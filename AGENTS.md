@@ -28,19 +28,19 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 
 ## 当前仓库
 
-当前仓库已迁移为 pnpm workspace，Web 端仍是原有的直连模式：
+当前仓库已迁移为 pnpm workspace，Web 端已接入服务端代理：
 
 - `apps/web` 是 React 18、TypeScript、Rspack、Zustand、`idb`、`fflate` 客户端。
-- `apps/server` 是 TypeScript + Hono 服务端，已包含 GitHub OAuth 会话、加密 Key 存储、流式聊天代理和 Node adapter。
+- `apps/server` 是 TypeScript + Hono 服务端，包含 GitHub OAuth 会话、加密 Key 存储、聊天 / 附件 / 语音代理和 Node adapter。
 - `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
-- 浏览器直接请求 DeepSeek API。
-- API Key 当前存放在 `localStorage`，这是需要迁移掉的旧模式。
+- Web 通过同源 `/api` 接口访问服务端，不再直接请求 DeepSeek API。
+- DeepSeek API Key 只加密保存在服务端，浏览器不持久化明文。
 - 会话和附件当前存放在 IndexedDB，数据库名为 `chat-demo`。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主题 token 位于 `apps/web/src/app/theme.css`。
 - 文案必须同时维护 `apps/web/src/i18n/zh.ts` 和 `apps/web/src/i18n/en.ts`。
-- 服务端已有 GitHub OAuth 账号系统，但登录入口和代理尚未接入 Web 客户端。
+- GitHub OAuth 登录、Key 设置以及聊天、附件、语音代理均已接入 Web 客户端。
 
 ## 目标架构
 
@@ -109,7 +109,7 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 
 ## 开发顺序
 
-1. 将现有 API Key 直连模式迁移到服务端代理，建立账号、后端和共享协议。
+1. 服务端代理、GitHub OAuth、共享协议和 Web 接入已完成。
 2. 实现云端历史同步和可选离线缓存。
 3. 加入 Skill 与远程 MCP。
 4. 加入 JSON-Render 和 Markdown 回退。

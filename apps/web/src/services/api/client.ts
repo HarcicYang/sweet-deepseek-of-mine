@@ -7,15 +7,16 @@ import {
   type FilePurpose,
   type MessageStreamEvent,
 } from '@sweet-deepseek/contracts'
+import {
+  ApiKeyStatusResponseSchema,
+  FileObjectResponseSchema,
+  SessionResponseSchema,
+  apiRoutes,
+  type ApiKeyStatusResponse,
+  type SessionResponse,
+} from '@sweet-deepseek/contracts/api'
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { readServerSentEvents } from './sse.js'
-
-/** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
-export const API_ORIGIN = __API_ORIGIN__
-/** Anthropic 兼容接口的前缀 */
-const ANTHROPIC_BASE_URL = `${API_ORIGIN}/anthropic/v1`
-/** 引用 Files API 上传的图片、调用 Anthropic 兼容 Files API 时必须携带 */
-const FILES_BETA = 'files-api-2025-04-14'
 
 export type ApiErrorKind =
   /** 非 2xx 响应 */
@@ -35,11 +36,33 @@ export class ApiError extends Error {
   constructor(
     readonly kind: ApiErrorKind,
     message: string | TranslationMessage,
-    readonly status?: number
+    readonly status?: number,
+    readonly code?: string
   ) {
     super(typeof message === 'string' ? message : translate(message.key, message.params))
     this.name = 'ApiError'
     this.localMessage = typeof message === 'string' ? undefined : message
+  }
+}
+
+type ParsedError = {
+  message: string
+  code?: string
+}
+
+const readErrorBody = (text: string): ParsedError | null => {
+  try {
+    const body: unknown = JSON.parse(text)
+    const errorBody: ApiErrorBody | null = readApiErrorBody(body)
+    if (!errorBody) {
+      return null
+    }
+    return {
+      message: errorBody.error.message,
+      ...(typeof errorBody.error.code === 'string' ? { code: errorBody.error.code } : {}),
+    }
+  } catch {
+    return null
   }
 }
 
@@ -49,20 +72,17 @@ const readErrorResponse = async (
   fallback = response.statusText
 ): Promise<ApiError> => {
   const text = await response.text().catch(() => '')
-  let message = text || fallback
-  try {
-    const body: unknown = JSON.parse(text)
-    const errorBody: ApiErrorBody | null = readApiErrorBody(body)
-    if (errorBody) {
-      message = errorBody.error.message
-    }
-  } catch {
-    // 非 JSON 响应体直接展示原文
-  }
-  return new ApiError(kind, message, response.status)
+  const parsed = readErrorBody(text)
+  return new ApiError(kind, parsed?.message || text || fallback, response.status, parsed?.code)
 }
 
-export const request = async (url: string, init: RequestInit): Promise<Response> => {
+const notifyUnauthorized = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('sdom:auth-expired'))
+  }
+}
+
+export const request = async (url: string, init: RequestInit = {}): Promise<Response> => {
   let response: Response
   try {
     response = await fetch(url, init)
@@ -73,33 +93,57 @@ export const request = async (url: string, init: RequestInit): Promise<Response>
     throw new ApiError('network', error instanceof Error ? error.message : String(error))
   }
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyUnauthorized()
+    }
     throw await readErrorResponse(response)
   }
   return response
 }
 
-const anthropicHeaders = (apiKey: string, beta: boolean): Record<string, string> => ({
-  // DeepSeek 兼容接口的鉴权方式，也可使用 Authorization: Bearer。
-  'x-api-key': apiKey,
-  // Files API 和通过 file_id 引用图片时必传；纯文本聊天无需携带。
-  ...(beta ? { 'anthropic-beta': FILES_BETA } : {}),
-})
+const parseResponse = <Value>(
+  schema: { safeParse: (value: unknown) => { success: true; data: Value } | { success: false } },
+  value: unknown
+): Value => {
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) {
+    throw new ApiError('protocol', 'Invalid server response')
+  }
+  return parsed.data
+}
 
-/** 用 GET /models 校验 API Key（不产生费用） */
-export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promise<void> => {
-  await request(`${API_ORIGIN}/models`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
+export const beginGithubLogin = () => {
+  window.location.assign(apiRoutes.githubStart)
+}
+
+export const getSession = async (signal?: AbortSignal): Promise<SessionResponse> => {
+  const response = await request(apiRoutes.session, { signal })
+  return parseResponse(SessionResponseSchema, await response.json())
+}
+
+export const logout = async (): Promise<void> => {
+  await request(apiRoutes.logout, { method: 'POST' })
+}
+
+export const saveDeepSeekKey = async (apiKey: string): Promise<ApiKeyStatusResponse> => {
+  const response = await request(apiRoutes.deepseekKey, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey }),
   })
+  return parseResponse(ApiKeyStatusResponseSchema, await response.json())
+}
+
+export const deleteDeepSeekKey = async (): Promise<ApiKeyStatusResponse> => {
+  const response = await request(apiRoutes.deepseekKey, { method: 'DELETE' })
+  return parseResponse(ApiKeyStatusResponseSchema, await response.json())
 }
 
 /**
- * POST /anthropic/v1/files 上传附件（不设过期时间，会话里的历史附件一直可用）。
- * purpose 为 null 时不传该字段（图片）；purpose 必须排在 file 之前。
+ * POST /api/files 上传附件。服务端代理 DeepSeek Files API，并继续要求
+ * purpose 排在 file 之前。
  */
 export const uploadFile = async (
-  apiKey: string,
   file: File,
   purpose: FilePurpose | null,
   signal?: AbortSignal
@@ -109,47 +153,36 @@ export const uploadFile = async (
     form.append('purpose', purpose)
   }
   form.append('file', file)
-  const response = await request(`${ANTHROPIC_BASE_URL}/files`, {
+  const response = await request(apiRoutes.files, {
     method: 'POST',
-    headers: anthropicHeaders(apiKey, true),
     body: form,
     signal,
   })
-  return (await response.json()) as FileObject
+  return parseResponse(FileObjectResponseSchema, await response.json())
 }
 
-/** DELETE /anthropic/v1/files/{file_id} */
-export const deleteFile = async (apiKey: string, fileId: string): Promise<void> => {
-  await request(`${ANTHROPIC_BASE_URL}/files/${encodeURIComponent(fileId)}`, {
+/** DELETE /api/files/{file_id} */
+export const deleteFile = async (fileId: string): Promise<void> => {
+  await request(apiRoutes.file.replace(':fileId', encodeURIComponent(fileId)), {
     method: 'DELETE',
-    headers: anthropicHeaders(apiKey, true),
   })
 }
 
-const hasFile = (body: CreateMessageRequest) =>
-  body.messages.some(
-    (message) =>
-      typeof message.content !== 'string' &&
-      message.content.some((block) => block.type === 'image' || block.type === 'document')
-  )
-
 /**
- * POST /anthropic/v1/messages（stream: true），逐个产出流式事件，收到 message_stop 时结束。
+ * POST /api/chat（stream: true），逐个产出流式事件，收到 message_stop 时结束。
  * ping、保活注释与无法解析的内容不产出；中止请求时抛出 signal 的 AbortError。
  */
 export async function* streamMessage(
-  apiKey: string,
   body: CreateMessageRequest,
   signal: AbortSignal
 ): AsyncGenerator<MessageStreamEvent> {
-  const response = await request(`${ANTHROPIC_BASE_URL}/messages`, {
+  const response = await request(apiRoutes.chat, {
     method: 'POST',
     headers: {
-      ...anthropicHeaders(apiKey, hasFile(body)),
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ ...body, stream: true }),
+    body: JSON.stringify(body),
     signal,
   })
   const contentType = response.headers.get('Content-Type') ?? ''
@@ -167,7 +200,12 @@ export async function* streamMessage(
     }
     const errorBody = readApiErrorBody(payload)
     if (errorBody) {
-      throw new ApiError('stream', errorBody.error.message)
+      throw new ApiError(
+        'stream',
+        errorBody.error.message,
+        undefined,
+        errorBody.error.code ?? undefined
+      )
     }
     if (eventName === 'error') {
       throw new ApiError('stream', data)

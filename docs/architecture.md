@@ -19,6 +19,6 @@ packages/
 
 ## 当前迁移状态
 
-服务端已实现 GitHub OAuth 登录会话、加密 API Key 存储和流式聊天代理，协议见
-[认证与 API Key](authentication.md)。Web 端暂时保留原来的浏览器直连模式和
-`localStorage` API Key，下一阶段再把请求切换为同源后端接口。
+服务端已实现 GitHub OAuth 登录会话、加密 API Key 存储，以及聊天、附件和语音代理，
+协议见[认证与 API Key](authentication.md)。Web 端通过同源 `/api` 接口调用服务端，
+不再直接请求 DeepSeek API，也不在浏览器持久化 API Key。

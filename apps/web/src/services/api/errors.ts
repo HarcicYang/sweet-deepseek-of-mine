@@ -5,7 +5,8 @@ import { ApiError } from './client.js'
  * 例如余额不足在回答、上传、朗读里措辞不同，所以这里只归类，不生成文案。
  */
 export type ApiErrorCondition =
-  | 'unauthorized'
+  | 'invalidApiKey'
+  | 'sessionExpired'
   | 'insufficientBalance'
   | 'tooLarge'
   | 'rateLimited'
@@ -16,7 +17,7 @@ export type ApiErrorCondition =
 /** 按 HTTP 状态码归类；没有状态码（请求没到达服务端）时按网络问题处理 */
 export const classifyStatus = (status: number | undefined): ApiErrorCondition => {
   if (status === 401) {
-    return 'unauthorized'
+    return 'sessionExpired'
   }
   if (status === 402) {
     return 'insufficientBalance'
@@ -36,6 +37,9 @@ export const classifyStatus = (status: number | undefined): ApiErrorCondition =>
 export const classifyApiError = (error: unknown): ApiErrorCondition => {
   if (!(error instanceof ApiError)) {
     return 'other'
+  }
+  if (error.code === 'invalid_api_key' || error.code === 'api_key_missing') {
+    return 'invalidApiKey'
   }
   if (error.status === undefined) {
     return error.kind === 'network' ? 'network' : 'other'

@@ -29,9 +29,16 @@ OAuth scope 目前只有 `read:user`。代码不依赖 GitHub OAuth Apps 的 PKC
 客户端断开时上游请求随之中止；默认超时为 15 分钟，可通过
 `DEEPSEEK_REQUEST_TIMEOUT_MS` 调整。
 
+## 附件与语音
+
+- `POST /api/files` 和 `DELETE /api/files/:fileId` 代理 Files API；服务端重新校验 multipart
+  文件大小与 purpose，不把浏览器中的 Key 透传给上游。
+- `POST /api/speech/asr` 代理语音识别 multipart 请求，限制音频大小为 8 MiB。
+- `POST /api/speech/tts` 校验文本和音色参数后，把 PCM 字节流直接转发给浏览器。
+- 上游返回的无效 Key 会转换为 `invalid_api_key`，不会和登录会话失效混淆。
+
 ## 当前限制
 
-- Web 客户端尚未接入 GitHub 登录和这些服务端接口。
 - Node adapter 使用本地 JSON 文件保存账户数据，用于当前开发闭环；云端部署需要实现相同
   `AccountStore` 接口的数据库 adapter。
 - 尚未实现邮箱登录、账户合并或 GitHub 账户解绑。

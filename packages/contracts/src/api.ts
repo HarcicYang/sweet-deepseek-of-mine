@@ -8,6 +8,10 @@ export const apiRoutes = {
   logout: '/api/auth/logout',
   deepseekKey: '/api/account/deepseek-key',
   chat: '/api/chat',
+  files: '/api/files',
+  file: '/api/files/:fileId',
+  speechAsr: '/api/speech/asr',
+  speechTts: '/api/speech/tts',
 } as const
 
 export const ApiErrorCodeSchema = z.enum([
@@ -16,6 +20,7 @@ export const ApiErrorCodeSchema = z.enum([
   'forbidden',
   'conflict',
   'api_key_missing',
+  'invalid_api_key',
   'credential_error',
   'upstream_error',
   'server_error',
@@ -62,6 +67,30 @@ export type ApiKeyRequest = z.infer<typeof ApiKeyRequestSchema>
 export const ApiKeyStatusResponseSchema = z.object({ configured: z.boolean() }).strict()
 
 export type ApiKeyStatusResponse = z.infer<typeof ApiKeyStatusResponseSchema>
+
+export const FilePurposeSchema = z.enum(['rich_layout_recognition', 'user_data'])
+
+export const FileObjectResponseSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('file'),
+  size_bytes: z.number().int().nonnegative(),
+  created_at: z.string(),
+  filename: z.string(),
+  mime_type: z.string(),
+})
+
+export type FileObjectResponse = z.infer<typeof FileObjectResponseSchema>
+
+export const SpeechTranscriptionResponseSchema = z.object({ text: z.string() })
+
+export const SpeechSynthesisRequestSchema = z
+  .object({
+    text: z.string().min(1).max(100_000),
+    voice_id: z.enum(['stella', 'tide']),
+    format: z.literal('pcm'),
+    filter_markdown: z.literal(true),
+  })
+  .strict()
 
 const ChatMessageSchema = z
   .object({

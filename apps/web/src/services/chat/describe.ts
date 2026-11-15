@@ -18,7 +18,7 @@ const getTemplateText = (reply: AssistantMessage) =>
 /** 回复出错或未正常结束时展示的提示 */
 export const describeReply = (reply: AssistantMessage): Notice | null => {
   if (reply.status === 'error' && reply.error) {
-    const { kind, status, localMessage } = reply.error
+    const { kind, status, code, localMessage } = reply.error
     // 导入的历史可能来自不同版本；不识别的文案沿用保存时的原文。
     const message =
       localMessage && isTranslationKey(localMessage.key)
@@ -31,8 +31,13 @@ export const describeReply = (reply: AssistantMessage): Notice | null => {
     if (kind === 'network') {
       return { text: translate('commonNetworkErrorToast') }
     }
+    if (code === 'invalid_api_key' || code === 'api_key_missing') {
+      return { text: translate('replyInvalidApiKey'), action: 'apiKey' }
+    }
     switch (classifyStatus(status)) {
-      case 'unauthorized':
+      case 'sessionExpired':
+        return { text: translate('replySessionExpired') }
+      case 'invalidApiKey':
         return { text: translate('replyInvalidApiKey'), action: 'apiKey' }
       case 'insufficientBalance':
         return { text: translate('replyInsufficientBalance'), action: 'topUp' }

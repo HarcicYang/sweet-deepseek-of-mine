@@ -1,6 +1,6 @@
 import { useState } from 'react'
+import { useAuth } from '../../services/auth/store.js'
 import { IconEditOutline16 } from '../base/icons.js'
-import { useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { IconButton } from '../base/IconButton.js'
 import { useApiKeyForm } from './useApiKeyForm.js'
@@ -9,10 +9,10 @@ import styles from './Settings.module.css'
 
 /** API Key 的编辑状态：输入框与移动端底部的「确定」按钮共用 */
 export const useApiKeyEditor = () => {
-  const apiKey = useSettings((state) => state.apiKey)
+  const configured = useAuth((state) => state.user?.hasApiKey ?? false)
   const [editing, setEditing] = useState(false)
   const form = useApiKeyForm(() => setEditing(false))
-  return { apiKey, editing, setEditing, form, showInput: !apiKey || editing }
+  return { configured, editing, setEditing, form, showInput: !configured || editing }
 }
 
 type ApiKeyEditor = ReturnType<typeof useApiKeyEditor>
@@ -21,15 +21,15 @@ type ApiKeyEditor = ReturnType<typeof useApiKeyEditor>
 export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const { apiKey, editing, setEditing, form, showInput } = editor
+  const { configured, editing, setEditing, form, showInput } = editor
 
   return (
     <div className={styles.cell}>
       <div className={styles.apiKey}>
-        <div className={styles.label}>{t('apiKeyStart')}</div>
-        {apiKey && !editing ? (
+        <div className={styles.label}>{t(configured ? 'apiKeyStoredServer' : 'apiKeyStart')}</div>
+        {configured && !editing ? (
           <div className={styles.apiKeySaved}>
-            <span className={styles.apiKeyMask}>{'*'.repeat(apiKey.length)}</span>
+            <span className={styles.apiKeyMask}>{'********'}</span>
             <IconButton
               tone="primary"
               icon={<IconEditOutline16 />}
@@ -55,7 +55,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
               }}
               onBlur={() => {
                 // 修改时没输入就离开，回到已保存的状态
-                if (apiKey && !form.value.trim()) {
+                if (configured && !form.value.trim()) {
                   setEditing(false)
                 }
               }}

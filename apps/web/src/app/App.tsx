@@ -1,20 +1,23 @@
 import { useEffect } from 'react'
 import { useTranslate } from '../i18n/index.js'
 import { useSettings } from '../services/settings.js'
+import { initAuth, useAuth } from '../services/auth/store.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
   bindChatPersistence,
   initChat,
   retrySaveSessions,
   selectSession,
+  stopAllReplies,
   useChatStore,
 } from '../services/chat/store.js'
 import { SearchPanel } from '../components/search/SearchPanel.js'
+import { LoginView } from '../components/auth/LoginView.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
-import { ensureApiKey } from '../components/settings/settingsDialogState.js'
+import { closeSettings, ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
@@ -30,6 +33,7 @@ export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const authStatus = useAuth((state) => state.status)
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -68,10 +72,28 @@ export const App = () => {
   useEffect(closeMobileSider, [activeId, isMobile])
 
   useEffect(() => {
-    void initChat()
-    // 首次打开先在设置里输入 API Key
-    ensureApiKey()
+    void initAuth()
   }, [])
+
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      void initChat()
+      ensureApiKey()
+    } else {
+      stopAllReplies()
+      stopReadAloud()
+      closeSettings()
+    }
+  }, [authStatus])
+
+  if (authStatus !== 'authenticated') {
+    return (
+      <>
+        <LoginView />
+        <Toast />
+      </>
+    )
+  }
 
   return (
     <>

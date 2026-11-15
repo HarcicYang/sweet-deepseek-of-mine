@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 An independent community chat app based on DeepSeek's open-source `chat-demo` and the DeepSeek API. It is not an official DeepSeek product.
 
-The repository now uses a pnpm workspace. The server includes GitHub OAuth, encrypted API key storage, and a streaming chat proxy. The web app temporarily keeps the existing browser-direct mode until those endpoints are integrated.
+The repository uses a pnpm workspace. The web app signs in through GitHub and sends chat, attachment, and speech requests through the same-origin server proxy. DeepSeek API keys never enter browser storage.
 
 ## Getting started
 
@@ -33,7 +33,7 @@ pnpm dev
 pnpm dev:server
 ```
 
-The web UI does not yet expose the GitHub login flow. See [authentication and API keys](docs/authentication.md) for the server endpoints and security model.
+See [authentication and API keys](docs/authentication.md) for the login flow, endpoints, and security model.
 
 To build the static site:
 
@@ -41,11 +41,12 @@ To build the static site:
 pnpm build
 ```
 
-The output is written to `apps/web/dist/`. Deploy it to a static web server or open `apps/web/dist/index.html` directly. Opening the file directly requires browser support for storage on `file://` pages and an API service that permits their cross-origin requests.
+The output is written to `apps/web/dist/`. The complete app also requires the Hono server and a same-origin `/api` route; opening the static `index.html` alone is not enough for the online chat flow.
 
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.
+- GitHub sign-in, server sessions, encrypted API key storage, and the same-origin API proxy.
 - Streaming replies, deep thinking, smart search, link reading, and source citations; stop generation or continue eligible replies.
 - Upload, paste, or drag and drop attachments; use voice input and read replies aloud. A live audio spectrum appears in the first row of the input area while recording on mobile.
 - Markdown, syntax highlighting, KaTeX math, and Mermaid diagrams.
@@ -53,7 +54,7 @@ The output is written to `apps/web/dist/`. Deploy it to a static web server or o
 
 ## Data and storage
 
-The current web client still stores its API key and settings in localStorage and conversations in IndexedDB. The server provides GitHub OAuth sessions and AES-256-GCM encrypted key storage, but the web client has not switched to the server proxy yet.
+The web client stores ordinary settings and conversations locally, while DeepSeek API keys are encrypted and stored on the server. Attachments uploaded through DeepSeek are proxied by the server.
 
 History import and export in Settings use ZIP archives. After confirmation and successful validation, importing replaces all local conversations and attachments. Exports include conversations and locally available original images, but exclude API keys, settings, and original non-image attachments. See the [history import/export documentation (Chinese)](apps/web/src/services/chat/history/README.md) for the archive format and preservation details.
 
@@ -71,7 +72,7 @@ Settings → Data → Delete all chats clears all local conversations, original 
 | `pnpm test`       | Run server tests             |
 | `pnpm format`     | Format with oxfmt            |
 
-[apps/web/rspack.config.ts](apps/web/rspack.config.ts) uses `https://api.deepseek.com` by default. Use `createConfig({ apiOrigin, devServer })` to customize the API origin and development server proxy.
+[apps/web/rspack.config.ts](apps/web/rspack.config.ts) proxies `/api` to the local Hono server. Set `API_PROXY_TARGET` to override the development proxy target.
 
 Chat uses `deepseek-flash` by default through Anthropic-compatible Messages / Files APIs. Speech features use ASR / TTS endpoints. Requests include extensions for search, link reading, titles, and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
 

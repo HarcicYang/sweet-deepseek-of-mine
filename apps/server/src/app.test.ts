@@ -42,6 +42,27 @@ const createTestApp = async () => {
     if (url === 'https://api.deepseek.test/models') {
       return Response.json({ data: [] })
     }
+    if (url === 'https://api.deepseek.test/anthropic/v1/files') {
+      return Response.json({
+        id: 'file-1',
+        type: 'file',
+        size_bytes: 5,
+        created_at: '2026-11-15T00:00:00.000Z',
+        filename: 'note.txt',
+        mime_type: 'text/plain',
+      })
+    }
+    if (url === 'https://api.deepseek.test/anthropic/v1/files/file-1') {
+      return new Response(null, { status: 204 })
+    }
+    if (url === 'https://api.deepseek.test/v1/tools/asr') {
+      return Response.json({ text: 'hello from audio' })
+    }
+    if (url === 'https://api.deepseek.test/v1/tools/tts') {
+      return new Response(new Uint8Array([1, 2, 3, 4]), {
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
+    }
     return new Response('unexpected request', { status: 500 })
   }
   const app = createApp({
@@ -93,7 +114,7 @@ test('GitHub OAuth creates an authenticated server session', async () => {
   assert.equal(sessionBody.user.hasApiKey, false)
 })
 
-test('API key storage and chat proxy keep credentials on the server', async () => {
+test('API key storage and DeepSeek proxies keep credentials on the server', async () => {
   const { app, calls } = await createTestApp()
   const start = await app.request(`${APP_ORIGIN}${apiRoutes.githubStart}`)
   const state = cookieValue(start.headers.get('set-cookie'), 'sdom_oauth_state')
@@ -140,6 +161,47 @@ test('API key storage and chat proxy keep credentials on the server', async () =
   const upstreamHeaders = new Headers(upstream.init?.headers)
   assert.equal(upstreamHeaders.get('x-api-key'), 'sk-test-key')
   assert.equal(JSON.parse(String(upstream.init?.body)).stream, true)
+
+  const uploadForm = new FormData()
+  uploadForm.append('purpose', 'user_data')
+  uploadForm.append('file', new File(['hello'], 'note.txt', { type: 'text/plain' }))
+  const upload = await app.request(`${APP_ORIGIN}${apiRoutes.files}`, {
+    method: 'POST',
+    headers: { Cookie: `sdom_session=${sessionToken}`, Origin: APP_ORIGIN },
+    body: uploadForm,
+  })
+  assert.equal(upload.status, 200)
+  const uploaded = (await upload.json()) as { id: string }
+  assert.equal(uploaded.id, 'file-1')
+
+  const remove = await app.request(`${APP_ORIGIN}/api/files/file-1`, {
+    method: 'DELETE',
+    headers: { Cookie: `sdom_session=${sessionToken}`, Origin: APP_ORIGIN },
+  })
+  assert.equal(remove.status, 204)
+
+  const audioForm = new FormData()
+  audioForm.append('file', new File(['audio'], 'recording.wav', { type: 'audio/wav' }))
+  const asr = await app.request(`${APP_ORIGIN}${apiRoutes.speechAsr}`, {
+    method: 'POST',
+    headers: { Cookie: `sdom_session=${sessionToken}`, Origin: APP_ORIGIN },
+    body: audioForm,
+  })
+  assert.equal(asr.status, 200)
+  assert.deepEqual(await asr.json(), { text: 'hello from audio' })
+
+  const tts = await app.request(`${APP_ORIGIN}${apiRoutes.speechTts}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      text: 'read this',
+      voice_id: 'stella',
+      format: 'pcm',
+      filter_markdown: true,
+    }),
+  })
+  assert.equal(tts.status, 200)
+  assert.deepEqual(new Uint8Array(await tts.arrayBuffer()), new Uint8Array([1, 2, 3, 4]))
 })
 
 test('cross-origin writes are rejected before authentication', async () => {
@@ -149,4 +211,14 @@ test('cross-origin writes are rejected before authentication', async () => {
     headers: { Origin: 'https://attacker.example' },
   })
   assert.equal(response.status, 403)
+})
+
+test('OAuth callback rejects a mismatched state', async () => {
+  const { app } = await createTestApp()
+  const response = await app.request(
+    `${APP_ORIGIN}${apiRoutes.githubCallback}?code=oauth-code&state=wrong`,
+    { headers: { Cookie: 'sdom_oauth_state=expected' } }
+  )
+  assert.equal(response.status, 302)
+  assert.match(response.headers.get('location') ?? '', /\?auth=error&reason=oauth_state$/u)
 })

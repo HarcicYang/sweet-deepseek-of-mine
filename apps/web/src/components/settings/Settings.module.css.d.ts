@@ -9,6 +9,9 @@ declare const styles: {
   readonly row: string
   readonly text: string
   readonly label: string
+  readonly accountAvatar: string
+  readonly accountRow: string
+  readonly accountText: string
   readonly uploadButton: string
   readonly locationCell: string
   readonly locationSelectors: string

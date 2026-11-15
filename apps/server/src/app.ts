@@ -3,7 +3,11 @@ import {
   ApiKeyRequestSchema,
   ApiKeyStatusResponseSchema,
   ChatProxyRequestSchema,
+  FileObjectResponseSchema,
+  FilePurposeSchema,
   SessionResponseSchema,
+  SpeechSynthesisRequestSchema,
+  SpeechTranscriptionResponseSchema,
   apiRoutes,
   type ApiErrorCode,
   type ApiErrorResponse,
@@ -25,6 +29,9 @@ const GITHUB_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize'
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
 const GITHUB_USER_URL = 'https://api.github.com/user'
 const GITHUB_API_VERSION = '2022-11-28'
+const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024
+const MAX_AUDIO_BYTES = 8 * 1024 * 1024
+const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 
 type AuthContext = {
   user: UserRecord
@@ -91,6 +98,33 @@ const hasFileBlocks = (messages: unknown[]): boolean =>
       )
   )
 
+const contentLengthExceeds = (context: Context<AppEnv>, limit: number): boolean => {
+  const header = context.req.header('Content-Length')
+  if (!header) {
+    return false
+  }
+  const length = Number(header)
+  return Number.isFinite(length) && length > limit
+}
+
+const readFilePart = (form: FormData, name: string): File | null => {
+  const value = form.get(name)
+  return typeof File !== 'undefined' && value instanceof File ? value : null
+}
+
+const forwardUpstreamError = (context: Context<AppEnv>, response: Response): Response => {
+  if (response.status === 401 || response.status === 403) {
+    void response.body?.cancel().catch(() => {})
+    return apiError(context, 400, 'invalid_api_key', 'DeepSeek rejected the API key')
+  }
+  const headers = new Headers()
+  const contentType = response.headers.get('content-type')
+  if (contentType) {
+    headers.set('Content-Type', contentType)
+  }
+  return new Response(response.body, { status: response.status, headers })
+}
+
 const readGitHubToken = (value: unknown): string | null => {
   if (
     !isRecord(value) ||
@@ -107,20 +141,24 @@ const readGitHubProfile = (value: unknown): GitHubProfile | null => {
     !isRecord(value) ||
     !Number.isSafeInteger(value.id) ||
     (value.id as number) <= 0 ||
-    typeof value.login !== 'string' ||
-    value.login.trim() === ''
+    typeof value.login !== 'string'
   ) {
     return null
   }
-  const avatarUrl =
-    value.avatar_url === null
-      ? null
-      : typeof value.avatar_url === 'string' && URL.canParse(value.avatar_url)
-        ? value.avatar_url
-        : null
+  const githubLogin = value.login.trim()
+  if (!githubLogin || githubLogin.length > 100) {
+    return null
+  }
+  let avatarUrl: string | null = null
+  if (typeof value.avatar_url === 'string' && URL.canParse(value.avatar_url)) {
+    const parsed = new URL(value.avatar_url)
+    if (parsed.protocol === 'https:' && parsed.hostname === 'avatars.githubusercontent.com') {
+      avatarUrl = parsed.toString()
+    }
+  }
   return {
     githubId: String(value.id),
-    githubLogin: value.login,
+    githubLogin,
     avatarUrl,
   }
 }
@@ -174,6 +212,48 @@ export const createApp = ({
     }
     context.set('auth', { user, sessionTokenHash })
     return await next()
+  }
+
+  const requireApiKey = async (
+    context: Context<AppEnv>
+  ): Promise<{ ok: true; apiKey: string } | { ok: false; response: Response }> => {
+    const user = context.get('auth').user
+    if (!user.apiKey) {
+      return {
+        ok: false,
+        response: apiError(context, 409, 'api_key_missing', 'A DeepSeek API key is required'),
+      }
+    }
+    const apiKey = await security.decryptApiKey(user.id, user.apiKey).catch(() => null)
+    if (!apiKey) {
+      return {
+        ok: false,
+        response: apiError(
+          context,
+          500,
+          'credential_error',
+          'Stored API key could not be decrypted'
+        ),
+      }
+    }
+    return { ok: true, apiKey }
+  }
+
+  const createProxySignal = (context: Context<AppEnv>): AbortSignal => {
+    const clientSignal = context.req.raw.signal
+    return requestTimeoutMs > 0
+      ? AbortSignal.any([clientSignal, AbortSignal.timeout(requestTimeoutMs)])
+      : clientSignal
+  }
+
+  const proxyFailure = (context: Context<AppEnv>, error: unknown, clientSignal: AbortSignal) => {
+    if (clientSignal.aborted) {
+      return new Response(null, { status: 499 })
+    }
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      return apiError(context, 504, 'upstream_error', 'DeepSeek request timed out')
+    }
+    return apiError(context, 502, 'upstream_error', 'DeepSeek request failed')
   }
 
   const createSession = async (context: Context<AppEnv>, user: UserRecord) => {
@@ -324,7 +404,7 @@ export const createApp = ({
       return apiError(context, 502, 'upstream_error', 'Could not verify the DeepSeek API key')
     }
     if (verification.status === 401 || verification.status === 403) {
-      return apiError(context, 400, 'invalid_request', 'DeepSeek rejected the API key')
+      return apiError(context, 400, 'invalid_api_key', 'DeepSeek rejected the API key')
     }
     if (!verification.ok) {
       return apiError(context, 502, 'upstream_error', 'DeepSeek API key verification failed')
@@ -342,10 +422,183 @@ export const createApp = ({
     return context.json(body)
   })
 
+  app.post(apiRoutes.files, requireAuth, async (context) => {
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
+    if (contentLengthExceeds(context, MAX_ATTACHMENT_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)) {
+      return apiError(context, 413, 'invalid_request', 'Attachment is too large')
+    }
+    const form = await context.req.formData().catch(() => null)
+    if (!form) {
+      return apiError(context, 400, 'invalid_request', 'Invalid multipart upload')
+    }
+    const file = readFilePart(form, 'file')
+    if (!file) {
+      return apiError(context, 400, 'invalid_request', 'Attachment file is required')
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      return apiError(context, 413, 'invalid_request', 'Attachment is too large')
+    }
+    const purposeValue = form.get('purpose')
+    const purpose =
+      typeof purposeValue === 'string' ? FilePurposeSchema.safeParse(purposeValue) : null
+    if (purposeValue !== null && !purpose?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid attachment purpose')
+    }
+    const outbound = new FormData()
+    if (purpose?.success) {
+      outbound.append('purpose', purpose.data)
+    }
+    outbound.append('file', file, file.name)
+    const clientSignal = context.req.raw.signal
+    let response: Response
+    try {
+      response = await fetchImpl(`${deepSeekBaseUrl.replace(/\/+$/u, '')}/anthropic/v1/files`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': credential.apiKey,
+          'anthropic-beta': 'files-api-2025-04-14',
+        },
+        body: outbound,
+        signal: createProxySignal(context),
+        redirect: 'error',
+      })
+    } catch (error) {
+      return proxyFailure(context, error, clientSignal)
+    }
+    if (!response.ok) {
+      return forwardUpstreamError(context, response)
+    }
+    const parsed = FileObjectResponseSchema.safeParse(await response.json().catch(() => null))
+    if (!parsed.success) {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek returned an invalid file object')
+    }
+    return context.json(parsed.data)
+  })
+
+  app.delete(apiRoutes.file, requireAuth, async (context) => {
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
+    const fileId = context.req.param('fileId')
+    if (!/^[\w-]{1,200}$/u.test(fileId)) {
+      return apiError(context, 400, 'invalid_request', 'Invalid file ID')
+    }
+    const clientSignal = context.req.raw.signal
+    let response: Response
+    try {
+      response = await fetchImpl(
+        `${deepSeekBaseUrl.replace(/\/+$/u, '')}/anthropic/v1/files/${encodeURIComponent(fileId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'x-api-key': credential.apiKey,
+            'anthropic-beta': 'files-api-2025-04-14',
+          },
+          signal: createProxySignal(context),
+          redirect: 'error',
+        }
+      )
+    } catch (error) {
+      return proxyFailure(context, error, clientSignal)
+    }
+    if (!response.ok) {
+      return forwardUpstreamError(context, response)
+    }
+    return context.body(null, 204)
+  })
+
+  app.post(apiRoutes.speechAsr, requireAuth, async (context) => {
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
+    if (contentLengthExceeds(context, MAX_AUDIO_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)) {
+      return apiError(context, 413, 'invalid_request', 'Audio is too large')
+    }
+    const form = await context.req.formData().catch(() => null)
+    const file = form ? readFilePart(form, 'file') : null
+    if (!file) {
+      return apiError(context, 400, 'invalid_request', 'Audio file is required')
+    }
+    if (file.size > MAX_AUDIO_BYTES) {
+      return apiError(context, 413, 'invalid_request', 'Audio is too large')
+    }
+    const outbound = new FormData()
+    outbound.append('file', file, file.name)
+    const clientSignal = context.req.raw.signal
+    let response: Response
+    try {
+      response = await fetchImpl(`${deepSeekBaseUrl.replace(/\/+$/u, '')}/v1/tools/asr`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${credential.apiKey}` },
+        body: outbound,
+        signal: createProxySignal(context),
+        redirect: 'error',
+      })
+    } catch (error) {
+      return proxyFailure(context, error, clientSignal)
+    }
+    if (!response.ok) {
+      return forwardUpstreamError(context, response)
+    }
+    const parsed = SpeechTranscriptionResponseSchema.safeParse(
+      await response.json().catch(() => null)
+    )
+    if (!parsed.success) {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek returned an invalid transcript')
+    }
+    return context.json(parsed.data)
+  })
+
+  app.post(apiRoutes.speechTts, requireAuth, async (context) => {
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
+    const json = await readJson(context)
+    const parsed = json.ok ? SpeechSynthesisRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid speech synthesis request')
+    }
+    const clientSignal = context.req.raw.signal
+    let response: Response
+    try {
+      response = await fetchImpl(`${deepSeekBaseUrl.replace(/\/+$/u, '')}/v1/tools/tts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${credential.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(parsed.data),
+        signal: createProxySignal(context),
+        redirect: 'error',
+      })
+    } catch (error) {
+      return proxyFailure(context, error, clientSignal)
+    }
+    if (!response.ok) {
+      return forwardUpstreamError(context, response)
+    }
+    if (!response.body) {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek returned empty audio')
+    }
+    const headers = new Headers()
+    const contentType = response.headers.get('content-type')
+    if (contentType) {
+      headers.set('Content-Type', contentType)
+    }
+    headers.set('Cache-Control', 'no-store')
+    return new Response(response.body, { status: response.status, headers })
+  })
+
   app.post(apiRoutes.chat, requireAuth, async (context) => {
-    const user = context.get('auth').user
-    if (!user.apiKey) {
-      return apiError(context, 409, 'api_key_missing', 'A DeepSeek API key is required')
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
     }
     const json = await readJson(context)
     const parsed = json.ok ? ChatProxyRequestSchema.safeParse(json.value) : null
@@ -353,19 +606,11 @@ export const createApp = ({
       return apiError(context, 400, 'invalid_request', 'Invalid chat request')
     }
 
-    const apiKey = await security.decryptApiKey(user.id, user.apiKey).catch(() => null)
-    if (!apiKey) {
-      return apiError(context, 500, 'credential_error', 'Stored API key could not be decrypted')
-    }
-
     const clientSignal = context.req.raw.signal
-    const signal =
-      requestTimeoutMs > 0
-        ? AbortSignal.any([clientSignal, AbortSignal.timeout(requestTimeoutMs)])
-        : clientSignal
+    const signal = createProxySignal(context)
     const requestBody = { ...parsed.data, stream: true }
     const headers: Record<string, string> = {
-      'x-api-key': apiKey,
+      'x-api-key': credential.apiKey,
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     }
@@ -383,15 +628,13 @@ export const createApp = ({
         redirect: 'error',
       })
     } catch (error) {
-      if (clientSignal.aborted) {
-        return new Response(null, { status: 499 })
-      }
-      if (error instanceof DOMException && error.name === 'TimeoutError') {
-        return apiError(context, 504, 'upstream_error', 'DeepSeek request timed out')
-      }
-      return apiError(context, 502, 'upstream_error', 'DeepSeek request failed')
+      return proxyFailure(context, error, clientSignal)
     }
 
+    if (!response.ok && (response.status === 401 || response.status === 403)) {
+      void response.body?.cancel().catch(() => {})
+      return apiError(context, 400, 'invalid_api_key', 'DeepSeek rejected the API key')
+    }
     if (!response.body) {
       return apiError(context, 502, 'upstream_error', 'DeepSeek returned an empty response')
     }
