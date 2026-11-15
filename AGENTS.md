@@ -24,20 +24,23 @@ Sweet DeepSeek 是一个基于 DeepSeek 官方开源 `chat-demo` 和 DeepSeek AP
 4. 模型输出、Skill 清单、MCP 返回值和 JSON-Render 文档都视为不可信输入。
 5. 产生写入、删除、发布等外部副作用的工具操作需要权限检查；高风险操作需要在界面中确认。
 6. 保持 MIT 许可证、上游版权和归属信息，不暗示与 DeepSeek 官方存在关联。
+7. 可复用优先：遇到同类能力时，先评估 DeepSeek harness、官方 `chat-demo` 或成熟依赖中的现成实现；能安全复用就不要自行重造轮子。复用前仍需检查许可证、安全边界和与目标架构的适配性。
 
 ## 当前仓库
 
-当前代码仍是官方 `chat-demo` 的静态前端：
+当前仓库已迁移为 pnpm workspace，Web 端仍是原有的直连模式：
 
-- React 18、TypeScript、Rspack、Zustand、`idb`、`fflate`。
+- `apps/web` 是 React 18、TypeScript、Rspack、Zustand、`idb`、`fflate` 客户端。
+- `apps/server` 是 TypeScript + Hono 服务端骨架，目前只有健康检查。
+- `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
 - 浏览器直接请求 DeepSeek API。
 - API Key 当前存放在 `localStorage`，这是需要迁移掉的旧模式。
 - 会话和附件当前存放在 IndexedDB，数据库名为 `chat-demo`。
-- 聊天状态集中在 `src/services/chat/store.ts`。
-- API 和 SSE 协议位于 `src/services/api/`。
-- 主题 token 位于 `src/app/theme.css`。
-- 文案必须同时维护 `src/i18n/zh.ts` 和 `src/i18n/en.ts`。
-- 当前没有后端、账号系统或独立协议包。
+- 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
+- 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
+- 主题 token 位于 `apps/web/src/app/theme.css`。
+- 文案必须同时维护 `apps/web/src/i18n/zh.ts` 和 `apps/web/src/i18n/en.ts`。
+- 当前仍没有账号系统，服务端代理尚未接入客户端。
 
 ## 目标架构
 

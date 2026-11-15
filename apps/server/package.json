@@ -1,0 +1,19 @@
+{
+  "name": "@sweet-deepseek/server",
+  "version": "0.0.0",
+  "description": "Sweet DeepSeek 服务端",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "type": "tsc -p tsconfig.json",
+    "lint": "oxlint src"
+  },
+  "dependencies": {
+    "@sweet-deepseek/contracts": "workspace:*",
+    "hono": "^4.13.18"
+  },
+  "devDependencies": {
+    "@types/node": "~20.9.2"
+  }
+}

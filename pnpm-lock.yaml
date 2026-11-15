@@ -7,7 +7,35 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      oxfmt:
+        specifier: 0.48.0
+        version: 0.48.0
+      oxlint:
+        specifier: 1.63.0
+        version: 1.63.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  apps/server:
     dependencies:
+      '@sweet-deepseek/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      hono:
+        specifier: ^4.13.18
+        version: 4.13.18
+    devDependencies:
+      '@types/node':
+        specifier: ~20.9.2
+        version: 20.9.2
+
+  apps/web:
+    dependencies:
+      '@sweet-deepseek/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@types/katex':
         specifier: ^0.16.5
         version: 0.16.8
@@ -84,15 +112,8 @@ importers:
       '@types/node':
         specifier: ~20.9.2
         version: 20.9.2
-      oxfmt:
-        specifier: 0.48.0
-        version: 0.48.0
-      oxlint:
-        specifier: 1.63.0
-        version: 1.63.0
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
+
+  packages/contracts: {}
 
 packages:
 
@@ -990,6 +1011,10 @@ packages:
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
 
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
+    engines: {node: '>=16.9.0'}
+
   iconv-lite@0.6.3:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
@@ -1009,10 +1034,6 @@ packages:
 
   katex@0.16.22:
     resolution: {integrity: sha512-XCHRdUw4lf3SKBaJe4EvgqIuWwkPSo9XoeO8GjQW94Bp7TWv9hNhzZjZ+OH9yf1UmLygb7DIT5GSFQiyt16zYg==}
-    hasBin: true
-
-  katex@0.16.47:
-    resolution: {integrity: sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg==}
     hasBin: true
 
   khroma@2.1.0:
@@ -1058,9 +1079,6 @@ packages:
 
   mdast-util-find-and-replace@3.0.2:
     resolution: {integrity: sha512-Tmd1Vg/m3Xz43afeNxDIhWRtFZgM2VLyaf4vSTYwudTyeuTneoL3qtWMA5jeLyz/O1vDJmmV4QuScFCA2tBPwg==}
-
-  mdast-util-find-and-replace@3.0.4:
-    resolution: {integrity: sha512-z4B5c6jrnJ1ltOQemhWYPBSAo6y42Z8Gt2yEgfgNTMcLSU59B8bfj8Z8AnAlJrBGLnqkdAUZ7jdDEqQw3KuipQ==}
 
   mdast-util-from-markdown@2.0.3:
     resolution: {integrity: sha512-W4mAWTvSlKvf8L6J+VN9yLSqQ9AOAAvHuoDAmPkz4dHf553m5gVj2ejadHJhoJmcmxEnOv6Pa8XJhpxE93kb8Q==}
@@ -2089,6 +2107,8 @@ snapshots:
 
   hachure-fill@0.5.2: {}
 
+  hono@4.13.18: {}
+
   iconv-lite@0.6.3:
     dependencies:
       safer-buffer: 2.1.2
@@ -2102,10 +2122,6 @@ snapshots:
   js-tokens@3.0.0: {}
 
   katex@0.16.22:
-    dependencies:
-      commander: 8.3.0
-
-  katex@0.16.47:
     dependencies:
       commander: 8.3.0
 
@@ -2152,13 +2168,6 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.1.0
 
-  mdast-util-find-and-replace@3.0.4:
-    dependencies:
-      '@types/mdast': 4.0.4
-      escape-string-regexp: 5.0.0
-      unist-util-is: 6.0.1
-      unist-util-visit-parents: 6.1.0
-
   mdast-util-from-markdown@2.0.3:
     dependencies:
       '@types/mdast': 4.0.4
@@ -2181,7 +2190,7 @@ snapshots:
       '@types/mdast': 4.0.4
       ccount: 2.0.1
       devlop: 1.1.0
-      mdast-util-find-and-replace: 3.0.4
+      mdast-util-find-and-replace: 3.0.2
       micromark-util-character: 2.1.1
 
   mdast-util-gfm-footnote@2.1.0:
@@ -2376,7 +2385,7 @@ snapshots:
     dependencies:
       '@types/katex': 0.16.8
       devlop: 1.1.0
-      katex: 0.16.47
+      katex: 0.16.22
       micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.0
