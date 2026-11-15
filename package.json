@@ -1,7 +1,7 @@
 {
   "name": "sweet-deepseek",
   "version": "0.1.1",
-  "description": "Sweet DeepSeek 在线聊天应用。",
+  "description": "Sweet DeepSeek O'Mine 在线聊天应用。",
   "license": "MIT",
   "private": true,
   "type": "module",

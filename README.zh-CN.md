@@ -1,4 +1,4 @@
-# Sweet DeepSeek
+# Sweet DeepSeek O'Mine
 
 [English](README.md) | 简体中文
 

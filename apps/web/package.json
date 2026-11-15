@@ -1,7 +1,7 @@
 {
   "name": "@sweet-deepseek/web",
   "version": "0.1.1",
-  "description": "Sweet DeepSeek Web 客户端",
+  "description": "Sweet DeepSeek O'Mine Web 客户端",
   "license": "MIT",
   "private": true,
   "type": "module",

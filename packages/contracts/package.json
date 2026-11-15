@@ -1,7 +1,7 @@
 {
   "name": "@sweet-deepseek/contracts",
   "version": "0.0.0",
-  "description": "Sweet DeepSeek 前后端共享协议",
+  "description": "Sweet DeepSeek O'Mine 前后端共享协议",
   "license": "MIT",
   "private": true,
   "type": "module",

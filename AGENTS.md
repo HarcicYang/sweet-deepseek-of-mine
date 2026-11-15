@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-Sweet DeepSeek 是一个基于 DeepSeek 官方开源 `chat-demo` 和 DeepSeek API 的聊天工具。
+Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 DeepSeek API 的聊天工具。
 它是独立社区项目，不代表 DeepSeek 官方产品。
 
 目标是一个完整的在线聊天产品：
