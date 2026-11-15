@@ -4,7 +4,7 @@
 
 基于 DeepSeek 官方开源 `chat-demo` 和 DeepSeek API 的独立社区聊天工具，不代表 DeepSeek 官方产品。
 
-当前仓库已迁移为 pnpm workspace，Web 端暂时保留原有浏览器直连模式；服务端代理和账号体系正在逐步接入。
+当前仓库已迁移为 pnpm workspace。服务端已实现 GitHub OAuth、服务端 Key 加密和流式聊天代理；Web 端暂时保留原有浏览器直连模式，下一阶段接入这些接口。
 
 ## 运行
 
@@ -18,6 +18,22 @@ pnpm dev
 ```
 
 打开 http://localhost:8090 。
+
+### 本地服务端
+
+服务端默认运行在 `http://localhost:8787`，Web 开发服务器会把 `/api` 代理到该端口。
+
+1. 在 GitHub 创建 OAuth App，回调地址填写 `http://localhost:8090/api/auth/github/callback`。
+2. 复制 `.env.example` 为 `.env`，填写 `GITHUB_CLIENT_ID` 和 `GITHUB_CLIENT_SECRET`。
+3. 使用 `openssl rand -base64 32` 生成 32 字节 `APP_MASTER_KEY`。
+4. 在两个终端分别运行：
+
+```sh
+pnpm dev
+pnpm dev:server
+```
+
+当前 Web UI 尚未接入登录入口；服务端接口与安全边界见[认证与 API Key](docs/authentication.md)。
 
 生成静态产物：
 
@@ -37,7 +53,7 @@ pnpm build
 
 ## 数据
 
-API Key 和设置保存在浏览器 localStorage，会话及附件原件保存在 IndexedDB，本地数据按浏览器用户配置和站点源（origin）隔离。发送对话、上传附件和使用语音功能时，相应内容会提交给配置的 API 服务。
+当前 Web 端的 API Key 和设置仍保存在浏览器 localStorage，会话及附件原件保存在 IndexedDB。服务端提供 GitHub OAuth 会话和 AES-256-GCM 加密的 Key 存储，但 Web 端尚未切换到服务端代理。
 
 设置中的历史导入导出使用 ZIP 格式。导入会在确认并校验成功后替换全部本地会话和附件；导出包含会话与本地可用的图片原件，不包含 API Key、设置或非图片附件原件。格式与保留范围见[历史导入导出](apps/web/src/services/chat/history/README.md)。
 
@@ -45,13 +61,15 @@ API Key 和设置保存在浏览器 localStorage，会话及附件原件保存�
 
 ## 开发
 
-| 命令          | 用途                    |
-| ------------- | ----------------------- |
-| `pnpm dev`    | 启动开发服务器          |
-| `pnpm build`  | 构建到 `apps/web/dist/` |
-| `pnpm type`   | TypeScript 类型检查     |
-| `pnpm lint`   | oxlint 检查             |
-| `pnpm format` | oxfmt 格式化            |
+| 命令              | 用途                    |
+| ----------------- | ----------------------- |
+| `pnpm dev`        | 启动开发服务器          |
+| `pnpm dev:server` | 启动 Hono 服务端        |
+| `pnpm build`      | 构建到 `apps/web/dist/` |
+| `pnpm type`       | TypeScript 类型检查     |
+| `pnpm lint`       | oxlint 检查             |
+| `pnpm test`       | 运行服务端测试          |
+| `pnpm format`     | oxfmt 格式化            |
 
 [apps/web/rspack.config.ts](apps/web/rspack.config.ts) 默认连接 `https://api.deepseek.com`。`createConfig({ apiOrigin, devServer })` 支持自定义 API 地址和开发服务器代理。
 

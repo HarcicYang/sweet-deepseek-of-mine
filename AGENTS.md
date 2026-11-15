@@ -31,7 +31,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 当前仓库已迁移为 pnpm workspace，Web 端仍是原有的直连模式：
 
 - `apps/web` 是 React 18、TypeScript、Rspack、Zustand、`idb`、`fflate` 客户端。
-- `apps/server` 是 TypeScript + Hono 服务端骨架，目前只有健康检查。
+- `apps/server` 是 TypeScript + Hono 服务端，已包含 GitHub OAuth 会话、加密 Key 存储、流式聊天代理和 Node adapter。
 - `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
 - 浏览器直接请求 DeepSeek API。
 - API Key 当前存放在 `localStorage`，这是需要迁移掉的旧模式。
@@ -40,7 +40,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主题 token 位于 `apps/web/src/app/theme.css`。
 - 文案必须同时维护 `apps/web/src/i18n/zh.ts` 和 `apps/web/src/i18n/en.ts`。
-- 当前仍没有账号系统，服务端代理尚未接入客户端。
+- 服务端已有 GitHub OAuth 账号系统，但登录入口和代理尚未接入 Web 客户端。
 
 ## 目标架构
 

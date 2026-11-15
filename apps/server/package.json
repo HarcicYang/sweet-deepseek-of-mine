@@ -6,14 +6,19 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/index.ts",
+    "test": "node --import tsx --test src/*.test.ts",
     "type": "tsc -p tsconfig.json",
     "lint": "oxlint src"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.8",
     "@sweet-deepseek/contracts": "workspace:*",
     "hono": "^4.13.18"
   },
   "devDependencies": {
-    "@types/node": "~20.9.2"
+    "@types/node": "~20.9.2",
+    "tsx": "^4.23.15"
   }
 }

@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 An independent community chat app based on DeepSeek's open-source `chat-demo` and the DeepSeek API. It is not an official DeepSeek product.
 
-The repository now uses a pnpm workspace. The web app temporarily keeps the existing browser-direct mode while the server proxy and accounts are implemented.
+The repository now uses a pnpm workspace. The server includes GitHub OAuth, encrypted API key storage, and a streaming chat proxy. The web app temporarily keeps the existing browser-direct mode until those endpoints are integrated.
 
 ## Getting started
 
@@ -18,6 +18,22 @@ pnpm dev
 ```
 
 Open http://localhost:8090.
+
+### Local server
+
+The server listens on `http://localhost:8787`; the web development server proxies `/api` to it.
+
+1. Create a GitHub OAuth App with the callback URL `http://localhost:8090/api/auth/github/callback`.
+2. Copy `.env.example` to `.env` and fill in `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
+3. Generate a 32-byte `APP_MASTER_KEY` with `openssl rand -base64 32`.
+4. Run the web app and server in separate terminals:
+
+```sh
+pnpm dev
+pnpm dev:server
+```
+
+The web UI does not yet expose the GitHub login flow. See [authentication and API keys](docs/authentication.md) for the server endpoints and security model.
 
 To build the static site:
 
@@ -37,7 +53,7 @@ The output is written to `apps/web/dist/`. Deploy it to a static web server or o
 
 ## Data and storage
 
-Your API key and settings are stored in the browser's localStorage. Conversations and original attachments are stored in IndexedDB. Local data is isolated by browser profile and site origin. Sending messages, uploading attachments, and using speech features sends the relevant content to the configured API service.
+The current web client still stores its API key and settings in localStorage and conversations in IndexedDB. The server provides GitHub OAuth sessions and AES-256-GCM encrypted key storage, but the web client has not switched to the server proxy yet.
 
 History import and export in Settings use ZIP archives. After confirmation and successful validation, importing replaces all local conversations and attachments. Exports include conversations and locally available original images, but exclude API keys, settings, and original non-image attachments. See the [history import/export documentation (Chinese)](apps/web/src/services/chat/history/README.md) for the archive format and preservation details.
 
@@ -45,13 +61,15 @@ Settings → Data → Delete all chats clears all local conversations, original 
 
 ## Development
 
-| Command       | Description                  |
-| ------------- | ---------------------------- |
-| `pnpm dev`    | Start the development server |
-| `pnpm build`  | Build into `apps/web/dist/`  |
-| `pnpm type`   | Run TypeScript type checks   |
-| `pnpm lint`   | Lint with oxlint             |
-| `pnpm format` | Format with oxfmt            |
+| Command           | Description                  |
+| ----------------- | ---------------------------- |
+| `pnpm dev`        | Start the development server |
+| `pnpm dev:server` | Start the Hono server        |
+| `pnpm build`      | Build into `apps/web/dist/`  |
+| `pnpm type`       | Run TypeScript type checks   |
+| `pnpm lint`       | Lint with oxlint             |
+| `pnpm test`       | Run server tests             |
+| `pnpm format`     | Format with oxfmt            |
 
 [apps/web/rspack.config.ts](apps/web/rspack.config.ts) uses `https://api.deepseek.com` by default. Use `createConfig({ apiOrigin, devServer })` to customize the API origin and development server proxy.
 
