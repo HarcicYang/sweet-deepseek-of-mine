@@ -25,6 +25,10 @@ import {
   type SyncSessionSummary,
   type SyncSettingsRecord,
 } from '@sweet-deepseek/contracts/sync'
+import {
+  JsonRenderValidationResponseSchema,
+  type JsonRenderDocument,
+} from '@sweet-deepseek/json-render'
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { readServerSentEvents } from './sse.js'
 
@@ -127,6 +131,46 @@ const parseResponse = <Value>(
 
 export const beginGithubLogin = () => {
   window.location.assign(apiUrl(apiRoutes.githubStart))
+}
+
+const JSON_RENDER_CACHE_LIMIT = 32
+const jsonRenderCache = new Map<string, JsonRenderDocument>()
+const jsonRenderRequests = new Map<string, Promise<JsonRenderDocument>>()
+
+/** Validate untrusted model-generated UI with the server before rendering it. */
+export const validateJsonRenderSource = (source: string): Promise<JsonRenderDocument> => {
+  const cached = jsonRenderCache.get(source)
+  if (cached) {
+    return Promise.resolve(cached)
+  }
+  const pending = jsonRenderRequests.get(source)
+  if (pending) {
+    return pending
+  }
+  const requestPromise = request(apiRoutes.jsonRenderValidate, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source }),
+  })
+    .then(
+      async (response) =>
+        parseResponse(JsonRenderValidationResponseSchema, await response.json()).document
+    )
+    .then((document) => {
+      if (jsonRenderCache.size >= JSON_RENDER_CACHE_LIMIT) {
+        const oldest = jsonRenderCache.keys().next().value
+        if (oldest !== undefined) {
+          jsonRenderCache.delete(oldest)
+        }
+      }
+      jsonRenderCache.set(source, document)
+      return document
+    })
+    .finally(() => {
+      jsonRenderRequests.delete(source)
+    })
+  jsonRenderRequests.set(source, requestPromise)
+  return requestPromise
 }
 
 export const getSession = async (signal?: AbortSignal): Promise<SessionResponse> => {

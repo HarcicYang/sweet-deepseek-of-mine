@@ -55,6 +55,20 @@
   }
 }
 
+.ds-markdown .ds-markdown-section-label {
+  margin: 24px 0 10px;
+  font: var(--dsw-font-markdown-h4);
+}
+
+.ds-markdown .ds-markdown-section-label strong {
+  font-weight: inherit;
+}
+
+.ds-markdown .ds-markdown-section-label + ul,
+.ds-markdown .ds-markdown-section-label + ol {
+  margin-top: 8px;
+}
+
 .ds-markdown {
   h4 + ul,
   h5 + ul,

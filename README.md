@@ -1,95 +1,95 @@
 # Sweet DeepSeek O'Mine
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](README.md)
 
-An independent community chat app based on DeepSeek's open-source `chat-demo` and the DeepSeek API. It is not an official DeepSeek product.
+An independent community chat tool (unofficial product) developed based on DeepSeek's official `chat-demo` and API. Built with a pnpm workspace architecture, it provides a complete chat experience with separated frontend and backend, as well as secure credential management.
 
-The repository uses a pnpm workspace. The web app signs in through GitHub and sends chat, attachment, and speech requests through the same-origin server proxy. DeepSeek API keys never enter browser storage.
+## Core Features
 
-## Getting started
+- **Multi-Session Management**: Supports auto-generated titles, renaming, deletion, message branch switching, and regeneration.
+- **Secure Proxy**: Authenticated via GitHub OAuth. DeepSeek API Keys are encrypted and stored on the server using AES-256-GCM, and all API requests are proxied by the same-origin backend, keeping them hidden from the browser.
+- **Cloud Sync & Caching**: Sessions and settings support cloud synchronization, account-isolated IndexedDB caching, offline outbox, and conflict replica handling.
+- **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
+- **Generative UI**: Server-validated JSON-Render cards, carousels, tables, charts, and code blocks with Markdown fallback and safe copy/continue actions.
+- **Multimedia Interaction**: Supports drag-and-drop attachment uploads, voice input, and text-to-speech reading.
+- **Personalization**: Supports bilingual (English/Chinese), dark/light themes, mobile adaptation, and history import/export.
 
-Install Node.js 22.12+ and pnpm, then run:
+## Quick Start
+
+This project requires **Node.js 22.12+** and **pnpm**.
+
+### 1. Clone & Install
 
 ```sh
-git clone https://github.com/HarcicYang/sweet-deepseek-of-mine.git
+git clone [https://github.com/HarcicYang/sweet-deepseek-of-mine.git](https://github.com/HarcicYang/sweet-deepseek-of-mine.git)
 cd sweet-deepseek-of-mine
 pnpm install
-pnpm dev
+
 ```
 
-Open http://localhost:8090.
+### 2. Configure Environment Variables
 
-### Local server
-
-The server listens on `http://localhost:8787`; the web development server proxies `/api` to it.
-
-1. Create a GitHub OAuth App with the callback URL `http://localhost:8090/api/auth/github/callback`.
-2. Copy `.env.example` to `.env` and fill in `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
-3. Generate a 32-byte `APP_MASTER_KEY` with `openssl rand -base64 32`.
-4. Run the web app and server in separate terminals:
+1. Create an OAuth App in GitHub and set the callback URL to: `http://localhost:8090/api/auth/github/callback`.
+2. Copy `.env.example` to `.env`, and fill in your `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
+3. Run the following command to generate a 32-byte master key and write it to `.env`:
 
 ```sh
-pnpm dev
-pnpm dev:server
+openssl rand -base64 32
+
 ```
 
-See [authentication and API keys](docs/authentication.md) for the login flow, endpoints, and security model.
+### 3. Run the Services
 
-To build the static site:
+Execute the following commands in two separate terminals:
 
 ```sh
-pnpm build
+pnpm dev         # Start the frontend development server (http://localhost:8090)
+pnpm dev:server  # Start the Hono backend service (http://localhost:8787)
+
 ```
 
-The output is written to `apps/web/dist/`. The complete app also requires the Hono server and a same-origin `/api` route; opening the static `index.html` alone is not enough for the online chat flow.
+> **Note**: The full application requires the Hono backend for same-origin `/api` forwarding and cannot run online chat with just a static `index.html`.
+> For detailed deployment schemes, refer to [Authentication & API Key](https://www.google.com/search?q=docs/authentication.md) and [Deployment Guide](https://www.google.com/search?q=docs/deployment.md).
 
-The frontend can also be hosted independently by building with `SDOM_API_BASE_URL`. Backend, Node/ECS, and Cloudflare Workers deployment options are documented in [deployment](docs/deployment.md).
+---
 
-## Features
-
-- Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.
-- GitHub sign-in, server sessions, encrypted API key storage, and the same-origin API proxy.
-- Cloud session and common preference sync, account-isolated IndexedDB caches, offline outboxes, and conflict copies.
-- Streaming replies, deep thinking, smart search, link reading, and source citations; stop generation or continue eligible replies.
-- Upload, paste, or drag and drop attachments; use voice input and read replies aloud. A live audio spectrum appears in the first row of the input area while recording on mobile.
-- Markdown, syntax highlighting, KaTeX math, and Mermaid diagrams.
-- Simplified Chinese and English, light and dark themes, mobile layouts, location settings, and chat history import and export.
-
-## Data and storage
-
-The web client caches synced conversations and the thinking, search, text-to-speech voice, and location preferences in an account-scoped `chat-demo:<userId>` IndexedDB database. Theme, language, and sidebar state remain device-local. Attachment originals are not yet cloud-synced. DeepSeek API keys are encrypted and stored on the server, and uploaded attachments are proxied by the server.
-
-See [cloud session sync](docs/sync.md) for revisions, deletion tombstones, offline outboxes, and conflict handling.
-
-History import and export in Settings use ZIP archives. After confirmation and successful validation, importing replaces all local conversations and attachments. Exports include conversations and locally available original images, but exclude API keys, settings, and original non-image attachments. See the [history import/export documentation (Chinese)](apps/web/src/services/chat/history/README.md) for the archive format and preservation details.
-
-Settings → Data → Delete all chats clears all local conversations, original attachments, and unsent drafts after confirmation. It stops ongoing replies and returns to a new chat. Your API key and settings are preserved; files already uploaded to the API service are not deleted.
-
-## Development
-
-| Command           | Description                  |
-| ----------------- | ---------------------------- |
-| `pnpm dev`        | Start the development server |
-| `pnpm dev:server` | Start the Hono server        |
-| `pnpm build`      | Build into `apps/web/dist/`  |
-| `pnpm type`       | Run TypeScript type checks   |
-| `pnpm lint`       | Lint with oxlint             |
-| `pnpm test`       | Run server tests             |
-| `pnpm format`     | Format with oxfmt            |
-
-[apps/web/rspack.config.ts](apps/web/rspack.config.ts) proxies `/api` to the local Hono server. Set `API_PROXY_TARGET` to override the development proxy target.
-
-Chat uses `deepseek-flash` by default through Anthropic-compatible Messages / Files APIs. Speech features use ASR / TTS endpoints. Requests include extensions for search, link reading, titles, and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
+## Project Structure
 
 ```text
 apps/
-  web/                 React chat client
-  server/              TypeScript + Hono server
+  web/              React chat client
+  server/           TypeScript + Hono backend
 packages/
-  contracts/           Shared protocols and runtime validation
-docs/                  Architecture and protocol notes
+  contracts/        Shared frontend/backend protocols and runtime validation
+  json-render/      Versioned JSON UI schema and validation
+docs/               Architecture and protocol documentation
+
 ```
+
+## Development Commands
+
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Start frontend development server |
+| `pnpm dev:server` | Start Hono backend service |
+| `pnpm build` | Build production artifacts (`apps/web/dist/`) |
+| `pnpm type` | TypeScript type checking |
+| `pnpm lint` | oxlint code linting |
+| `pnpm test` | Run backend tests |
+| `pnpm format` | oxfmt code formatting |
+
+---
+
+## Data & Privacy
+
+* **API Key Protection**: API keys are encrypted and stored exclusively on the server using AES-256-GCM and are never saved locally in the browser.
+* **Data Synchronization**: Session text, thinking processes, search results, and related settings are synchronized to the cloud and cached in `chat-demo:<userId>` IndexedDB.
+* **Import & Export**: Supports importing and exporting history in ZIP format (exported content includes sessions and raw images, excluding API keys and sensitive credentials).
+
+For more synchronization protocols and design details, please refer to the [Cloud Session Sync Guide](https://www.google.com/search?q=docs/sync.md).
+
+---
 
 ## License
 
-[MIT](LICENSE). The build copies the license to `apps/web/dist/LICENSE`; include it when distributing the app. Third-party dependencies are subject to their own licenses.
+[MIT](https://www.google.com/search?q=LICENSE) © HarcicYang

@@ -33,6 +33,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - `apps/web` 是 React 18、TypeScript、Rspack、Zustand、`idb`、`fflate` 客户端。
 - `apps/server` 是 TypeScript + Hono 服务端，包含 GitHub OAuth 会话、加密 Key 存储、聊天 / 附件 / 语音代理，以及 Node / Cloudflare Workers adapter。
 - `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
+- `packages/json-render` 保存版本化 JSON UI schema、围栏提取和结构限制校验。
 - Web 默认通过同源 `/api` 接口访问服务端，也可通过 `SDOM_API_BASE_URL` 指向独立后端，不再直接请求 DeepSeek API。
 - DeepSeek API Key 只加密保存在服务端，浏览器不持久化明文。
 - 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。
@@ -42,6 +43,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 附件和 ASR multipart 以限长流转发，不在服务端整体缓冲。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
+- 主回答已支持受约束的 JSON-Render、服务端二次校验和 Markdown 回退；当前 action 仅限复制和发起 prompt。
 - 主题 token 位于 `apps/web/src/app/theme.css`。
 - 文案必须同时维护 `apps/web/src/i18n/zh.ts` 和 `apps/web/src/i18n/en.ts`。
 - GitHub OAuth 登录、Key 设置以及聊天、附件、语音代理均已接入 Web 客户端。
@@ -121,7 +123,7 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 1. 服务端代理、GitHub OAuth、共享协议和 Web 接入已完成。
 2. 云端会话同步、设置同步和离线缓存第一切片已完成，继续处理附件原件与对象存储。
 3. 加入 Skill 与远程 MCP。
-4. 加入 JSON-Render 和 Markdown 回退。
+4. JSON-Render 基础切片已完成，继续补真实模型评测、移动端/键盘回归和受权限控制的高级 action。
 
 ## 验证
 

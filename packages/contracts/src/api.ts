@@ -12,6 +12,7 @@ export const apiRoutes = {
   file: '/api/files/:fileId',
   speechAsr: '/api/speech/asr',
   speechTts: '/api/speech/tts',
+  jsonRenderValidate: '/api/json-render/validate',
   syncSessions: '/api/sync/sessions',
   syncSession: '/api/sync/sessions/:sessionId',
   syncSettings: '/api/sync/settings',

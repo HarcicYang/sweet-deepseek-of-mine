@@ -20,6 +20,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.8",
     "@sweet-deepseek/contracts": "workspace:*",
+    "@sweet-deepseek/json-render": "workspace:*",
     "hono": "^4.13.18"
   },
   "devDependencies": {

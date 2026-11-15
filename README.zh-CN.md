@@ -2,94 +2,96 @@
 
 [English](README.md) | 简体中文
 
-基于 DeepSeek 官方开源 `chat-demo` 和 DeepSeek API 的独立社区聊天工具，不代表 DeepSeek 官方产品。
+基于 DeepSeek 官方 `chat-demo` 与 API 开发的独立社区聊天工具（非官方产品）。采用 pnpm workspace 架构，提供前后端分离的完整聊天体验与安全凭据管理。
 
-当前仓库已迁移为 pnpm workspace。Web 端通过同源后端接口使用 GitHub OAuth，聊天、附件和语音请求都由服务端代理；DeepSeek API Key 不再进入浏览器存储。
+## 核心功能
 
-## 运行
+- **多会话管理**：支持自动标题、重命名、删除、消息分支切换与重新生成。
+- **安全代理**：通过 GitHub OAuth 登录，DeepSeek API Key 由服务端经 AES-256-GCM 加密存储，所有 API 请求均由同源后端代理，不暴露在浏览器端。
+- **云端同步与缓存**：会话与设置支持云端同步、账号隔离的 IndexedDB 缓存、离线 outbox 及冲突副本处理。
+- **多模态与富文本**：支持流式响应、深度思考、网络搜索、链接阅读与来源引用；支持 Markdown、代码高亮、KaTeX 公式与 Mermaid 图表。
+- **生成式界面**：支持经服务端校验的 JSON-Render 卡片、轮播、表格、图表和代码块，并提供 Markdown 回退与安全复制/继续操作。
+- **多媒体交互**：支持附件拖拽上传、语音输入及朗读。
+- **个性化**：支持中英双语、明暗主题、移动端适配及历史记录导入导出。
 
-准备 Node.js 22.12+ 和 pnpm：
+
+## 快速开始
+
+本项目需要 **Node.js 22.12+** 和 **pnpm**。
+
+### 1. 克隆与安装
 
 ```sh
-git clone https://github.com/HarcicYang/sweet-deepseek-of-mine.git
+git clone [https://github.com/HarcicYang/sweet-deepseek-of-mine.git](https://github.com/HarcicYang/sweet-deepseek-of-mine.git)
 cd sweet-deepseek-of-mine
 pnpm install
-pnpm dev
+
 ```
 
-打开 http://localhost:8090 。
+### 2. 配置环境变量
 
-### 本地服务端
+1. 在 GitHub 中创建一个 OAuth App，回调地址填写：`http://localhost:8090/api/auth/github/callback`。
+2. 复制 `.env.example` 为 `.env`，填入你的 `GITHUB_CLIENT_ID` 和 `GITHUB_CLIENT_SECRET`。
+3. 运行以下命令生成 32 字节的主密钥并写入 `.env`：
+```sh
+openssl rand -base64 32
 
-服务端默认运行在 `http://localhost:8787`，Web 开发服务器会把 `/api` 代理到该端口。
+```
 
-1. 在 GitHub 创建 OAuth App，回调地址填写 `http://localhost:8090/api/auth/github/callback`。
-2. 复制 `.env.example` 为 `.env`，填写 `GITHUB_CLIENT_ID` 和 `GITHUB_CLIENT_SECRET`。
-3. 使用 `openssl rand -base64 32` 生成 32 字节 `APP_MASTER_KEY`。
-4. 在两个终端分别运行：
+
+
+### 3. 运行服务
+
+在两个终端分别执行以下命令：
 
 ```sh
-pnpm dev
-pnpm dev:server
+pnpm dev         # 启动前端开发服务器 (http://localhost:8090)
+pnpm dev:server  # 启动 Hono 后端服务 (http://localhost:8787)
+
 ```
 
-登录与安全边界见[认证与 API Key](docs/authentication.md)。
+> **注意**：完整应用需要配合 Hono 服务端进行同源 `/api` 转发，无法仅靠静态 `index.html` 运行在线聊天。
+> 详细部署方案可参考 [认证与 API Key](https://www.google.com/search?q=docs/authentication.md) 及 [部署说明](https://www.google.com/search?q=docs/deployment.md)。
 
-生成静态产物：
+---
 
-```sh
-pnpm build
-```
-
-产物位于 `apps/web/dist/`。完整应用还需要部署 Hono 服务端，并把同源 `/api` 请求转发到该服务端；不能只打开静态 `index.html` 使用在线聊天。
-
-前端也可以通过 `SDOM_API_BASE_URL` 指向独立后端。Node / ECS 和 Cloudflare Workers 部署方式见[部署说明](docs/deployment.md)。
-
-## 功能
-
-- 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。
-- GitHub 登录、服务端会话、加密 Key 存储与同源 API 代理。
-- 会话与常用设置云端同步、账号隔离的 IndexedDB 缓存、离线 outbox 和冲突副本。
-- 流式回答、深度思考、智能搜索、链接阅读与来源引用；支持停止和符合条件的继续生成。
-- 附件上传、粘贴与拖拽，语音输入和回复朗读；移动端录音时输入框首行显示实时频谱。
-- Markdown、代码高亮、KaTeX 公式和 Mermaid 图表。
-- 简体中文与英文、浅色与深色主题、移动端布局、位置设置、历史导入导出。
-
-## 数据
-
-Web 端只保存普通设置，DeepSeek API Key 由服务端使用 AES-256-GCM 加密保存。会话文本以及思考、搜索、TTS 音色和位置设置会同步到云端，并按账号缓存在 `chat-demo:<userId>` IndexedDB 中；主题、语言和侧栏状态保持设备本地。附件原件目前仍是本地数据；通过服务端上传到 DeepSeek 的附件由服务端代理。
-
-会话同步协议、删除墓碑、离线 outbox 和冲突策略见[云端会话同步](docs/sync.md)。
-
-设置中的历史导入导出使用 ZIP 格式。导入会在确认并校验成功后替换全部本地会话和附件；导出包含会话与本地可用的图片原件，不包含 API Key、设置或非图片附件原件。格式与保留范围见[历史导入导出](apps/web/src/services/chat/history/README.md)。
-
-设置 → 数据管理 → 删除所有对话，会在确认后清空全部本地会话、附件原件和未发送的草稿，停止正在生成的回复并回到新对话。API Key 和其他设置保留，已上传到 API 服务的文件不受影响。
-
-## 开发
-
-| 命令              | 用途                    |
-| ----------------- | ----------------------- |
-| `pnpm dev`        | 启动开发服务器          |
-| `pnpm dev:server` | 启动 Hono 服务端        |
-| `pnpm build`      | 构建到 `apps/web/dist/` |
-| `pnpm type`       | TypeScript 类型检查     |
-| `pnpm lint`       | oxlint 检查             |
-| `pnpm test`       | 运行服务端测试          |
-| `pnpm format`     | oxfmt 格式化            |
-
-[apps/web/rspack.config.ts](apps/web/rspack.config.ts) 将 `/api` 代理到本地 Hono 服务端；`API_PROXY_TARGET` 可覆盖开发代理目标。
-
-聊天默认使用 `deepseek-flash`，通过 Anthropic 兼容的 Messages / Files API 通信；语音使用 ASR / TTS 接口。请求使用搜索、链接阅读、标题和 `latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
+## 项目结构
 
 ```text
 apps/
-  web/                 React 聊天客户端
-  server/              TypeScript + Hono 服务端
+  web/               React 聊天客户端
+  server/            TypeScript + Hono 服务端
 packages/
-  contracts/           前后端共享协议与运行时校验
-docs/                  架构与协议说明
+  contracts/         前后端共享协议与运行时校验
+  json-render/        版本化 JSON UI schema 与校验
+docs/                架构与协议说明
+
 ```
+
+## 开发命令
+
+| 命令 | 说明 |
+| --- | --- |
+| `pnpm dev` | 启动前端开发服务器 |
+| `pnpm dev:server` | 启动 Hono 服务端 |
+| `pnpm build` | 构建生产产物 (`apps/web/dist/`) |
+| `pnpm type` | TypeScript 类型检查 |
+| `pnpm lint` | oxlint 代码检查 |
+| `pnpm test` | 运行服务端测试 |
+| `pnpm format` | oxfmt 代码格式化 |
+
+---
+
+## 数据与隐私
+
+* **API Key 保护**：API Key 仅由服务端使用 AES-256-GCM 加密存储，不保存在浏览器本地。
+* **数据同步**：会话文本、思考、搜索及相关设置会同步至云端，并缓存在 `chat-demo:<userId>` IndexedDB 中。
+* **导入导出**：支持 ZIP 格式的历史记录导入导出（导出内容包含会话与图片原件，不包含 API Key 及敏感凭据）。
+
+更多同步协议与设计细节请查阅 [云端会话同步说明](https://www.google.com/search?q=docs/sync.md)。
+
+---
 
 ## 许可证
 
-[MIT](LICENSE)。构建会将许可证复制到 `apps/web/dist/LICENSE`，分发时请一并保留；第三方依赖遵循各自的许可证。
+[MIT](https://www.google.com/search?q=LICENSE) © HarcicYang

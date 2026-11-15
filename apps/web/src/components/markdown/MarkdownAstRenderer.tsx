@@ -187,7 +187,15 @@ const MarkdownBlockContentOrDefinitionContent = memo(
               )
         case 'paragraph':
           return (
-            <p key={index} className="ds-markdown-paragraph">
+            <p
+              key={index}
+              className={clsx(
+                'ds-markdown-paragraph',
+                node.children.length === 1 &&
+                  node.children[0]?.type === 'strong' &&
+                  'ds-markdown-section-label'
+              )}
+            >
               <MarkdownPhrasingContent nodes={node.children} />
             </p>
           )

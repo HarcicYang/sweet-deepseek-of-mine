@@ -8,6 +8,7 @@ apps/
   server/              TypeScript + Hono 服务端
 packages/
   contracts/           前后端共享协议和运行时校验
+  json-render/          JSON UI schema、提取和静态白名单校验
 ```
 
 ## 边界
@@ -15,7 +16,10 @@ packages/
 - `apps/web` 负责界面、本地缓存、流式渲染和用户交互；迁移完成后不持久化 DeepSeek API Key。
 - `apps/server` 负责登录会话、服务端密钥、DeepSeek 代理和后续的 MCP 网关。
 - `packages/contracts` 同时被客户端和服务端引用，保存可序列化协议、共享常量和不可信输入的校验函数。
+- `packages/json-render` 只保存可序列化 UI 协议和纯校验逻辑；React 组件仍在 Web 端静态注册。
 - 静态注册的 UI 组件、Skill manifest 和 MCP 返回值不进入共享协议包，直到对应能力开始实现。
+
+JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入规划](json-render.md)。
 
 ## 当前迁移状态
 

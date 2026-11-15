@@ -37,6 +37,40 @@ import {
 const MODEL: ChatModel = 'deepseek-flash'
 /** 所有生成请求统一携带的助手身份说明 */
 const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
+/** 只在结构化展示明显优于纯文本时启用；无效输出会由客户端回退为 Markdown。 */
+const JSON_RENDER_PROMPT = `
+你应主动使用受约束的 JSON-Render 展示适合结构化的回答，不必等用户明确点名。只要内容涉及多个方案、选择、比较维度、行动步骤、指标、趋势、数据或后续操作，并且界面能明显提升扫描、比较或行动效率，就优先使用 JSON-Render。用户明确要求卡片、图表、可视化或交互界面时必须使用。简单事实、定义、短解释和普通代码继续使用 Markdown，避免为了展示而展示。
+
+规则：
+- 简单结构化内容使用一个 json-render 块；复杂回答拆成 2 至 4 个单一用途的块，块之间保留简短 Markdown 过渡文字，每轮最多 4 个块。
+- 每个块闭合后会立即独立渲染，后续文字继续流式显示。不要把整页内容塞进一个超大块，也不要把所有界面集中到回答末尾。
+- 每个块只承担一个明确目的，例如比较卡片、数据表格、趋势图或后续操作；块外文字不要重复界面中的内容。
+- 用户要求卡片、图表、可视化或后续操作按钮时，最终回答必须包含至少一个有效 json-render 块；不要改用 Mermaid、HTML 或普通链接列表替代。
+- 后续操作、推荐选择或下一步按钮应放进 Card actions，不要只输出一组 Markdown 链接。
+- 普通 Markdown 使用标准标题语法（如 \`## 标题\`）和列表前后空行，不要用单独一行粗体文字充当标题。
+- 块内必须是有效 JSON，不要注释、尾逗号、HTML、CSS、脚本、任意 URL 或自定义颜色。
+- 所有数据都是候选内容；保持简洁，移动端可读，卡片最多两个操作。
+
+块格式：
+\`\`\`json-render
+{"version":"1.0","root":NODE}
+\`\`\`
+
+NODE 支持以下类型：
+- {"type":"Markdown","value":"..."}
+- {"type":"Stack","gap":"none|s|m|l","children":[NODE...]}
+- {"type":"Callout","tone":"info|success|warning|danger","title":"可选","content":{"type":"Markdown","value":"..."}}
+- {"type":"Card","eyebrow":"可选","title":"可选","description":"可选","content":[NODE...],"actions":[ACTION...]}
+- {"type":"Carousel","items":[{"eyebrow":"可选","title":"可选","description":"可选","content":[NODE...],"actions":[ACTION...]}...]}，2 至 6 项
+- {"type":"Table","title":"可选","columns":[{"label":"列名","align":"left|center|right"}...],"rows":[["单元格"...]...]}，每行列数必须一致
+- {"type":"Chart","kind":"bar|line","title":"可选","unit":"可选","labels":["A","B"],"series":[{"name":"系列","values":[1,2]}]}，每个系列长度必须等于 labels
+- {"type":"Code","title":"可选","language":"可选","code":"..."}
+
+ACTION 仅支持：
+- {"kind":"prompt","label":"按钮文字","value":"用户点击后发送的问题"}
+- {"kind":"copy","label":"按钮文字","value":"要复制的文本"}
+
+若不需要丰富界面，直接输出 Markdown，不要提到 JSON-Render。`
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
@@ -587,43 +621,18 @@ export const stopAllReplies = () => {
   }
 }
 
-/**
- * 提交指定会话的最新草稿；null 表示新建会话。
- * 同步接收成功才清空草稿，附件原件由会话接管；保存失败仍通过保存入口重试。
- */
-export const sendMessage = (targetSessionId: string | null) => {
-  if (get().importingHistory || !get().ready) {
-    return false
-  }
-  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
-  if (!prepared) {
-    return false
-  }
-  const { text, files } = prepared
+type SubmitFile = FileAttachment & { serverId: string; blob: Blob }
+
+const submitMessage = (
+  targetSessionId: string,
+  text: string,
+  files: SubmitFile[],
+  clearDraft: boolean
+) => {
   const now = Date.now()
   let sessionId = targetSessionId
-  if (
-    sessionId !== null &&
-    (deletingSessions.has(sessionId) || getStreamController(sessionId) || !getSession(sessionId))
-  ) {
+  if (deletingSessions.has(sessionId) || getStreamController(sessionId) || !getSession(sessionId)) {
     return false
-  }
-  if (sessionId === null) {
-    const session: Session = {
-      id: createId(),
-      title: '',
-      createdAt: now,
-      updatedAt: now,
-      messages: [],
-      rootMessageId: null,
-    }
-    sessionId = session.id
-    touchSession(session.id)
-    set((state) => ({
-      sessions: [toSessionSummary(session), ...state.sessions],
-      sessionCache: { ...state.sessionCache, [session.id]: session },
-      activeId: session.id,
-    }))
   }
   const current = getSession(sessionId)
   if (!current) {
@@ -656,9 +665,54 @@ export const sendMessage = (targetSessionId: string | null) => {
     ])
   }
   persist(sessionId)
-  clearSentDraft(targetSessionId)
+  if (clearDraft) {
+    clearSentDraft(targetSessionId)
+  }
   void streamReply(sessionId, reply, { history, question })
   return true
+}
+
+/**
+ * 提交指定会话的最新草稿；null 表示新建会话。
+ * 同步接收成功才清空草稿，附件原件由会话接管；保存失败仍通过保存入口重试。
+ */
+export const sendMessage = (targetSessionId: string | null) => {
+  if (get().importingHistory || !get().ready) {
+    return false
+  }
+  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
+  if (!prepared) {
+    return false
+  }
+  const now = Date.now()
+  let sessionId = targetSessionId
+  if (sessionId === null) {
+    const session: Session = {
+      id: createId(),
+      title: '',
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+      rootMessageId: null,
+    }
+    sessionId = session.id
+    touchSession(session.id)
+    set((state) => ({
+      sessions: [toSessionSummary(session), ...state.sessions],
+      sessionCache: { ...state.sessionCache, [session.id]: session },
+      activeId: session.id,
+    }))
+  }
+  return submitMessage(sessionId, prepared.text, prepared.files, true)
+}
+
+/** JSON-Render 的安全 prompt action：保留输入框草稿，仅由用户手势提交新问题。 */
+export const sendPromptFromRender = (sessionId: string, prompt: string) => {
+  const text = prompt.trim()
+  if (!text || text.length > 4000 || get().importingHistory || !get().ready) {
+    return false
+  }
+  return submitMessage(sessionId, text, [], false)
 }
 
 /** 重新生成当前路径上的回答：在原问题下新增版本，不覆盖旧回答和后续对话。 */
@@ -1041,15 +1095,16 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           initial.thinking ?? false,
           latestReminder
         )
+        const requestTitle = titleRequests.has(controller)
         const events = streamMessage(
           {
             model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
+            system: `${SYSTEM_PROMPT}\n\n${JSON_RENDER_PROMPT}`,
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,
             tools: serverTools(initial.search ?? false),
-            ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+            ...(requestTitle ? { title: { enabled: true } } : {}),
           },
           controller.signal
         )

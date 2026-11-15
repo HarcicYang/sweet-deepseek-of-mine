@@ -15,6 +15,12 @@ import {
   type SessionResponse,
 } from '@sweet-deepseek/contracts/api'
 import {
+  JSON_RENDER_LIMITS,
+  JsonRenderValidationRequestSchema,
+  JsonRenderValidationResponseSchema,
+  parseJsonRenderSource,
+} from '@sweet-deepseek/json-render'
+import {
   SyncDeleteRequestSchema,
   SyncSettingsResponseSchema,
   SyncSettingsUpdateRequestSchema,
@@ -27,11 +33,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccountStore, GitHubProfile, UserRecord } from './account-store.js'
 import type { SecurityService } from './security.js'
-import {
-  SyncConflictError,
-  SyncSettingsConflictError,
-  type SyncStore,
-} from './sync-store.js'
+import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
 
 const SESSION_COOKIE = 'sdom_session'
 const OAUTH_STATE_COOKIE = 'sdom_oauth_state'
@@ -41,10 +43,13 @@ const GITHUB_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize'
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
 const GITHUB_USER_URL = 'https://api.github.com/user'
 const GITHUB_API_VERSION = '2022-11-28'
+// Workers only supports Fetch redirect modes "follow" and "manual".
+const UPSTREAM_REDIRECT_MODE = 'manual' as const
 const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 const MAX_SYNC_BODY_BYTES = 20 * 1024 * 1024
+const MAX_JSON_RENDER_BODY_BYTES = JSON_RENDER_LIMITS.maxDocumentBytes + 1024
 
 class RequestBodyTooLargeError extends Error {
   constructor() {
@@ -79,6 +84,7 @@ export type AppOptions = {
   cookieSameSite?: 'Lax' | 'Strict' | 'None'
   allowedOrigins?: string[]
   fetchImpl?: typeof fetch
+  logger?: Pick<Console, 'warn'>
 }
 
 type JsonResult = { ok: true; value: unknown } | { ok: false }
@@ -89,6 +95,49 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readJson = async (context: Context<AppEnv>): Promise<JsonResult> => {
   try {
     return { ok: true, value: await context.req.json<unknown>() }
+  } catch {
+    return { ok: false }
+  }
+}
+
+const readLimitedJson = async (
+  context: Context<AppEnv>,
+  limit: number
+): Promise<JsonResult | 'too-large'> => {
+  if (contentLengthExceeds(context, limit)) {
+    return 'too-large'
+  }
+  const body = context.req.raw.body
+  if (!body) {
+    return { ok: false }
+  }
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+      total += value.byteLength
+      if (total > limit) {
+        await reader.cancel()
+        return 'too-large'
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  try {
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(bytes)) as unknown }
   } catch {
     return { ok: false }
   }
@@ -195,6 +244,14 @@ const readGitHubToken = (value: unknown): string | null => {
   return value.access_token.trim()
 }
 
+const readGitHubTokenError = (value: unknown): string => {
+  if (!isRecord(value) || typeof value.error !== 'string') {
+    return 'invalid_response'
+  }
+  const errorCode = value.error.trim()
+  return /^[a-z0-9_]{1,100}$/iu.test(errorCode) ? errorCode : 'unknown_error'
+}
+
 const readGitHubProfile = (value: unknown): GitHubProfile | null => {
   if (
     !isRecord(value) ||
@@ -237,6 +294,7 @@ export const createApp = ({
   cookieSameSite = 'Lax',
   allowedOrigins = [],
   fetchImpl = fetch,
+  logger = globalThis.console,
 }: AppOptions) => {
   const app = new Hono<AppEnv>()
   const trustedOrigins = new Set(
@@ -411,13 +469,25 @@ export const createApp = ({
         redirect_uri: githubCallbackUrl,
       }),
       signal: AbortSignal.timeout(20_000),
-      redirect: 'error',
-    }).catch(() => null)
+      redirect: UPSTREAM_REDIRECT_MODE,
+    }).catch((error: unknown) => {
+      logger.warn('GitHub OAuth token exchange request failed', {
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return null
+    })
     if (!tokenResponse?.ok) {
+      logger.warn('GitHub OAuth token exchange returned an HTTP error', {
+        status: tokenResponse?.status ?? null,
+      })
       return authRedirect(context, 'error', 'oauth_exchange')
     }
-    const accessToken = readGitHubToken(await tokenResponse.json().catch(() => null))
+    const tokenPayload = await tokenResponse.json().catch(() => null)
+    const accessToken = readGitHubToken(tokenPayload)
     if (!accessToken) {
+      logger.warn('GitHub OAuth token exchange returned no access token', {
+        githubError: readGitHubTokenError(tokenPayload),
+      })
       return authRedirect(context, 'error', 'oauth_exchange')
     }
 
@@ -429,7 +499,7 @@ export const createApp = ({
         'User-Agent': 'sweet-deepseek-omine',
       },
       signal: AbortSignal.timeout(20_000),
-      redirect: 'error',
+      redirect: UPSTREAM_REDIRECT_MODE,
     }).catch(() => null)
     if (!profileResponse?.ok) {
       return authRedirect(context, 'error', 'github_profile')
@@ -447,6 +517,22 @@ export const createApp = ({
   app.get(apiRoutes.session, requireAuth, (context) => {
     const body: SessionResponse = { user: toAuthUser(context.get('auth').user) }
     return context.json(SessionResponseSchema.parse(body))
+  })
+
+  app.post(apiRoutes.jsonRenderValidate, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, MAX_JSON_RENDER_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'JSON-Render document is too large')
+    }
+    const request = json.ok ? JsonRenderValidationRequestSchema.safeParse(json.value) : null
+    if (!request?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid JSON-Render request')
+    }
+    const result = parseJsonRenderSource(request.data.source)
+    if (!result.success) {
+      return apiError(context, 400, 'invalid_request', result.error)
+    }
+    return context.json(JsonRenderValidationResponseSchema.parse({ document: result.data }))
   })
 
   app.post(apiRoutes.logout, requireAuth, async (context) => {
@@ -473,7 +559,7 @@ export const createApp = ({
       method: 'GET',
       headers: { Authorization: `Bearer ${parsed.data.apiKey}` },
       signal: AbortSignal.timeout(20_000),
-      redirect: 'error',
+      redirect: UPSTREAM_REDIRECT_MODE,
     }).catch(() => null)
     if (!verification) {
       return apiError(context, 502, 'upstream_error', 'Could not verify the DeepSeek API key')
@@ -629,7 +715,7 @@ export const createApp = ({
         },
         body: limitRequestBody(body, limit),
         signal: createProxySignal(context),
-        redirect: 'error',
+        redirect: UPSTREAM_REDIRECT_MODE,
         duplex: 'half',
       } as RequestInit & { duplex: 'half' })
     } catch (error) {
@@ -669,7 +755,7 @@ export const createApp = ({
             'anthropic-beta': 'files-api-2025-04-14',
           },
           signal: createProxySignal(context),
-          redirect: 'error',
+          redirect: UPSTREAM_REDIRECT_MODE,
         }
       )
     } catch (error) {
@@ -706,7 +792,7 @@ export const createApp = ({
         },
         body: limitRequestBody(body, limit),
         signal: createProxySignal(context),
-        redirect: 'error',
+        redirect: UPSTREAM_REDIRECT_MODE,
         duplex: 'half',
       } as RequestInit & { duplex: 'half' })
     } catch (error) {
@@ -748,7 +834,7 @@ export const createApp = ({
         },
         body: JSON.stringify(parsed.data),
         signal: createProxySignal(context),
-        redirect: 'error',
+        redirect: UPSTREAM_REDIRECT_MODE,
       })
     } catch (error) {
       return proxyFailure(context, error, clientSignal)
@@ -798,7 +884,7 @@ export const createApp = ({
         headers,
         body: JSON.stringify(requestBody),
         signal,
-        redirect: 'error',
+        redirect: UPSTREAM_REDIRECT_MODE,
       })
     } catch (error) {
       return proxyFailure(context, error, clientSignal)

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { apiRoutes } from '@sweet-deepseek/contracts/api'
+import { JSON_RENDER_LIMITS, JSON_RENDER_VERSION } from '@sweet-deepseek/json-render'
 import { MemoryAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { createSecurityService } from './security.js'
@@ -121,6 +122,7 @@ test('GitHub OAuth creates an authenticated server session', async () => {
   assert.equal(callback.status, 302)
   assert.ok(sessionToken)
   assert.equal(calls.filter((call) => call.url === 'https://api.github.com/user').length, 1)
+  assert.ok(calls.every((call) => call.init?.redirect === 'manual'))
 
   const session = await app.request(`${APP_ORIGIN}${apiRoutes.session}`, {
     headers: { Cookie: `sdom_session=${sessionToken}` },
@@ -133,6 +135,58 @@ test('GitHub OAuth creates an authenticated server session', async () => {
   assert.equal(sessionBody.user.githubLogin, 'octocat')
   assert.equal(sessionBody.user.avatarUrl, 'https://avatars.githubusercontent.com/u/12345')
   assert.equal(sessionBody.user.hasApiKey, false)
+})
+
+test('JSON-Render validation requires auth and rejects unknown nodes', async () => {
+  const { app } = await createTestApp()
+  const unauthorized = await app.request(`${APP_ORIGIN}${apiRoutes.jsonRenderValidate}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: '{}' }),
+  })
+  assert.equal(unauthorized.status, 401)
+
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const source = JSON.stringify({
+    version: JSON_RENDER_VERSION,
+    root: {
+      type: 'Card',
+      title: 'Ready',
+      content: [{ type: 'Markdown', value: 'Rendered safely.' }],
+    },
+  })
+  const valid = await app.request(`${APP_ORIGIN}${apiRoutes.jsonRenderValidate}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ source }),
+  })
+  assert.equal(valid.status, 200)
+  const body = (await valid.json()) as { document: { root: { type: string } } }
+  assert.equal(body.document.root.type, 'Card')
+
+  const invalid = await app.request(`${APP_ORIGIN}${apiRoutes.jsonRenderValidate}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      source: JSON.stringify({
+        version: JSON_RENDER_VERSION,
+        root: { type: 'Unknown', value: 'no' },
+      }),
+    }),
+  })
+  assert.equal(invalid.status, 400)
+
+  const tooLarge = await app.request(`${APP_ORIGIN}${apiRoutes.jsonRenderValidate}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ source: ' '.repeat(JSON_RENDER_LIMITS.maxDocumentBytes + 1024) }),
+  })
+  assert.equal(tooLarge.status, 413)
 })
 
 test('API key storage and DeepSeek proxies keep credentials on the server', async () => {
@@ -222,9 +276,7 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   })
   assert.equal(asr.status, 200)
   assert.deepEqual(await asr.json(), { text: 'hello from audio' })
-  const upstreamAsr = calls.find(
-    (call) => call.url === 'https://api.deepseek.test/v1/tools/asr'
-  )
+  const upstreamAsr = calls.find((call) => call.url === 'https://api.deepseek.test/v1/tools/asr')
   assert.ok(upstreamAsr?.body)
   const asrBody = new TextDecoder().decode(upstreamAsr.body)
   assert.match(asrBody, /name="file"; filename="recording.wav"/u)
@@ -242,6 +294,7 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   })
   assert.equal(tts.status, 200)
   assert.deepEqual(new Uint8Array(await tts.arrayBuffer()), new Uint8Array([1, 2, 3, 4]))
+  assert.ok(calls.every((call) => call.init?.redirect === 'manual'))
 })
 
 test('cross-origin writes are rejected before authentication', async () => {

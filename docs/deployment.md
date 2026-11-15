@@ -47,24 +47,46 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    pnpm worker:migrate:remote
    ```
 
-3. 首次创建 Worker 时，把 secrets 写入 `.dev.vars.production`：
+3. 创建生产环境使用的 GitHub OAuth App：
+   - 打开 GitHub 的 `Settings → Developer settings → OAuth Apps → New OAuth App`。
+   - `Application name` 可以填写 `Sweet DeepSeek O'Mine`。
+   - `Homepage URL` 填写用户访问的前端地址，默认部署为 `https://sdom.harcic.me`。
+   - `Authorization callback URL` 填写 `https://sdom.harcic.me/api/auth/github/callback`。
+   - 注册后复制 `Client ID`，再生成并立即保存 `Client secret`。GitHub 通常只显示一次 secret。
+
+   如果使用其他域名，`Homepage URL` 对应 `APP_ORIGIN`；回调地址必须精确等于
+   `API_ORIGIN` 加上 `/api/auth/github/callback`。不要复用本地开发 OAuth App 的
+   `localhost` 回调地址。
+
+4. 首次创建 Worker 时，把真实值写入仓库外、仅当前用户可读的 secrets 文件。例如：
 
    ```sh
-   APP_MASTER_KEY=...
-   GITHUB_CLIENT_ID=...
-   GITHUB_CLIENT_SECRET=...
+   mkdir -p ~/.config/sweet-deepseek-o-mine
+   chmod 700 ~/.config/sweet-deepseek-o-mine
+   cp .dev.vars.example ~/.config/sweet-deepseek-o-mine/production.env
+   chmod 600 ~/.config/sweet-deepseek-o-mine/production.env
+   openssl rand -base64 32
    ```
 
-4. 部署：
+   然后填写：
+
+   ```dotenv
+   APP_MASTER_KEY=<刚生成的 Base64 主密钥>
+   GITHUB_CLIENT_ID=<OAuth App 的 Client ID>
+   GITHUB_CLIENT_SECRET=<OAuth App 的 Client secret>
+   ```
+
+   不要把这三个值提交到 Git、粘贴到 issue、聊天记录或部署日志中。也不要把 secrets
+   保存到不支持 Unix 权限的共享盘或外接盘；部分文件系统会把文件权限固定为 `0777`。
+
+5. 部署：
 
    ```sh
-   pnpm exec wrangler deploy --secrets-file .dev.vars.production
+   pnpm exec wrangler deploy \
+     --secrets-file "$HOME/.config/sweet-deepseek-o-mine/production.env"
    ```
 
 Worker 已存在后，单独更新某项 secret 可以使用 `wrangler secret put <NAME>`。
-
-GitHub OAuth App 的回调地址必须指向后端公开域名的
-`/api/auth/github/callback`。当前配置的自定义域名是 `https://sdom.harcic.me`。
 
 Worker 默认同时提供 `apps/web/dist` 和 `/api`，这是最简单的单服务部署方式。前端也可以单独
 部署；此时设置 `SDOM_API_BASE_URL`，并把前端 origin 加入 `APP_ALLOWED_ORIGINS`。

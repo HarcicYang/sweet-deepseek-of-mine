@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@sweet-deepseek/contracts": "workspace:*",
+    "@sweet-deepseek/json-render": "workspace:*",
     "@types/katex": "^0.16.5",
     "@types/mdast": "~4.0.3",
     "@types/prismjs": "^1.26.1",
