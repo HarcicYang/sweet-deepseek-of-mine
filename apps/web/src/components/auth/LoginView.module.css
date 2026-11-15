@@ -1,117 +1,83 @@
 .page {
-  position: relative;
   display: grid;
+  box-sizing: border-box;
   min-height: 100vh;
+  padding: 24px;
   place-items: center;
-  overflow: hidden;
-  padding: 32px;
-  background:
-    radial-gradient(
-      circle at 18% 18%,
-      var(--dsw-alias-interactive-bg-hover-accent) 0,
-      transparent 34%
-    ),
-    radial-gradient(circle at 82% 78%, var(--dsw-alias-interactive-bg-hover) 0, transparent 30%),
-    var(--dsw-alias-bg-base);
-}
-
-.atmosphere {
-  position: absolute;
-  inset: 0;
-  opacity: 0.45;
-  background-image:
-    linear-gradient(var(--dsw-alias-border-l2) 1px, transparent 1px),
-    linear-gradient(90deg, var(--dsw-alias-border-l2) 1px, transparent 1px);
-  background-size: 48px 48px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 25%, black 75%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, black 25%, black 75%, transparent);
+  background-color: var(--dsw-alias-bg-base);
 }
 
 .card {
-  position: relative;
-  z-index: 1;
   box-sizing: border-box;
-  width: min(440px, 100%);
-  padding: 40px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 28px;
+  width: min(380px, 100%);
+  padding: 32px 28px 26px;
+  border-radius: 24px;
+  color: var(--dsw-alias-label-primary);
   background-color: var(--dsw-alias-bg-layer-2);
-  box-shadow: var(--dsw-shadow-lv3);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.mark {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  margin-bottom: 20px;
-  border-radius: 15px;
-  place-items: center;
-  background-color: var(--dsw-alias-brand-primary);
-  color: var(--dsw-alias-label-primary-foreground);
-  font-size: 24px;
-  font-weight: 700;
+  box-shadow:
+    inset 0 0 0 1px var(--dsw-alias-border-inverted),
+    0 0 1px 0 rgba(0, 0, 0, 0.2),
+    0 0 4px 0 rgba(0, 0, 0, 0.02),
+    0 12px 32px 0 rgba(0, 0, 0, 0.08);
 }
 
 .brand {
-  margin-bottom: 10px;
-  color: var(--dsw-alias-label-caption);
-  font-size: 12px;
-  line-height: 18px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  margin-bottom: 28px;
+  color: var(--dsw-alias-brand-primary);
+  font-size: 20px;
+  line-height: 22px;
+  font-weight: 600;
 }
 
 .title {
-  margin: 0;
+  margin: 0 0 10px;
   color: var(--dsw-alias-label-primary);
-  font-family: var(--dsw-font-family);
-  font-size: clamp(32px, 7vw, 46px);
-  line-height: 1.08;
-  letter-spacing: -0.04em;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
 }
 
 .description {
-  margin: 16px 0 28px;
+  margin: 0 0 24px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 15px;
-  line-height: 24px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .loading,
 .notice {
-  padding: 12px 14px;
-  border-radius: 14px;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
   font-size: 13px;
   line-height: 20px;
 }
 
 .loading {
-  background-color: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-secondary);
+  background-color: var(--dsw-specific-selector);
 }
 
 .notice {
-  margin-bottom: 16px;
-  background-color: var(--dsw-alias-interactive-bg-hover-danger);
   color: var(--dsw-alias-state-error-primary);
+  background-color: var(--dsw-alias-interactive-bg-hover-danger);
 }
 
 .privacy {
-  margin: 20px 0 0;
+  margin: 18px 0 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .page {
-    padding: 20px;
+    padding: 16px;
   }
 
   .card {
-    padding: 30px 24px;
-    border-radius: 24px;
+    padding: 28px 22px 24px;
+    border-radius: 20px;
   }
 }

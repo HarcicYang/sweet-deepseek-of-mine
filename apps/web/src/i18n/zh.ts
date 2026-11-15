@@ -11,7 +11,7 @@ export const zh = {
   sessionSaveFailed: '对话或附件尚未保存到本机，关闭页面可能丢失，请重试',
   sessionDeleteFailed: '删除对话失败，请重试',
   settings: '设置',
-  appName: "Sweet DeepSeek O'Mine",
+  appName: 'SDoM',
   loginTitle: '继续你的对话',
   loginDescription: '使用 GitHub 登录，DeepSeek API Key 和聊天请求都由服务端安全代理。',
   loginCheckingSession: '正在检查登录状态...',

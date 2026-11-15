@@ -10,9 +10,7 @@ export const LoginView = () => {
 
   return (
     <main className={styles.page}>
-      <div className={styles.atmosphere} aria-hidden="true" />
       <section className={styles.card} aria-live="polite">
-        <div className={styles.mark}>S</div>
         <div className={styles.brand}>{"Sweet DeepSeek O'Mine"}</div>
         <h1 className={styles.title}>{t('loginTitle')}</h1>
         <p className={styles.description}>{t('loginDescription')}</p>

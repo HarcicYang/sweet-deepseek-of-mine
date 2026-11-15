@@ -14,7 +14,7 @@ export const en = {
     'Chats or attachments have not been saved locally. Retry before closing this page.',
   sessionDeleteFailed: 'Unable to delete this chat. Please try again.',
   settings: 'Settings',
-  appName: "Sweet DeepSeek O'Mine",
+  appName: 'SDoM',
   loginTitle: 'Continue your conversation',
   loginDescription:
     'Sign in with GitHub. Your DeepSeek API key and chat requests stay behind the secure server proxy.',
