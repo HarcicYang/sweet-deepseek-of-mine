@@ -18,7 +18,7 @@ const cookieValue = (setCookie: string | null, name: string): string | null => {
   return match?.[1] ?? null
 }
 
-const createTestApp = async () => {
+const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
   const security = await createSecurityService(MASTER_KEY)
   const syncStore = new MemorySyncStore()
   const calls: Array<{ url: string; init?: RequestInit; body?: Uint8Array }> = []
@@ -83,6 +83,7 @@ const createTestApp = async () => {
     requestTimeoutMs: 60_000,
     sessionTtlMs: 24 * 60 * 60 * 1000,
     cookieSecure: false,
+    allowedOrigins: options.allowedOrigins,
     fetchImpl,
   })
   return { app, calls, syncStore }
@@ -250,6 +251,29 @@ test('cross-origin writes are rejected before authentication', async () => {
     headers: { Origin: 'https://attacker.example' },
   })
   assert.equal(response.status, 403)
+})
+
+test('configured frontend origins can use credentialed API requests', async () => {
+  const frontendOrigin = 'https://frontend.example'
+  const { app } = await createTestApp({ allowedOrigins: [frontendOrigin] })
+  const preflight = await app.request(`${APP_ORIGIN}${apiRoutes.session}`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: frontendOrigin,
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'Content-Type',
+    },
+  })
+  assert.equal(preflight.status, 204)
+  assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), frontendOrigin)
+  assert.equal(preflight.headers.get('Access-Control-Allow-Credentials'), 'true')
+
+  const response = await app.request(`${APP_ORIGIN}${apiRoutes.logout}`, {
+    method: 'POST',
+    headers: { Origin: frontendOrigin },
+  })
+  assert.equal(response.status, 401)
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), frontendOrigin)
 })
 
 test('OAuth callback rejects a mismatched state', async () => {

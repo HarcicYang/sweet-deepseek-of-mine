@@ -43,6 +43,8 @@ pnpm build
 
 The output is written to `apps/web/dist/`. The complete app also requires the Hono server and a same-origin `/api` route; opening the static `index.html` alone is not enough for the online chat flow.
 
+The frontend can also be hosted independently by building with `SDOM_API_BASE_URL`. Backend, Node/ECS, and Cloudflare Workers deployment options are documented in [deployment](docs/deployment.md).
+
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.

@@ -5,6 +5,8 @@ declare module '*.module.css' {
 
 declare module '*.css' {}
 
+declare const __SDOM_API_BASE_URL__: string
+
 /** Prism 语言包通过副作用注册到全局 Prism */
 declare module 'prismjs/components/*' {}
 

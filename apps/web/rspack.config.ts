@@ -69,6 +69,9 @@ export const createConfig = ({ devServer }: ConfigOptions = {}): Configuration =
     ],
   },
   plugins: [
+    new rspack.DefinePlugin({
+      __SDOM_API_BASE_URL__: JSON.stringify(process.env.SDOM_API_BASE_URL ?? ''),
+    }),
     // 经典 defer 脚本支持 file:// 页面的资源加载
     new rspack.HtmlRspackPlugin({
       template: './src/index.html',

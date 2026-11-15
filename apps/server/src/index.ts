@@ -24,6 +24,18 @@ const requireEnv = (name: string): string => {
 }
 
 const origin = new URL(process.env.APP_ORIGIN ?? 'http://localhost:8090').origin
+const apiOrigin = new URL(process.env.API_ORIGIN ?? origin).origin
+const allowedOrigins = (process.env.APP_ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+allowedOrigins.push(apiOrigin)
+const cookieSameSite =
+  process.env.COOKIE_SAME_SITE?.toLowerCase() === 'none'
+    ? 'None'
+    : process.env.COOKIE_SAME_SITE?.toLowerCase() === 'strict'
+      ? 'Strict'
+      : 'Lax'
 const port = readPositiveInt(process.env.PORT, 8787)
 const sessionTtlDays = readPositiveInt(process.env.SESSION_TTL_DAYS, 30)
 const security = await createSecurityService(requireEnv('APP_MASTER_KEY'))
@@ -42,13 +54,15 @@ const app = createApp({
   githubClientId: requireEnv('GITHUB_CLIENT_ID'),
   githubClientSecret: requireEnv('GITHUB_CLIENT_SECRET'),
   githubCallbackUrl:
-    process.env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, origin).toString(),
+    process.env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, apiOrigin).toString(),
   deepSeekBaseUrl: process.env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
   requestTimeoutMs: readPositiveInt(process.env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
   sessionTtlMs: sessionTtlDays * 24 * 60 * 60 * 1000,
   cookieSecure: process.env.COOKIE_SECURE
     ? process.env.COOKIE_SECURE === 'true'
     : origin.startsWith('https://'),
+  cookieSameSite,
+  allowedOrigins,
 })
 
 serve({ fetch: app.fetch, port })

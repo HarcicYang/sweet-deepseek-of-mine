@@ -43,6 +43,8 @@ pnpm build
 
 产物位于 `apps/web/dist/`。完整应用还需要部署 Hono 服务端，并把同源 `/api` 请求转发到该服务端；不能只打开静态 `index.html` 使用在线聊天。
 
+前端也可以通过 `SDOM_API_BASE_URL` 指向独立后端。Node / ECS 和 Cloudflare Workers 部署方式见[部署说明](docs/deployment.md)。
+
 ## 功能
 
 - 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。

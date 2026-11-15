@@ -76,6 +76,8 @@ export type AppOptions = {
   requestTimeoutMs: number
   sessionTtlMs: number
   cookieSecure: boolean
+  cookieSameSite?: 'Lax' | 'Strict' | 'None'
+  allowedOrigins?: string[]
   fetchImpl?: typeof fetch
 }
 
@@ -232,21 +234,36 @@ export const createApp = ({
   requestTimeoutMs,
   sessionTtlMs,
   cookieSecure,
+  cookieSameSite = 'Lax',
+  allowedOrigins = [],
   fetchImpl = fetch,
 }: AppOptions) => {
   const app = new Hono<AppEnv>()
+  const trustedOrigins = new Set(
+    [appOrigin, ...allowedOrigins].map((origin) => new URL(origin).origin)
+  )
 
   app.use('/api/*', async (context, next) => {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(context.req.method)) {
-      return await next()
-    }
     const origin = context.req.header('Origin')
-    if (origin && origin !== appOrigin) {
+    if (origin && !trustedOrigins.has(origin)) {
       return apiError(context, 403, 'forbidden', 'Cross-origin request rejected')
     }
-    const fetchSite = context.req.header('Sec-Fetch-Site')
-    if (fetchSite && !['same-origin', 'none'].includes(fetchSite)) {
-      return apiError(context, 403, 'forbidden', 'Cross-site request rejected')
+    if (origin) {
+      context.header('Access-Control-Allow-Origin', origin)
+      context.header('Access-Control-Allow-Credentials', 'true')
+      context.header('Vary', 'Origin')
+    }
+    if (context.req.method === 'OPTIONS') {
+      context.header('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS')
+      context.header(
+        'Access-Control-Allow-Headers',
+        context.req.header('Access-Control-Request-Headers') ?? 'Content-Type, Accept'
+      )
+      context.header('Access-Control-Max-Age', '600')
+      return context.body(null, 204)
+    }
+    if (['GET', 'HEAD', 'OPTIONS'].includes(context.req.method)) {
+      return await next()
     }
     return await next()
   })
@@ -327,7 +344,7 @@ export const createApp = ({
     setCookie(context, SESSION_COOKIE, token, {
       httpOnly: true,
       secure: cookieSecure,
-      sameSite: 'Lax',
+      sameSite: cookieSameSite,
       path: '/',
       maxAge: Math.floor(sessionTtlMs / 1000),
     })

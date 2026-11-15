@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sweet-deepseek-o-mine",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-15",
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sweet-deepseek-o-mine",
+      "database_id": "597a6b8c-1b82-474f-b2f8-4d756f0e1118",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "secrets": {
+    "required": ["APP_MASTER_KEY", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"]
+  },
+  "vars": {
+    "APP_ORIGIN": "https://sdom.harcic.me",
+    "APP_ALLOWED_ORIGINS": "",
+    "COOKIE_SAME_SITE": "lax",
+    "DEEPSEEK_API_BASE_URL": "https://api.deepseek.com",
+    "DEEPSEEK_REQUEST_TIMEOUT_MS": "900000",
+    "SESSION_TTL_DAYS": "30"
+  },
+  "routes": [
+    {
+      "pattern": "sdom.harcic.me",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  }
+}

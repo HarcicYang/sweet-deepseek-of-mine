@@ -28,6 +28,9 @@ import {
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { readServerSentEvents } from './sse.js'
 
+const apiBaseUrl = __SDOM_API_BASE_URL__.replace(/\/+$/u, '')
+const apiUrl = (path: string) => (path.startsWith('/') ? `${apiBaseUrl}${path}` : path)
+
 export type ApiErrorKind =
   /** 非 2xx 响应 */
   | 'http'
@@ -95,7 +98,7 @@ const notifyUnauthorized = () => {
 export const request = async (url: string, init: RequestInit = {}): Promise<Response> => {
   let response: Response
   try {
-    response = await fetch(url, init)
+    response = await fetch(apiUrl(url), { credentials: 'include', ...init })
   } catch (error) {
     if (init.signal?.aborted) {
       throw error
@@ -123,7 +126,7 @@ const parseResponse = <Value>(
 }
 
 export const beginGithubLogin = () => {
-  window.location.assign(apiRoutes.githubStart)
+  window.location.assign(apiUrl(apiRoutes.githubStart))
 }
 
 export const getSession = async (signal?: AbortSignal): Promise<SessionResponse> => {
