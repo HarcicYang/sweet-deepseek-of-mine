@@ -21,7 +21,8 @@ packages/
 
 服务端已实现 GitHub OAuth 登录会话、加密 API Key 存储，以及聊天、附件和语音代理，
 协议见[认证与 API Key](authentication.md)。Web 端通过同源 `/api` 接口调用服务端，
-不再直接请求 DeepSeek API，也不在浏览器持久化 API Key。
+不再直接请求 DeepSeek API，也不在浏览器持久化 API Key。会话、删除墓碑和账号常用设置
+已接入云端同步；同步协议见[云端会话同步](sync.md)。
 
 ## 边缘运行时边界
 
@@ -38,3 +39,4 @@ packages/
 
 当前仓库只实现了 Node adapter。边缘部署仍需要 Worker 入口，以及 `AccountStore`、
 `SyncStore` 和对象存储的对应 adapter；不能只把 Node 文件存储直接打包进 Worker。
+附件原件尚未进入云端存储，后续对象存储方案应同时服务附件和大会话载荷。
