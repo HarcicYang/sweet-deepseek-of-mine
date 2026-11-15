@@ -14,6 +14,7 @@ export const apiRoutes = {
   speechTts: '/api/speech/tts',
   syncSessions: '/api/sync/sessions',
   syncSession: '/api/sync/sessions/:sessionId',
+  syncSettings: '/api/sync/settings',
 } as const
 
 export const ApiErrorCodeSchema = z.enum([

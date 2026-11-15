@@ -47,7 +47,7 @@ The output is written to `apps/web/dist/`. The complete app also requires the Ho
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.
 - GitHub sign-in, server sessions, encrypted API key storage, and the same-origin API proxy.
-- Cloud session sync, account-isolated IndexedDB caches, offline outboxes, and conflict copies.
+- Cloud session and common preference sync, account-isolated IndexedDB caches, offline outboxes, and conflict copies.
 - Streaming replies, deep thinking, smart search, link reading, and source citations; stop generation or continue eligible replies.
 - Upload, paste, or drag and drop attachments; use voice input and read replies aloud. A live audio spectrum appears in the first row of the input area while recording on mobile.
 - Markdown, syntax highlighting, KaTeX math, and Mermaid diagrams.
@@ -55,7 +55,7 @@ The output is written to `apps/web/dist/`. The complete app also requires the Ho
 
 ## Data and storage
 
-The web client stores ordinary settings locally and caches synced conversations in an account-scoped `chat-demo:<userId>` IndexedDB database. Attachment originals and settings are not yet cloud-synced. DeepSeek API keys are encrypted and stored on the server, and uploaded attachments are proxied by the server.
+The web client caches synced conversations and the thinking, search, text-to-speech voice, and location preferences in an account-scoped `chat-demo:<userId>` IndexedDB database. Theme, language, and sidebar state remain device-local. Attachment originals are not yet cloud-synced. DeepSeek API keys are encrypted and stored on the server, and uploaded attachments are proxied by the server.
 
 See [cloud session sync](docs/sync.md) for revisions, deletion tombstones, offline outboxes, and conflict handling.
 

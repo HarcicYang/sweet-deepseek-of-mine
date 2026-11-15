@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const SYNC_SCHEMA_VERSION = 1
+export const SYNC_SETTINGS_SCHEMA_VERSION = 1
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 
@@ -189,3 +190,52 @@ export const SyncSessionResponseSchema = z
   .strict()
 
 export type SyncSessionResponse = z.infer<typeof SyncSessionResponseSchema>
+
+export const SyncedUserLocationSchema = z
+  .object({
+    region: z.string().regex(/^[A-Z]{2}$/u),
+    province: z.string().regex(/^\d{6}$/u).optional(),
+    city: z.string().regex(/^\d{6}$/u).optional(),
+  })
+  .strict()
+
+export const SyncedSettingsPayloadSchema = z
+  .object({
+    schemaVersion: z.literal(SYNC_SETTINGS_SCHEMA_VERSION),
+    thinking: z.boolean(),
+    search: z.boolean(),
+    ttsVoice: z.enum(['stella', 'tide']),
+    location: SyncedUserLocationSchema.nullable(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export type SyncedSettingsPayload = z.infer<typeof SyncedSettingsPayloadSchema>
+
+export const SyncSettingsRecordSchema = z
+  .object({
+    revision: z.number().int().positive(),
+    clientUpdatedAt: z.number().int().nonnegative(),
+    serverUpdatedAt: z.string(),
+    payload: SyncedSettingsPayloadSchema,
+  })
+  .strict()
+
+export type SyncSettingsRecord = z.infer<typeof SyncSettingsRecordSchema>
+
+export const SyncSettingsUpdateRequestSchema = z
+  .object({
+    baseRevision: z.number().int().nonnegative(),
+    payload: SyncedSettingsPayloadSchema,
+  })
+  .strict()
+
+export type SyncSettingsUpdateRequest = z.infer<typeof SyncSettingsUpdateRequestSchema>
+
+export const SyncSettingsResponseSchema = z
+  .object({
+    settings: SyncSettingsRecordSchema.nullable(),
+  })
+  .strict()
+
+export type SyncSettingsResponse = z.infer<typeof SyncSettingsResponseSchema>

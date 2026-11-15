@@ -344,3 +344,59 @@ test('session sync enforces revisions and deletion tombstones', async () => {
   })
   assert.deepEqual(await emptyList.json(), { sessions: [] })
 })
+
+test('settings sync advances one revision per account', async () => {
+  const { app } = await createTestApp()
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const path = `${APP_ORIGIN}${apiRoutes.syncSettings}`
+  const initial = await app.request(path, {
+    headers: { Cookie: `sdom_session=${sessionToken}` },
+  })
+  assert.deepEqual(await initial.json(), { settings: null })
+
+  const payload = {
+    schemaVersion: 1,
+    thinking: true,
+    search: false,
+    ttsVoice: 'tide',
+    location: { region: 'CN', province: '440000', city: '440300' },
+    updatedAt: 100,
+  }
+  const first = await app.request(path, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ baseRevision: 0, payload }),
+  })
+  assert.equal(first.status, 200)
+  const firstBody = (await first.json()) as {
+    settings: { revision: number; payload: typeof payload }
+  }
+  assert.equal(firstBody.settings.revision, 1)
+  assert.deepEqual(firstBody.settings.payload, payload)
+
+  const stale = await app.request(path, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ baseRevision: 0, payload }),
+  })
+  assert.equal(stale.status, 409)
+  assert.equal(((await stale.json()) as { error: { code: string } }).error.code, 'sync_conflict')
+
+  const updatedPayload = { ...payload, search: true, updatedAt: 200 }
+  const updated = await app.request(path, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ baseRevision: 1, payload: updatedPayload }),
+  })
+  assert.equal(updated.status, 200)
+  const updatedBody = (await updated.json()) as {
+    settings: { revision: number; payload: typeof updatedPayload }
+  }
+  assert.equal(updatedBody.settings.revision, 2)
+  assert.deepEqual(updatedBody.settings.payload, updatedPayload)
+})

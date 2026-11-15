@@ -16,6 +16,8 @@ import {
 } from '@sweet-deepseek/contracts/api'
 import {
   SyncDeleteRequestSchema,
+  SyncSettingsResponseSchema,
+  SyncSettingsUpdateRequestSchema,
   SyncSessionResponseSchema,
   SyncSessionsResponseSchema,
   SyncUpsertRequestSchema,
@@ -25,7 +27,11 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccountStore, GitHubProfile, UserRecord } from './account-store.js'
 import type { SecurityService } from './security.js'
-import { SyncConflictError, type SyncStore } from './sync-store.js'
+import {
+  SyncConflictError,
+  SyncSettingsConflictError,
+  type SyncStore,
+} from './sync-store.js'
 
 const SESSION_COOKIE = 'sdom_session'
 const OAUTH_STATE_COOKIE = 'sdom_oauth_state'
@@ -549,6 +555,32 @@ export const createApp = ({
     } catch (error) {
       if (error instanceof SyncConflictError) {
         return apiError(context, 409, 'sync_conflict', 'Session changed on another device')
+      }
+      throw error
+    }
+  })
+
+  app.get(apiRoutes.syncSettings, requireAuth, async (context) => {
+    const settings = await syncStore.getSettings(context.get('auth').user.id)
+    return context.json(SyncSettingsResponseSchema.parse({ settings }))
+  })
+
+  app.put(apiRoutes.syncSettings, requireAuth, async (context) => {
+    const json = await readJson(context)
+    const parsed = json.ok ? SyncSettingsUpdateRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid settings sync payload')
+    }
+    try {
+      const settings = await syncStore.putSettings(
+        context.get('auth').user.id,
+        parsed.data.baseRevision,
+        parsed.data.payload
+      )
+      return context.json(SyncSettingsResponseSchema.parse({ settings }))
+    } catch (error) {
+      if (error instanceof SyncSettingsConflictError) {
+        return apiError(context, 409, 'sync_conflict', 'Settings changed on another device')
       }
       throw error
     }

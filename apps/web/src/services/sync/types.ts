@@ -16,3 +16,12 @@ export type SyncMetaRecord = {
   key: 'reset'
   value: boolean
 }
+
+export type SettingsSyncState = {
+  key: 'settings'
+  revision: number
+  clientUpdatedAt: number
+  pending: boolean
+  baseRevision: number
+  queuedAt: number | null
+}

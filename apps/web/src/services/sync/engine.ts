@@ -1,5 +1,6 @@
 import {
   SYNC_SCHEMA_VERSION,
+  type SyncSettingsRecord,
   type SyncSessionPayload,
   type SyncSessionRecord,
 } from '@sweet-deepseek/contracts/sync'
@@ -11,12 +12,20 @@ import {
   clearCloudSessions,
   deleteCloudSession,
   getCloudSession,
+  getCloudSettings,
   listCloudSessions,
+  putCloudSettings,
   putCloudSession,
 } from '../api/client.js'
 import { normalizeSession } from '../chat/branches.js'
 import * as db from '../chat/db.js'
 import type { Session } from '../chat/types.js'
+import {
+  SETTINGS_CHANGED_EVENT,
+  applySyncedSettings,
+  getSyncedSettings,
+  prepareSyncedSettingsForUser,
+} from '../settings.js'
 import type { SyncOutboxRecord, SyncStateRecord } from './types.js'
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'conflict' | 'error'
@@ -40,6 +49,7 @@ let activeSync: Promise<void> | null = null
 let scheduled: ReturnType<typeof setTimeout> | null = null
 let retryDelay = 5000
 let listenersBound = false
+let settingsOutboxQueue: Promise<void> = Promise.resolve()
 
 const notifyApplied = () => {
   if (typeof window !== 'undefined') {
@@ -54,7 +64,11 @@ const notifyConflict = () => {
 }
 
 const updatePending = async () => {
-  const pending = (await db.listSyncOutbox()).length
+  const [outbox, settings] = await Promise.all([
+    db.listSyncOutbox(),
+    db.getSettingsSyncState(),
+  ])
+  const pending = outbox.length + (settings?.pending ? 1 : 0)
   useSync.setState({ pending })
 }
 
@@ -123,6 +137,100 @@ const saveConflictCopy = async (session: Session) => {
 
 const baseRevisionFor = async (sessionId: string) =>
   (await db.getSyncState(sessionId))?.revision ?? 0
+
+const settingsStateFromRecord = (record: SyncSettingsRecord) => ({
+  key: 'settings' as const,
+  revision: record.revision,
+  clientUpdatedAt: record.payload.updatedAt,
+  pending: false,
+  baseRevision: record.revision,
+  queuedAt: null,
+})
+
+const queueSettingsUpsert = (): Promise<void> => {
+  if (!userId) {
+    return Promise.resolve()
+  }
+  const operation = settingsOutboxQueue.then(async () => {
+    const current = await db.getSettingsSyncState()
+    const payload = getSyncedSettings()
+    await db.putSettingsSyncState({
+      key: 'settings',
+      revision: current?.revision ?? 0,
+      clientUpdatedAt: payload.updatedAt,
+      pending: true,
+      baseRevision: current?.pending ? current.baseRevision : (current?.revision ?? 0),
+      queuedAt: Date.now(),
+    })
+    await updatePending()
+    schedule(500)
+  })
+  settingsOutboxQueue = operation.catch(() => undefined)
+  return operation
+}
+
+const applyRemoteSettings = async (record: SyncSettingsRecord): Promise<boolean> => {
+  if (getSyncedSettings().updatedAt > record.payload.updatedAt) {
+    return false
+  }
+  applySyncedSettings(record.payload)
+  await db.putSettingsSyncState(settingsStateFromRecord(record))
+  return true
+}
+
+const savePushedSettings = async (record: SyncSettingsRecord, pushedUpdatedAt: number) => {
+  const changedAgain = getSyncedSettings().updatedAt !== pushedUpdatedAt
+  await db.putSettingsSyncState({
+    ...settingsStateFromRecord(record),
+    pending: changedAgain,
+    queuedAt: changedAgain ? Date.now() : null,
+  })
+  if (changedAgain) {
+    schedule(0)
+  }
+}
+
+const syncSettings = async (): Promise<void> => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const [state, remote] = await Promise.all([db.getSettingsSyncState(), getCloudSettings()])
+    const local = getSyncedSettings()
+
+    let baseRevision: number | null = null
+    if (state?.pending) {
+      if (!remote || state.baseRevision === remote.revision) {
+        baseRevision = remote?.revision ?? 0
+      } else if (local.updatedAt > remote.payload.updatedAt) {
+        baseRevision = remote.revision
+      }
+    } else if (!remote) {
+      baseRevision = local.updatedAt > 0 ? 0 : null
+    } else if (local.updatedAt > remote.payload.updatedAt) {
+      baseRevision = remote.revision
+    }
+
+    if (baseRevision !== null) {
+      try {
+        const saved = await putCloudSettings(baseRevision, local)
+        await savePushedSettings(saved, local.updatedAt)
+        return
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'sync_conflict') {
+          continue
+        }
+        throw error
+      }
+    }
+
+    if (!remote) {
+      return
+    }
+    if (!(await applyRemoteSettings(remote))) {
+      continue
+    }
+    return
+  }
+  throw new Error('Settings sync did not converge')
+}
 
 export const queueSessionUpsert = async (sessionId: string) => {
   const existing = (await db.listSyncOutbox()).find((record) => record.sessionId === sessionId)
@@ -339,6 +447,7 @@ const runSync = async () => {
   if (await db.getSyncMeta('reset')) {
     await resetCloud()
   }
+  await syncSettings()
   const conflicted = await pushOutbox()
   await pullRemote()
   await updatePending()
@@ -388,6 +497,15 @@ const bindListeners = () => {
   listenersBound = true
   window.addEventListener('online', () => schedule(0))
   window.addEventListener('focus', () => schedule(0))
+  window.addEventListener(SETTINGS_CHANGED_EVENT, () => {
+    void queueSettingsUpsert().catch((error: unknown) => {
+      useSync.setState({
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      })
+      schedule(15_000)
+    })
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       schedule(0)
@@ -401,6 +519,7 @@ const bindListeners = () => {
 }
 
 export const initSync = async (nextUserId: string): Promise<void> => {
+  prepareSyncedSettingsForUser(nextUserId)
   userId = nextUserId
   bindListeners()
   await updatePending()

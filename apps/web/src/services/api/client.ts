@@ -16,11 +16,14 @@ import {
   type SessionResponse,
 } from '@sweet-deepseek/contracts/api'
 import {
+  SyncSettingsResponseSchema,
   SyncSessionResponseSchema,
   SyncSessionsResponseSchema,
+  type SyncedSettingsPayload,
   type SyncSessionPayload,
   type SyncSessionRecord,
   type SyncSessionSummary,
+  type SyncSettingsRecord,
 } from '@sweet-deepseek/contracts/sync'
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { readServerSentEvents } from './sse.js'
@@ -192,6 +195,27 @@ export const deleteCloudSession = async (
 
 export const clearCloudSessions = async (): Promise<void> => {
   await request(apiRoutes.syncSessions, { method: 'DELETE' })
+}
+
+export const getCloudSettings = async (): Promise<SyncSettingsRecord | null> => {
+  const response = await request(apiRoutes.syncSettings)
+  return parseResponse(SyncSettingsResponseSchema, await response.json()).settings
+}
+
+export const putCloudSettings = async (
+  baseRevision: number,
+  payload: SyncedSettingsPayload
+): Promise<SyncSettingsRecord> => {
+  const response = await request(apiRoutes.syncSettings, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseRevision, payload }),
+  })
+  const settings = parseResponse(SyncSettingsResponseSchema, await response.json()).settings
+  if (!settings) {
+    throw new ApiError('protocol', 'Server returned empty settings after update')
+  }
+  return settings
 }
 
 /**

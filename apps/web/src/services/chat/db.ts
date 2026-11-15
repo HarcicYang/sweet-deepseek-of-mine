@@ -1,9 +1,14 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { SyncMetaRecord, SyncOutboxRecord, SyncStateRecord } from '../sync/types.js'
+import type {
+  SettingsSyncState,
+  SyncMetaRecord,
+  SyncOutboxRecord,
+  SyncStateRecord,
+} from '../sync/types.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 13
+const DB_VERSION = 14
 const LEGACY_DB_NAME = 'chat-demo'
 const LEGACY_MIGRATION_KEY = 'chat-demo:legacy-migrated'
 
@@ -35,6 +40,7 @@ interface ChatDB extends DBSchema {
   syncOutbox: { key: string; value: SyncOutboxRecord }
   syncState: { key: string; value: SyncStateRecord }
   syncMeta: { key: string; value: SyncMetaRecord }
+  settingsSync: { key: string; value: SettingsSyncState }
 }
 
 let dbPromise: Promise<IDBPDatabase<ChatDB>> | null = null
@@ -73,6 +79,7 @@ const openDatabase = (name: string) =>
         ['syncOutbox', 'sessionId'],
         ['syncState', 'sessionId'],
         ['syncMeta', 'key'],
+        ['settingsSync', 'key'],
       ] as const) {
         if (db.objectStoreNames.contains(name)) {
           const current = tx.objectStore(name)
@@ -269,6 +276,13 @@ export const getSyncMeta = async (key: SyncMetaRecord['key']): Promise<boolean> 
 
 export const setSyncMeta = async (key: SyncMetaRecord['key'], value: boolean): Promise<void> => {
   await (await getDB()).put('syncMeta', { key, value })
+}
+
+export const getSettingsSyncState = async (): Promise<SettingsSyncState | undefined> =>
+  (await getDB()).get('settingsSync', 'settings')
+
+export const putSettingsSyncState = async (record: SettingsSyncState): Promise<void> => {
+  await (await getDB()).put('settingsSync', record)
 }
 
 export const clearSyncData = async (): Promise<void> => {

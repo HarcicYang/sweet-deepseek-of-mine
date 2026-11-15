@@ -47,7 +47,7 @@ pnpm build
 
 - 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。
 - GitHub 登录、服务端会话、加密 Key 存储与同源 API 代理。
-- 会话云端同步、账号隔离的 IndexedDB 缓存、离线 outbox 和冲突副本。
+- 会话与常用设置云端同步、账号隔离的 IndexedDB 缓存、离线 outbox 和冲突副本。
 - 流式回答、深度思考、智能搜索、链接阅读与来源引用；支持停止和符合条件的继续生成。
 - 附件上传、粘贴与拖拽，语音输入和回复朗读；移动端录音时输入框首行显示实时频谱。
 - Markdown、代码高亮、KaTeX 公式和 Mermaid 图表。
@@ -55,7 +55,7 @@ pnpm build
 
 ## 数据
 
-Web 端只保存普通设置，DeepSeek API Key 由服务端使用 AES-256-GCM 加密保存。会话文本会同步到云端，并按账号缓存在 `chat-demo:<userId>` IndexedDB 中。附件原件和设置目前仍是本地数据；通过服务端上传到 DeepSeek 的附件由服务端代理。
+Web 端只保存普通设置，DeepSeek API Key 由服务端使用 AES-256-GCM 加密保存。会话文本以及思考、搜索、TTS 音色和位置设置会同步到云端，并按账号缓存在 `chat-demo:<userId>` IndexedDB 中；主题、语言和侧栏状态保持设备本地。附件原件目前仍是本地数据；通过服务端上传到 DeepSeek 的附件由服务端代理。
 
 会话同步协议、删除墓碑、离线 outbox 和冲突策略见[云端会话同步](docs/sync.md)。
 
