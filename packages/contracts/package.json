@@ -13,6 +13,10 @@
     "./api": {
       "types": "./src/api.ts",
       "default": "./src/api.ts"
+    },
+    "./sync": {
+      "types": "./src/sync.ts",
+      "default": "./src/sync.ts"
     }
   },
   "scripts": {

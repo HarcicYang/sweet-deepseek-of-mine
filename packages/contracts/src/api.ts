@@ -12,6 +12,8 @@ export const apiRoutes = {
   file: '/api/files/:fileId',
   speechAsr: '/api/speech/asr',
   speechTts: '/api/speech/tts',
+  syncSessions: '/api/sync/sessions',
+  syncSession: '/api/sync/sessions/:sessionId',
 } as const
 
 export const ApiErrorCodeSchema = z.enum([
@@ -23,6 +25,7 @@ export const ApiErrorCodeSchema = z.enum([
   'invalid_api_key',
   'credential_error',
   'upstream_error',
+  'sync_conflict',
   'server_error',
 ])
 

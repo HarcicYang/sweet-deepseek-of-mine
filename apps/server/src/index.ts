@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { FileAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { createSecurityService } from './security.js'
+import { FileSyncStore } from './sync-store.js'
 
 const readPositiveInt = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -30,8 +31,12 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const store = new FileAccountStore(
   path.resolve(repositoryRoot, process.env.AUTH_DB_PATH ?? '.data/accounts.json')
 )
+const syncStore = new FileSyncStore(
+  path.resolve(repositoryRoot, process.env.SYNC_DB_PATH ?? '.data/sync.json')
+)
 const app = createApp({
   store,
+  syncStore,
   security,
   appOrigin: origin,
   githubClientId: requireEnv('GITHUB_CLIENT_ID'),

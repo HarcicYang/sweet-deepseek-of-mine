@@ -5,6 +5,7 @@ import { ApiError, streamMessage } from '../api/client.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
+import { queueCloudReset, queueSessionDelete, queueSessionUpsert } from '../sync/engine.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -205,6 +206,7 @@ const persist = (sessionId: string) => {
             ),
           }))
           trimSessionCache()
+          void queueSessionUpsert(sessionId)
         }
       })
       .catch((error: unknown) => {
@@ -285,6 +287,36 @@ const settleInterrupted = (session: Session): Session => {
         ? settleReply(m, 'stopped', session.updatedAt)
         : m
     ),
+  }
+}
+
+export const refreshChatFromStorage = async (): Promise<void> => {
+  if (get().importingHistory) {
+    return
+  }
+  try {
+    const summaries = await db.loadSessionSummaries()
+    set({ ready: true, sessions: sortSessions(summaries) })
+    const activeId = get().activeId
+    if (activeId === null || getStreamController(activeId)) {
+      return
+    }
+    const stored = await db.loadSession(activeId)
+    if (!stored) {
+      set((state) => ({
+        activeId: null,
+        sessionCache: Object.fromEntries(
+          Object.entries(state.sessionCache).filter(([id]) => id !== activeId)
+        ),
+      }))
+      return
+    }
+    const session = settleInterrupted(normalizeSession(stored))
+    touchSession(activeId)
+    set((state) => ({ sessionCache: { ...state.sessionCache, [activeId]: session } }))
+    trimSessionCache()
+  } catch (error) {
+    db.reportStorageError('refresh synced sessions')(error)
   }
 }
 
@@ -426,6 +458,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
       sessionSaveErrors: {},
       activeId: null,
     })
+    void queueCloudReset()
     return summaries.length
   } finally {
     set({ importingHistory: false })
@@ -465,15 +498,21 @@ export const renameSession = (id: string, title: string) => {
     titleRequests.delete(controller)
   }
   if (getSession(id)) {
-    updateSession(id, (session) => ({ ...session, title }))
+    updateSession(id, (session) => ({ ...session, title, updatedAt: Date.now() }))
     persist(id)
   } else {
+    const updatedAt = Date.now()
     set((state) => ({
-      sessions: state.sessions.map((session) =>
-        session.id === id ? { ...session, title } : session
+      sessions: sortSessions(
+        state.sessions.map((session) =>
+          session.id === id ? { ...session, title, updatedAt } : session
+        )
       ),
     }))
-    void db.renameSession(id, title).catch(db.reportStorageError('rename session'))
+    void db
+      .renameSession(id, title, updatedAt)
+      .then(() => queueSessionUpsert(id))
+      .catch(db.reportStorageError('rename session'))
   }
 }
 
@@ -508,6 +547,7 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     sessionAccess.delete(id)
     unsavedSessions.delete(id)
     pendingFiles.delete(id)
+    void queueSessionDelete(id)
     clearDraft(id)
     set((state) => ({
       sessions: state.sessions.filter((session) => session.id !== id),

@@ -15,11 +15,18 @@ import {
   type AuthUser,
   type SessionResponse,
 } from '@sweet-deepseek/contracts/api'
+import {
+  SyncDeleteRequestSchema,
+  SyncSessionResponseSchema,
+  SyncSessionsResponseSchema,
+  SyncUpsertRequestSchema,
+} from '@sweet-deepseek/contracts/sync'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccountStore, GitHubProfile, UserRecord } from './account-store.js'
 import type { SecurityService } from './security.js'
+import { SyncConflictError, type SyncStore } from './sync-store.js'
 
 const SESSION_COOKIE = 'sdom_session'
 const OAUTH_STATE_COOKIE = 'sdom_oauth_state'
@@ -32,6 +39,7 @@ const GITHUB_API_VERSION = '2022-11-28'
 const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+const MAX_SYNC_BODY_BYTES = 20 * 1024 * 1024
 
 type AuthContext = {
   user: UserRecord
@@ -46,6 +54,7 @@ type AppEnv = {
 
 export type AppOptions = {
   store: AccountStore
+  syncStore: SyncStore
   security: SecurityService
   appOrigin: string
   githubClientId: string
@@ -165,6 +174,7 @@ const readGitHubProfile = (value: unknown): GitHubProfile | null => {
 
 export const createApp = ({
   store,
+  syncStore,
   security,
   appOrigin,
   githubClientId,
@@ -420,6 +430,86 @@ export const createApp = ({
     await store.clearApiKey(user.id)
     const body: ApiKeyStatusResponse = { configured: false }
     return context.json(body)
+  })
+
+  app.get(apiRoutes.syncSessions, requireAuth, async (context) => {
+    const userId = context.get('auth').user.id
+    const body = SyncSessionsResponseSchema.parse({
+      sessions: await syncStore.listSessions(userId),
+    })
+    return context.json(body)
+  })
+
+  app.delete(apiRoutes.syncSessions, requireAuth, async (context) => {
+    await syncStore.clearSessions(context.get('auth').user.id)
+    return context.body(null, 204)
+  })
+
+  app.get(apiRoutes.syncSession, requireAuth, async (context) => {
+    const sessionId = context.req.param('sessionId')
+    if (!/^[\w-]{1,200}$/u.test(sessionId)) {
+      return apiError(context, 400, 'invalid_request', 'Invalid session ID')
+    }
+    const record = await syncStore.getSession(context.get('auth').user.id, sessionId)
+    if (!record || record.deletedAt !== null) {
+      return apiError(context, 404, 'invalid_request', 'Session not found')
+    }
+    return context.json(SyncSessionResponseSchema.parse({ session: record }))
+  })
+
+  app.put(apiRoutes.syncSession, requireAuth, async (context) => {
+    const sessionId = context.req.param('sessionId')
+    if (!/^[\w-]{1,200}$/u.test(sessionId)) {
+      return apiError(context, 400, 'invalid_request', 'Invalid session ID')
+    }
+    if (contentLengthExceeds(context, MAX_SYNC_BODY_BYTES)) {
+      return apiError(context, 413, 'invalid_request', 'Session payload is too large')
+    }
+    const json = await readJson(context)
+    const parsed = json.ok ? SyncUpsertRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success || parsed.data.payload.id !== sessionId) {
+      return apiError(context, 400, 'invalid_request', 'Invalid session sync payload')
+    }
+    try {
+      const record = await syncStore.putSession(
+        context.get('auth').user.id,
+        sessionId,
+        parsed.data.baseRevision,
+        parsed.data.payload
+      )
+      return context.json(SyncSessionResponseSchema.parse({ session: record }))
+    } catch (error) {
+      if (error instanceof SyncConflictError) {
+        return apiError(context, 409, 'sync_conflict', 'Session changed on another device')
+      }
+      throw error
+    }
+  })
+
+  app.delete(apiRoutes.syncSession, requireAuth, async (context) => {
+    const sessionId = context.req.param('sessionId')
+    if (!/^[\w-]{1,200}$/u.test(sessionId)) {
+      return apiError(context, 400, 'invalid_request', 'Invalid session ID')
+    }
+    const json = await readJson(context)
+    const parsed = json.ok ? SyncDeleteRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid session delete payload')
+    }
+    try {
+      const record = await syncStore.deleteSession(
+        context.get('auth').user.id,
+        sessionId,
+        parsed.data.baseRevision,
+        parsed.data.deletedAt
+      )
+      return context.json(SyncSessionResponseSchema.parse({ session: record }))
+    } catch (error) {
+      if (error instanceof SyncConflictError) {
+        return apiError(context, 409, 'sync_conflict', 'Session changed on another device')
+      }
+      throw error
+    }
   })
 
   app.post(apiRoutes.files, requireAuth, async (context) => {

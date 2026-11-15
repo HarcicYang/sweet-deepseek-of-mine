@@ -6,11 +6,14 @@ import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport
 import {
   bindChatPersistence,
   initChat,
+  refreshChatFromStorage,
   retrySaveSessions,
   selectSession,
   stopAllReplies,
   useChatStore,
 } from '../services/chat/store.js'
+import { configureChatDatabase } from '../services/chat/db.js'
+import { initSync, stopSyncScheduler } from '../services/sync/engine.js'
 import { SearchPanel } from '../components/search/SearchPanel.js'
 import { LoginView } from '../components/auth/LoginView.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
@@ -34,6 +37,8 @@ export const App = () => {
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
   const authStatus = useAuth((state) => state.status)
+  const authUser = useAuth((state) => state.user)
+  const authUserId = authUser?.id
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -63,6 +68,16 @@ export const App = () => {
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])
   useEffect(bindChatPersistence, [])
+  useEffect(() => {
+    const onSyncApplied = () => void refreshChatFromStorage()
+    const onSyncConflict = () => showToast({ key: 'syncConflictToast', type: 'error' })
+    window.addEventListener('sdom:sync-applied', onSyncApplied)
+    window.addEventListener('sdom:sync-conflict', onSyncConflict)
+    return () => {
+      window.removeEventListener('sdom:sync-applied', onSyncApplied)
+      window.removeEventListener('sdom:sync-conflict', onSyncConflict)
+    }
+  }, [])
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
@@ -76,15 +91,31 @@ export const App = () => {
   }, [])
 
   useEffect(() => {
-    if (authStatus === 'authenticated') {
-      void initChat()
-      ensureApiKey()
+    let cancelled = false
+    if (authStatus === 'authenticated' && authUserId) {
+      void (async () => {
+        try {
+          await configureChatDatabase(authUserId)
+          if (cancelled) {
+            return
+          }
+          await initChat()
+          ensureApiKey()
+          await initSync(authUserId)
+        } catch {
+          showToast({ key: 'sessionListLoadFailed', type: 'error' })
+        }
+      })()
     } else {
+      stopSyncScheduler()
       stopAllReplies()
       stopReadAloud()
       closeSettings()
     }
-  }, [authStatus])
+    return () => {
+      cancelled = true
+    }
+  }, [authStatus, authUserId])
 
   if (authStatus !== 'authenticated') {
     return (

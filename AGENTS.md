@@ -35,7 +35,9 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
 - Web 通过同源 `/api` 接口访问服务端，不再直接请求 DeepSeek API。
 - DeepSeek API Key 只加密保存在服务端，浏览器不持久化明文。
-- 会话和附件当前存放在 IndexedDB，数据库名为 `chat-demo`。
+- 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。
+- 同步使用 IndexedDB outbox、会话 revision、删除墓碑和冲突副本，支持离线恢复。
+- 设置、附件元数据和附件原件尚未进入云端同步。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主题 token 位于 `apps/web/src/app/theme.css`。
@@ -110,7 +112,7 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 ## 开发顺序
 
 1. 服务端代理、GitHub OAuth、共享协议和 Web 接入已完成。
-2. 实现云端历史同步和可选离线缓存。
+2. 云端会话同步与离线缓存第一切片已完成，继续同步设置和附件元数据。
 3. 加入 Skill 与远程 MCP。
 4. 加入 JSON-Render 和 Markdown 回退。
 

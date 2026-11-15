@@ -15,6 +15,13 @@ import {
   type ApiKeyStatusResponse,
   type SessionResponse,
 } from '@sweet-deepseek/contracts/api'
+import {
+  SyncSessionResponseSchema,
+  SyncSessionsResponseSchema,
+  type SyncSessionPayload,
+  type SyncSessionRecord,
+  type SyncSessionSummary,
+} from '@sweet-deepseek/contracts/sync'
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { readServerSentEvents } from './sse.js'
 
@@ -137,6 +144,54 @@ export const saveDeepSeekKey = async (apiKey: string): Promise<ApiKeyStatusRespo
 export const deleteDeepSeekKey = async (): Promise<ApiKeyStatusResponse> => {
   const response = await request(apiRoutes.deepseekKey, { method: 'DELETE' })
   return parseResponse(ApiKeyStatusResponseSchema, await response.json())
+}
+
+export const listCloudSessions = async (): Promise<SyncSessionSummary[]> => {
+  const response = await request(apiRoutes.syncSessions)
+  return parseResponse(SyncSessionsResponseSchema, await response.json()).sessions
+}
+
+export const getCloudSession = async (sessionId: string): Promise<SyncSessionRecord> => {
+  const response = await request(
+    apiRoutes.syncSession.replace(':sessionId', encodeURIComponent(sessionId))
+  )
+  return parseResponse(SyncSessionResponseSchema, await response.json()).session
+}
+
+export const putCloudSession = async (
+  sessionId: string,
+  baseRevision: number,
+  payload: SyncSessionPayload
+): Promise<SyncSessionRecord> => {
+  const response = await request(
+    apiRoutes.syncSession.replace(':sessionId', encodeURIComponent(sessionId)),
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseRevision, payload }),
+    }
+  )
+  return parseResponse(SyncSessionResponseSchema, await response.json()).session
+}
+
+export const deleteCloudSession = async (
+  sessionId: string,
+  baseRevision: number,
+  deletedAt: number
+): Promise<SyncSessionRecord> => {
+  const response = await request(
+    apiRoutes.syncSession.replace(':sessionId', encodeURIComponent(sessionId)),
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseRevision, deletedAt }),
+    }
+  )
+  return parseResponse(SyncSessionResponseSchema, await response.json()).session
+}
+
+export const clearCloudSessions = async (): Promise<void> => {
+  await request(apiRoutes.syncSessions, { method: 'DELETE' })
 }
 
 /**

@@ -1,8 +1,11 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import type { SyncMetaRecord, SyncOutboxRecord, SyncStateRecord } from '../sync/types.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 11
+const DB_VERSION = 13
+const LEGACY_DB_NAME = 'chat-demo'
+const LEGACY_MIGRATION_KEY = 'chat-demo:legacy-migrated'
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -29,9 +32,13 @@ interface ChatDB extends DBSchema {
    */
   sessionsStaging: { key: string; value: Session }
   filesStaging: { key: string; value: StoredFile }
+  syncOutbox: { key: string; value: SyncOutboxRecord }
+  syncState: { key: string; value: SyncStateRecord }
+  syncMeta: { key: string; value: SyncMetaRecord }
 }
 
 let dbPromise: Promise<IDBPDatabase<ChatDB>> | null = null
+let databaseName: string | null = null
 
 const storedSummary = (session: Session): StoredSessionSummary => ({
   ...toSessionSummary(session),
@@ -53,13 +60,28 @@ const abortTransaction = (tx: { abort(): void }) => {
 }
 
 // 每个操作拿到连接后立即创建事务；IndexedDB 按创建顺序执行范围重叠的事务，读取总能看到之前发起的写入。
-const getDB = () =>
-  (dbPromise ??= openDB<ChatDB>('chat-demo', DB_VERSION, {
+const openDatabase = (name: string) =>
+  openDB<ChatDB>(name, DB_VERSION, {
     upgrade(db, _oldVersion, _newVersion, tx) {
       // 初始化当前格式需要的存储与索引，不迁移旧消息。
       for (const name of ['sessions', 'files', 'sessionsStaging', 'filesStaging'] as const) {
         if (!db.objectStoreNames.contains(name)) {
           db.createObjectStore(name, { keyPath: 'id' })
+        }
+      }
+      for (const [name, keyPath] of [
+        ['syncOutbox', 'sessionId'],
+        ['syncState', 'sessionId'],
+        ['syncMeta', 'key'],
+      ] as const) {
+        if (db.objectStoreNames.contains(name)) {
+          const current = tx.objectStore(name)
+          if (current.keyPath !== keyPath) {
+            db.deleteObjectStore(name)
+            db.createObjectStore(name, { keyPath })
+          }
+        } else {
+          db.createObjectStore(name, { keyPath })
         }
       }
       const summaries = db.objectStoreNames.contains('sessionSummaries')
@@ -69,11 +91,66 @@ const getDB = () =>
         summaries.createIndex('fileIds', 'fileIds', { multiEntry: true })
       }
     },
-  }).catch((error: unknown) => {
+  })
+
+const getDB = () =>
+  (dbPromise ??= openDatabase(databaseName ?? LEGACY_DB_NAME).catch((error: unknown) => {
     // 打开失败后允许界面重试，避免一直复用已拒绝的 Promise。
     dbPromise = null
     throw error
   }))
+
+const migrateLegacyDatabase = async (target: IDBPDatabase<ChatDB>) => {
+  try {
+    if (localStorage.getItem(LEGACY_MIGRATION_KEY) === 'true') {
+      return
+    }
+  } catch {
+    return
+  }
+  const databases = await indexedDB.databases?.()
+  if (!databases?.some((database) => database.name === LEGACY_DB_NAME)) {
+    return
+  }
+  const legacy = await openDB<ChatDB>(LEGACY_DB_NAME)
+  try {
+    if ((await target.count('sessions')) === 0) {
+      const sessions = await legacy.getAll('sessions')
+      const summaries = await legacy.getAll('sessionSummaries')
+      const files = await legacy.getAll('files')
+      const tx = target.transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')
+      await Promise.all([
+        ...sessions.map((session) => tx.objectStore('sessions').put(session)),
+        ...summaries.map((summary) => tx.objectStore('sessionSummaries').put(summary)),
+        ...files.map((file) => tx.objectStore('files').put(file)),
+        tx.done,
+      ])
+    }
+    try {
+      localStorage.setItem(LEGACY_MIGRATION_KEY, 'true')
+    } catch {
+      // 标记失败时保留旧库，避免未完成迁移被误判。
+      return
+    }
+  } finally {
+    legacy.close()
+  }
+  await indexedDB.deleteDatabase(LEGACY_DB_NAME)
+}
+
+export const configureChatDatabase = async (userId: string): Promise<void> => {
+  const nextName = `${LEGACY_DB_NAME}:${userId}`
+  if (databaseName === nextName && dbPromise) {
+    return
+  }
+  if (dbPromise) {
+    const current = await dbPromise.catch(() => null)
+    current?.close()
+  }
+  databaseName = nextName
+  dbPromise = null
+  await migrateLegacyDatabase(await getDB())
+}
 
 export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
   (await (await getDB()).getAll('sessionSummaries')).map(toSessionSummary)
@@ -102,7 +179,11 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
 }
 
 /** 未打开的会话也可重命名，只读取该会话，原子更新详情和列表。 */
-export const renameSession = async (id: string, title: string): Promise<void> => {
+export const renameSession = async (
+  id: string,
+  title: string,
+  updatedAt = Date.now()
+): Promise<void> => {
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries'], 'readwrite')
   await Promise.all([
     (async () => {
@@ -111,6 +192,7 @@ export const renameSession = async (id: string, title: string): Promise<void> =>
         const session = await sessions.get(id)
         if (session) {
           session.title = title
+          session.updatedAt = updatedAt
           await sessions.put(session)
           await tx.objectStore('sessionSummaries').put(storedSummary(session))
         }
@@ -156,6 +238,48 @@ export const saveFiles = (files: StoredFile[]): Promise<void> => putFiles('files
 
 export const loadFile = async (id: string): Promise<Blob | undefined> =>
   (await (await getDB()).get('files', id))?.blob
+
+export const listSyncOutbox = async (): Promise<SyncOutboxRecord[]> =>
+  (await getDB()).getAll('syncOutbox')
+
+export const putSyncOutbox = async (record: SyncOutboxRecord): Promise<void> => {
+  await (await getDB()).put('syncOutbox', record)
+}
+
+export const deleteSyncOutbox = async (sessionId: string): Promise<void> => {
+  await (await getDB()).delete('syncOutbox', sessionId)
+}
+
+export const getSyncState = async (sessionId: string): Promise<SyncStateRecord | undefined> =>
+  (await getDB()).get('syncState', sessionId)
+
+export const listSyncStates = async (): Promise<SyncStateRecord[]> =>
+  (await getDB()).getAll('syncState')
+
+export const putSyncState = async (record: SyncStateRecord): Promise<void> => {
+  await (await getDB()).put('syncState', record)
+}
+
+export const deleteSyncState = async (sessionId: string): Promise<void> => {
+  await (await getDB()).delete('syncState', sessionId)
+}
+
+export const getSyncMeta = async (key: SyncMetaRecord['key']): Promise<boolean> =>
+  (await (await getDB()).get('syncMeta', key))?.value ?? false
+
+export const setSyncMeta = async (key: SyncMetaRecord['key'], value: boolean): Promise<void> => {
+  await (await getDB()).put('syncMeta', { key, value })
+}
+
+export const clearSyncData = async (): Promise<void> => {
+  const tx = (await getDB()).transaction(['syncOutbox', 'syncState', 'syncMeta'], 'readwrite')
+  await Promise.all([
+    tx.objectStore('syncOutbox').clear(),
+    tx.objectStore('syncState').clear(),
+    tx.objectStore('syncMeta').clear(),
+    tx.done,
+  ])
+}
 
 /** 清空导入暂存：开始导入前清除上次中断（如关闭页面）遗留的数据，导入失败后清除本次写入。 */
 export const clearStaging = async (): Promise<void> => {

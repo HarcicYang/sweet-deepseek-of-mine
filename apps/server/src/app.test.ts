@@ -4,6 +4,7 @@ import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import { MemoryAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { createSecurityService } from './security.js'
+import { MemorySyncStore } from './sync-store.js'
 
 const APP_ORIGIN = 'http://localhost:8090'
 const MASTER_KEY = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
@@ -19,6 +20,7 @@ const cookieValue = (setCookie: string | null, name: string): string | null => {
 
 const createTestApp = async () => {
   const security = await createSecurityService(MASTER_KEY)
+  const syncStore = new MemorySyncStore()
   const calls: Array<{ url: string; init?: RequestInit }> = []
   const fetchImpl: typeof fetch = async (input, init) => {
     const url =
@@ -67,6 +69,7 @@ const createTestApp = async () => {
   }
   const app = createApp({
     store: new MemoryAccountStore(),
+    syncStore,
     security,
     appOrigin: APP_ORIGIN,
     githubClientId: 'github-client-id',
@@ -78,7 +81,20 @@ const createTestApp = async () => {
     cookieSecure: false,
     fetchImpl,
   })
-  return { app, calls }
+  return { app, calls, syncStore }
+}
+
+const authenticate = async (app: Awaited<ReturnType<typeof createTestApp>>['app']) => {
+  const start = await app.request(`${APP_ORIGIN}${apiRoutes.githubStart}`)
+  const state = cookieValue(start.headers.get('set-cookie'), 'sdom_oauth_state')
+  assert.ok(state)
+  const callback = await app.request(
+    `${APP_ORIGIN}${apiRoutes.githubCallback}?code=oauth-code&state=${encodeURIComponent(state)}`,
+    { headers: { Cookie: `sdom_oauth_state=${state}` } }
+  )
+  const token = cookieValue(callback.headers.get('set-cookie'), 'sdom_session')
+  assert.ok(token)
+  return token
 }
 
 test('GitHub OAuth creates an authenticated server session', async () => {
@@ -221,4 +237,87 @@ test('OAuth callback rejects a mismatched state', async () => {
   )
   assert.equal(response.status, 302)
   assert.match(response.headers.get('location') ?? '', /\?auth=error&reason=oauth_state$/u)
+})
+
+test('session sync enforces revisions and deletion tombstones', async () => {
+  const { app } = await createTestApp()
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const payload = {
+    schemaVersion: 1,
+    id: 'session-sync-1',
+    title: 'Sync test',
+    createdAt: 1,
+    updatedAt: 2,
+    messages: [
+      {
+        id: 'message-sync-1',
+        role: 'user',
+        content: 'hello',
+        files: [],
+        createdAt: 1,
+      },
+    ],
+    rootMessageId: null,
+  }
+  const path = `${APP_ORIGIN}/api/sync/sessions/session-sync-1`
+  const first = await app.request(path, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ baseRevision: 0, payload }),
+  })
+  assert.equal(first.status, 200)
+  const firstBody = (await first.json()) as {
+    session: { revision: number; payload: { title: string } }
+  }
+  assert.equal(firstBody.session.revision, 1)
+  assert.equal(firstBody.session.payload.title, 'Sync test')
+
+  const stale = await app.request(path, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ baseRevision: 0, payload }),
+  })
+  assert.equal(stale.status, 409)
+  assert.equal(((await stale.json()) as { error: { code: string } }).error.code, 'sync_conflict')
+
+  const removed = await app.request(path, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ baseRevision: 1, deletedAt: 3 }),
+  })
+  assert.equal(removed.status, 200)
+  const removedBody = (await removed.json()) as {
+    session: { revision: number; deletedAt: number | null }
+  }
+  assert.equal(removedBody.session.revision, 2)
+  assert.equal(removedBody.session.deletedAt, 3)
+
+  const list = await app.request(`${APP_ORIGIN}${apiRoutes.syncSessions}`, {
+    headers: { Cookie: `sdom_session=${sessionToken}` },
+  })
+  const listBody = (await list.json()) as {
+    sessions: Array<{ id: string; revision: number; deletedAt: number | null }>
+  }
+  assert.equal(listBody.sessions.length, 1)
+  assert.equal(listBody.sessions[0]?.id, 'session-sync-1')
+  assert.equal(listBody.sessions[0]?.revision, 2)
+  assert.equal(listBody.sessions[0]?.deletedAt, 3)
+
+  const cleared = await app.request(`${APP_ORIGIN}${apiRoutes.syncSessions}`, {
+    method: 'DELETE',
+    headers: {
+      Cookie: `sdom_session=${sessionToken}`,
+      Origin: APP_ORIGIN,
+    },
+  })
+  assert.equal(cleared.status, 204)
+  const emptyList = await app.request(`${APP_ORIGIN}${apiRoutes.syncSessions}`, {
+    headers: { Cookie: `sdom_session=${sessionToken}` },
+  })
+  assert.deepEqual(await emptyList.json(), { sessions: [] })
 })
