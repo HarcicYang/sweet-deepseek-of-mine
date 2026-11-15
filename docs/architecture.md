@@ -22,3 +22,19 @@ packages/
 服务端已实现 GitHub OAuth 登录会话、加密 API Key 存储，以及聊天、附件和语音代理，
 协议见[认证与 API Key](authentication.md)。Web 端通过同源 `/api` 接口调用服务端，
 不再直接请求 DeepSeek API，也不在浏览器持久化 API Key。
+
+## 边缘运行时边界
+
+后端代理不要求所有数据都在边缘 Worker 内完整缓冲。实现按控制面和数据面拆分：
+
+- 控制面适合直接运行在 Worker：OAuth、会话 Cookie、API Key 管理、权限检查、同步元数据和小型 JSON API。
+- 聊天 SSE 和 TTS 响应直接转发上游流，不在服务端聚合。
+- 附件和 ASR 的 multipart 请求体使用限长流直接转发，不在边缘调用 `formData()`、
+  `arrayBuffer()` 或 `text()` 整体读取。
+- 大文件、断点续传、对象留存或需要独立生命周期的数据应通过对象存储 adapter 处理；
+  业务层只依赖存储接口，不直接耦合具体云厂商。
+- 会话同步不能长期依赖单次请求上传完整会话快照。大历史需要增量变更、消息分页或分块存储，
+  避免受边缘请求体、内存和数据库单行大小限制。
+
+当前仓库只实现了 Node adapter。边缘部署仍需要 Worker 入口，以及 `AccountStore`、
+`SyncStore` 和对象存储的对应 adapter；不能只把 Node 文件存储直接打包进 Worker。

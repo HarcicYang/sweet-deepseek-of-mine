@@ -4,7 +4,6 @@ import {
   ApiKeyStatusResponseSchema,
   ChatProxyRequestSchema,
   FileObjectResponseSchema,
-  FilePurposeSchema,
   SessionResponseSchema,
   SpeechSynthesisRequestSchema,
   SpeechTranscriptionResponseSchema,
@@ -40,6 +39,13 @@ const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 const MAX_SYNC_BODY_BYTES = 20 * 1024 * 1024
+
+class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super('Request body exceeds the configured limit')
+    this.name = 'RequestBodyTooLargeError'
+  }
+}
 
 type AuthContext = {
   user: UserRecord
@@ -116,9 +122,45 @@ const contentLengthExceeds = (context: Context<AppEnv>, limit: number): boolean 
   return Number.isFinite(length) && length > limit
 }
 
-const readFilePart = (form: FormData, name: string): File | null => {
-  const value = form.get(name)
-  return typeof File !== 'undefined' && value instanceof File ? value : null
+const readMultipartContentType = (context: Context<AppEnv>): string | null => {
+  const contentType = context.req.header('Content-Type')?.trim()
+  if (!contentType || !/^multipart\/form-data\s*;/iu.test(contentType)) {
+    return null
+  }
+  return /\bboundary=/iu.test(contentType) ? contentType : null
+}
+
+const limitRequestBody = (
+  body: ReadableStream<Uint8Array>,
+  limit: number
+): ReadableStream<Uint8Array> => {
+  let bytesRead = 0
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytesRead += chunk.byteLength
+        if (bytesRead > limit) {
+          controller.error(new RequestBodyTooLargeError())
+          return
+        }
+        controller.enqueue(chunk)
+      },
+    })
+  )
+}
+
+const hasTooLargeCause = (error: unknown): boolean => {
+  let current = error
+  for (let depth = 0; depth < 4; depth++) {
+    if (current instanceof RequestBodyTooLargeError) {
+      return true
+    }
+    if (!(current instanceof Error) || !current.cause) {
+      return false
+    }
+    current = current.cause
+  }
+  return false
 }
 
 const forwardUpstreamError = (context: Context<AppEnv>, response: Response): Response => {
@@ -517,31 +559,15 @@ export const createApp = ({
     if (!credential.ok) {
       return credential.response
     }
-    if (contentLengthExceeds(context, MAX_ATTACHMENT_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)) {
+    const limit = MAX_ATTACHMENT_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+    if (contentLengthExceeds(context, limit)) {
       return apiError(context, 413, 'invalid_request', 'Attachment is too large')
     }
-    const form = await context.req.formData().catch(() => null)
-    if (!form) {
+    const contentType = readMultipartContentType(context)
+    const body = context.req.raw.body
+    if (!contentType || !body) {
       return apiError(context, 400, 'invalid_request', 'Invalid multipart upload')
     }
-    const file = readFilePart(form, 'file')
-    if (!file) {
-      return apiError(context, 400, 'invalid_request', 'Attachment file is required')
-    }
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      return apiError(context, 413, 'invalid_request', 'Attachment is too large')
-    }
-    const purposeValue = form.get('purpose')
-    const purpose =
-      typeof purposeValue === 'string' ? FilePurposeSchema.safeParse(purposeValue) : null
-    if (purposeValue !== null && !purpose?.success) {
-      return apiError(context, 400, 'invalid_request', 'Invalid attachment purpose')
-    }
-    const outbound = new FormData()
-    if (purpose?.success) {
-      outbound.append('purpose', purpose.data)
-    }
-    outbound.append('file', file, file.name)
     const clientSignal = context.req.raw.signal
     let response: Response
     try {
@@ -550,12 +576,17 @@ export const createApp = ({
         headers: {
           'x-api-key': credential.apiKey,
           'anthropic-beta': 'files-api-2025-04-14',
+          'Content-Type': contentType,
         },
-        body: outbound,
+        body: limitRequestBody(body, limit),
         signal: createProxySignal(context),
         redirect: 'error',
-      })
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' })
     } catch (error) {
+      if (hasTooLargeCause(error)) {
+        return apiError(context, 413, 'invalid_request', 'Attachment is too large')
+      }
       return proxyFailure(context, error, clientSignal)
     }
     if (!response.ok) {
@@ -606,30 +637,33 @@ export const createApp = ({
     if (!credential.ok) {
       return credential.response
     }
-    if (contentLengthExceeds(context, MAX_AUDIO_BYTES + MAX_MULTIPART_OVERHEAD_BYTES)) {
+    const limit = MAX_AUDIO_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+    if (contentLengthExceeds(context, limit)) {
       return apiError(context, 413, 'invalid_request', 'Audio is too large')
     }
-    const form = await context.req.formData().catch(() => null)
-    const file = form ? readFilePart(form, 'file') : null
-    if (!file) {
-      return apiError(context, 400, 'invalid_request', 'Audio file is required')
+    const contentType = readMultipartContentType(context)
+    const body = context.req.raw.body
+    if (!contentType || !body) {
+      return apiError(context, 400, 'invalid_request', 'Invalid multipart upload')
     }
-    if (file.size > MAX_AUDIO_BYTES) {
-      return apiError(context, 413, 'invalid_request', 'Audio is too large')
-    }
-    const outbound = new FormData()
-    outbound.append('file', file, file.name)
     const clientSignal = context.req.raw.signal
     let response: Response
     try {
       response = await fetchImpl(`${deepSeekBaseUrl.replace(/\/+$/u, '')}/v1/tools/asr`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${credential.apiKey}` },
-        body: outbound,
+        headers: {
+          Authorization: `Bearer ${credential.apiKey}`,
+          'Content-Type': contentType,
+        },
+        body: limitRequestBody(body, limit),
         signal: createProxySignal(context),
         redirect: 'error',
-      })
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' })
     } catch (error) {
+      if (hasTooLargeCause(error)) {
+        return apiError(context, 413, 'invalid_request', 'Audio is too large')
+      }
       return proxyFailure(context, error, clientSignal)
     }
     if (!response.ok) {

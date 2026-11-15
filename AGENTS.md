@@ -38,6 +38,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。
 - 同步使用 IndexedDB outbox、会话 revision、删除墓碑和冲突副本，支持离线恢复。
 - 设置、附件元数据和附件原件尚未进入云端同步。
+- 附件和 ASR multipart 以限长流转发，不在服务端整体缓冲。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主题 token 位于 `apps/web/src/app/theme.css`。
@@ -69,6 +70,7 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 - 离线时允许继续操作，恢复连接后同步未提交的修改，不能静默覆盖用户的新内容。
 - 多设备冲突需要可恢复策略，至少保留较新的版本或冲突副本。
 - 数据结构需要版本号，并为已有本地会话和历史 ZIP 提供迁移路径。
+- 云端同步不能长期依赖完整会话快照；大历史应使用增量 mutation、分页或分块存储。
 - 可选本地模式必须作为明确模式实现，不能改变云端默认路径的接口和数据模型。
 
 ## API Key 与 API 代理
@@ -78,6 +80,9 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 - 首次录入或更换 Key 时可以安全提交给服务端，但提交后客户端不保留明文。
 - 聊天、文件上传、语音和其他 DeepSeek 请求默认由后端代理。
 - 后端流式转发 DeepSeek 的 SSE 响应，并支持取消、断线处理和使用宽松的超时。
+- 大请求体和流式响应必须沿 Web Streams 边界转发，不能在边缘 handler 中用
+  `formData()`、`arrayBuffer()` 或 `text()` 整体缓冲。
+- 大文件、断点续传和对象留存通过可替换的对象存储 adapter 处理，不把具体云厂商写入业务层。
 - 服务端日志不得记录 API Key、鉴权头和完整请求敏感内容。
 
 ## Skills 与 MCP

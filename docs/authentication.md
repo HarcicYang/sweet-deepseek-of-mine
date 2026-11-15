@@ -31,9 +31,9 @@ OAuth scope 目前只有 `read:user`。代码不依赖 GitHub OAuth Apps 的 PKC
 
 ## 附件与语音
 
-- `POST /api/files` 和 `DELETE /api/files/:fileId` 代理 Files API；服务端重新校验 multipart
-  文件大小与 purpose，不把浏览器中的 Key 透传给上游。
-- `POST /api/speech/asr` 代理语音识别 multipart 请求，限制音频大小为 8 MiB。
+- `POST /api/files` 和 `DELETE /api/files/:fileId` 代理 Files API；附件 multipart 以限长流
+  转发，不在边缘完整读入内存，文件格式与 purpose 由上游校验。
+- `POST /api/speech/asr` 以同样的限长流代理语音识别 multipart 请求，限制音频大小为 8 MiB。
 - `POST /api/speech/tts` 校验文本和音色参数后，把 PCM 字节流直接转发给浏览器。
 - 上游返回的无效 Key 会转换为 `invalid_api_key`，不会和登录会话失效混淆。
 

@@ -21,11 +21,15 @@ const cookieValue = (setCookie: string | null, name: string): string | null => {
 const createTestApp = async () => {
   const security = await createSecurityService(MASTER_KEY)
   const syncStore = new MemorySyncStore()
-  const calls: Array<{ url: string; init?: RequestInit }> = []
+  const calls: Array<{ url: string; init?: RequestInit; body?: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (input, init) => {
     const url =
       typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString()
-    calls.push({ url, init })
+    const body =
+      init?.body instanceof ReadableStream
+        ? new Uint8Array(await new Response(init.body).arrayBuffer())
+        : undefined
+    calls.push({ url, init, body })
     if (url === 'https://github.com/login/oauth/access_token') {
       return Response.json({ access_token: 'github-access-token' })
     }
@@ -189,6 +193,18 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   assert.equal(upload.status, 200)
   const uploaded = (await upload.json()) as { id: string }
   assert.equal(uploaded.id, 'file-1')
+  const upstreamUpload = calls.find(
+    (call) => call.url === 'https://api.deepseek.test/anthropic/v1/files'
+  )
+  assert.ok(upstreamUpload?.body)
+  assert.match(
+    new Headers(upstreamUpload.init?.headers).get('Content-Type') ?? '',
+    /^multipart\/form-data; boundary=/u
+  )
+  const uploadBody = new TextDecoder().decode(upstreamUpload.body)
+  assert.match(uploadBody, /name="purpose"\r\n\r\nuser_data/u)
+  assert.match(uploadBody, /name="file"; filename="note.txt"/u)
+  assert.match(uploadBody, /\r\n\r\nhello\r\n/u)
 
   const remove = await app.request(`${APP_ORIGIN}/api/files/file-1`, {
     method: 'DELETE',
@@ -205,6 +221,13 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   })
   assert.equal(asr.status, 200)
   assert.deepEqual(await asr.json(), { text: 'hello from audio' })
+  const upstreamAsr = calls.find(
+    (call) => call.url === 'https://api.deepseek.test/v1/tools/asr'
+  )
+  assert.ok(upstreamAsr?.body)
+  const asrBody = new TextDecoder().decode(upstreamAsr.body)
+  assert.match(asrBody, /name="file"; filename="recording.wav"/u)
+  assert.match(asrBody, /\r\n\r\naudio\r\n/u)
 
   const tts = await app.request(`${APP_ORIGIN}${apiRoutes.speechTts}`, {
     method: 'POST',
