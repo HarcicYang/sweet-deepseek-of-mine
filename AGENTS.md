@@ -1,0 +1,128 @@
+# AGENTS.md
+
+## 项目定位
+
+Sweet DeepSeek 是一个基于 DeepSeek 官方开源 `chat-demo` 和 DeepSeek API 的聊天工具。
+它是独立社区项目，不代表 DeepSeek 官方产品。
+
+目标是一个完整的在线聊天产品：
+
+- 默认使用账号、云端历史和跨设备同步。
+- API Key 默认保存在服务端，由服务端代理 DeepSeek 请求。
+- 保留官方 `chat-demo` 的 UI 风格和交互习惯。
+- 提供接近 Claude / ChatGPT 的聊天体验，包括流式回复、工具过程和清晰的失败恢复。
+- 支持可组合的 Skill、远程 MCP 和受约束的 JSON-Render。
+- 后端开源，并能在边缘运行时部署。
+
+本地模式是可选的部署或运行方式，不是主产品的默认形态。
+
+## 产品原则
+
+1. 官方 UI 是视觉和交互基线。新增能力应融入现有侧栏、消息和设置体系，不做无关重设计。
+2. 云端账号和同步是默认路径。离线缓存、无账号模式和自托管本地模式可以保留，但不能反过来限制主产品。
+3. 浏览器不持有或持久化 DeepSeek API Key。客户端通过自己的登录会话调用后端，由后端使用云端保存的 Key 请求 DeepSeek。
+4. 模型输出、Skill 清单、MCP 返回值和 JSON-Render 文档都视为不可信输入。
+5. 产生写入、删除、发布等外部副作用的工具操作需要权限检查；高风险操作需要在界面中确认。
+6. 保持 MIT 许可证、上游版权和归属信息，不暗示与 DeepSeek 官方存在关联。
+
+## 当前仓库
+
+当前代码仍是官方 `chat-demo` 的静态前端：
+
+- React 18、TypeScript、Rspack、Zustand、`idb`、`fflate`。
+- 浏览器直接请求 DeepSeek API。
+- API Key 当前存放在 `localStorage`，这是需要迁移掉的旧模式。
+- 会话和附件当前存放在 IndexedDB，数据库名为 `chat-demo`。
+- 聊天状态集中在 `src/services/chat/store.ts`。
+- API 和 SSE 协议位于 `src/services/api/`。
+- 主题 token 位于 `src/app/theme.css`。
+- 文案必须同时维护 `src/i18n/zh.ts` 和 `src/i18n/en.ts`。
+- 当前没有后端、账号系统或独立协议包。
+
+## 目标架构
+
+引入后端时迁移为 pnpm workspace：
+
+```text
+apps/
+  web/                 React 聊天应用
+  server/              账号、云同步、API 代理、MCP 网关
+packages/
+  contracts/           前后端共享协议与运行时校验
+  skills/              Skill manifest 和运行时
+  json-render/         JSON UI schema 与安全渲染器
+docs/                  必要的设计与协议说明
+```
+
+后端默认使用 TypeScript + Hono，坚持 Web Fetch / Streams 边界，并通过 adapter 支持
+Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存储不要直接耦合到具体云厂商。
+
+## 聊天与同步
+
+- 云端账号数据是跨设备同步的主数据源，IndexedDB 用作快速读取和离线缓存。
+- 默认同步会话、设置和必要的附件元数据；API Key 单独处理，不进入普通会话载荷。
+- 离线时允许继续操作，恢复连接后同步未提交的修改，不能静默覆盖用户的新内容。
+- 多设备冲突需要可恢复策略，至少保留较新的版本或冲突副本。
+- 数据结构需要版本号，并为已有本地会话和历史 ZIP 提供迁移路径。
+- 可选本地模式必须作为明确模式实现，不能改变云端默认路径的接口和数据模型。
+
+## API Key 与 API 代理
+
+- DeepSeek API Key 保存在服务端，并使用部署环境提供的密钥或加密存储进行保护。
+- 浏览器只保存登录会话，不把 API Key 写入 `localStorage`、IndexedDB、URL、日志或前端错误对象。
+- 首次录入或更换 Key 时可以安全提交给服务端，但提交后客户端不保留明文。
+- 聊天、文件上传、语音和其他 DeepSeek 请求默认由后端代理。
+- 后端流式转发 DeepSeek 的 SSE 响应，并支持取消、断线处理和使用宽松的超时。
+- 服务端日志不得记录 API Key、鉴权头和完整请求敏感内容。
+
+## Skills 与 MCP
+
+- Skill 使用带版本号的 manifest，至少包含 ID、说明、输入 schema、所需工具和权限声明。
+- 首期 MCP 支持远程 Streamable HTTP；边缘环境不假设可以启动 `stdio` 子进程。
+- MCP 凭据和连接默认由后端管理，浏览器只调用自己的后端会话。
+- 工具调用保留权限检查，并对高风险副作用请求用户确认。
+- 当前不设计配额、速率限制或审计系统；除非后续明确要求，不要提前加入这些机制。
+- 超时不要设置得过于激进。长时间运行的 Skill 或 MCP 调用应使用宽松、可配置的超时，并允许用户取消。
+- UI 展示准备、调用中、成功、失败和可重试状态，具体细节可以按需展开。
+
+## JSON-Render
+
+- 模型只输出带版本号的 JSON，不输出任意 HTML、JS、CSS 或可执行表达式。
+- JSON 映射到静态注册的 React 组件白名单，不动态加载模型指定的代码。
+- 服务端和客户端都校验 schema；无效、未知或不兼容的 UI 回退到 Markdown。
+- Action 只能由用户手势触发，并遵守与普通工具调用相同的权限规则。
+- 新组件需要支持官方主题、深浅色、移动端和基本键盘可访问性。
+- 初版保持简单，优先支持 Markdown、Callout、Card、Table、Chart、Form、Code 等基础结构。
+
+## UI 与编码约定
+
+- 使用现有 `--dsw-*` / `--ds-*` 主题变量和 CSS Modules，不另建一套视觉系统。
+- 所有用户可见文本进入中英文 i18n。
+- 新功能检查桌面和移动端；流式任务必须可停止、可重试、可恢复。
+- 保持 TypeScript strict，外部输入先按 `unknown` 校验。
+- 使用 pnpm 和现有 Rspack 工具链，不进行无关的大版本升级。
+- 不提交 `.env`、凭据、OAuth token 或 API Key。
+- 重要的协议或数据结构变化需要简短记录，但不要为普通实现额外制造流程。
+
+## 开发顺序
+
+1. 将现有 API Key 直连模式迁移到服务端代理，建立账号、后端和共享协议。
+2. 实现云端历史同步和可选离线缓存。
+3. 加入 Skill 与远程 MCP。
+4. 加入 JSON-Render 和 Markdown 回退。
+
+## 验证
+
+代码修改后至少运行：
+
+```sh
+pnpm type
+pnpm lint
+pnpm build
+```
+
+涉及界面时，再做桌面/移动端、中英文和深浅色的必要冒烟检查。
+
+## AGENTS.md 维护
+
+产品范围或技术方向变化时更新本文件。若任务与这些原则冲突，先指出冲突并确认，不要静默偏离。
