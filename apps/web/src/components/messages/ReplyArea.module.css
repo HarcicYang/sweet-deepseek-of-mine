@@ -28,7 +28,11 @@
 }
 
 .titleText {
+  min-width: 0;
   margin-right: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: var(--dsw-font-markdown-base);
 }
 

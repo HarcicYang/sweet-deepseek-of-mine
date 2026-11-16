@@ -74,6 +74,8 @@ export const ReplyArea = memo(function ReplyArea({
   // 未记录请求开关时，按是否有思考内容显示标题。
   const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
   const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
+  const thinkingPreview = thinking ? getThinkingPreview(view.steps, streaming) : null
+  const titleText = open ? title : (thinkingPreview ?? title)
   const stopped = !streaming && !hasResponse
   return (
     <div className={styles.area}>
@@ -82,7 +84,7 @@ export const ReplyArea = memo(function ReplyArea({
           <span className={clsx(styles.titleIcon, stopped && styles.stoppedIcon)}>
             <IconThinkOutline16 />
           </span>
-          <span className={clsx(styles.titleText, titleActive && styles.shimmer)}>{title}</span>
+          <span className={clsx(styles.titleText, titleActive && styles.shimmer)}>{titleText}</span>
           {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </div>
       ) : null}
@@ -103,6 +105,17 @@ export const ReplyArea = memo(function ReplyArea({
     </div>
   )
 })
+
+const getThinkingPreview = (steps: Step[], streaming: boolean): string | null => {
+  const lines = steps
+    .flatMap((step) => (step.type === 'thinking' ? step.blocks : []))
+    .map((block) => block.thinking)
+    .join('\n')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return (streaming ? lines.at(-1) : lines[0]) ?? null
+}
 
 const stepKey = (step: Step, index: number) =>
   step.type === 'thinking' || step.type === 'text' || step.type === 'search'
