@@ -232,6 +232,61 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.customInstructions {
+  flex-shrink: 0;
+  padding: 12px 0;
+  box-shadow: inset 0 1px 0 0 var(--dsw-alias-border-l2-darkmode-thin);
+}
+
+.customInstructionsLabel {
+  display: block;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.customInstructions .description {
+  margin-top: 4px;
+}
+
+.customInstructionsInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 132px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  outline: none;
+  resize: vertical;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  transition:
+    border-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    box-shadow var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.customInstructionsInput:focus-visible {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+}
+
+.customInstructionsInput::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+.customInstructionsCount {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+}
+
 .error {
   font-size: 12px;
   line-height: 18px;

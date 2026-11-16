@@ -39,6 +39,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。
 - 同步使用 IndexedDB outbox、会话 revision、删除墓碑和冲突副本，支持离线恢复。
 - 思考、搜索、TTS 音色和位置设置已支持云端同步；主题、语言和侧栏状态保持设备本地。
+- 自定义指令是账号级同步设置，最多 16,000 字符；只作为身份与安全规则之后的 system prompt 补充，不能覆盖身份、安全和工具权限边界。
 - 附件元数据随会话同步，附件原件和对象存储尚未进入云端同步。
 - 附件和 ASR multipart 以限长流转发，不在服务端整体缓冲。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。

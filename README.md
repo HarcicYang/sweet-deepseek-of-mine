@@ -12,6 +12,7 @@ An independent community chat tool (unofficial product) developed based on DeepS
 - **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown tables with copy/download/fullscreen tools, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
 - **Generative UI**: Server-validated JSON-Render cards, carousels, metrics, steps, charts, details, and code blocks with Markdown fallback and safe copy/continue actions.
 - **Temporary sharing**: Create read-only conversation snapshots that expire in 1–30 days without exposing message sending or attachment originals.
+- **Custom instructions**: Add account-level system-prompt guidance in Settings and sync it across devices.
 - **Multimedia Interaction**: Supports drag-and-drop attachment uploads, voice input, and text-to-speech reading.
 - **Personalization**: Supports bilingual (English/Chinese), dark/light themes, mobile adaptation, and history import/export.
 

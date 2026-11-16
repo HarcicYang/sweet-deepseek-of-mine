@@ -140,6 +140,11 @@ export const en = {
   settingsTtsVoice: 'Read-aloud voice',
   settingsTtsVoiceStella: 'Stella (female)',
   settingsTtsVoiceTide: 'Tide (male)',
+  settingsCustomInstructions: 'Custom instructions',
+  settingsCustomInstructionsDescription:
+    'Sent to the model as a supplement to the system prompt. It cannot override identity, safety, or tool-permission rules.',
+  settingsCustomInstructionsPlaceholder:
+    'For example: Lead with the conclusion, then list the key points.',
   settingsLocation: 'Location',
   settingsLocationProvince: 'Select province/region',
   settingsLocationCity: 'Select city',

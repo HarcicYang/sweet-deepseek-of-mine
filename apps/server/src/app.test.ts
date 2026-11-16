@@ -581,8 +581,9 @@ test('settings sync advances one revision per account', async () => {
   assert.deepEqual(await initial.json(), { settings: null })
 
   const payload = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     thinkingMode: 'high',
+    customInstructions: 'Prefer concise answers.',
     search: false,
     ttsVoice: 'tide',
     location: { region: 'CN', province: '440000', city: '440300' },

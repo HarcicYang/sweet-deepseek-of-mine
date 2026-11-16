@@ -1,4 +1,5 @@
 import {
+  CUSTOM_INSTRUCTIONS_MAX_LENGTH,
   SYNC_SETTINGS_SCHEMA_VERSION,
   type SyncedSettingsPayload,
 } from '@sweet-deepseek/contracts/sync'
@@ -12,13 +13,14 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：语言、主题、位置、朗读音色、思考模式与智能搜索开关、侧边栏收起状态 */
+/** 本机设置，存 localStorage：语言、主题、位置、朗读音色、思考模式、自定义指令、搜索开关和侧边栏状态 */
 type Settings = {
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
   ttsVoice: TtsVoice
   thinkingMode: ThinkingMode
+  customInstructions: string
   search: boolean
   siderCollapsed: boolean
 }
@@ -29,6 +31,7 @@ const KEYS = {
   themePreference: 'chat-demo:theme-preference',
   ttsVoice: 'chat-demo:tts-voice',
   thinkingMode: 'chat-demo:thinking-mode',
+  customInstructions: 'chat-demo:custom-instructions',
   legacyThinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   siderCollapsed: 'chat-demo:sider-collapsed',
@@ -115,6 +118,9 @@ const initialThinkingMode = (): ThinkingMode => {
   return mode
 }
 
+const initialCustomInstructions = (): string =>
+  (read(KEYS.customInstructions) ?? '').slice(0, CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+
 const readSettingsUpdatedAt = (): number => {
   const value = Number(read(KEYS.settingsUpdatedAt))
   return Number.isSafeInteger(value) && value > 0 ? value : 0
@@ -137,6 +143,7 @@ export const useSettings = create<Settings>(() => ({
   themePreference: initialThemePreference(),
   ttsVoice: initialTtsVoice(),
   thinkingMode: initialThinkingMode(),
+  customInstructions: initialCustomInstructions(),
   search: read(KEYS.search) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
 }))
@@ -179,6 +186,16 @@ export const setThinkingMode = (thinkingMode: ThinkingMode) => {
   markSyncedSettingsChanged()
 }
 
+export const setCustomInstructions = (customInstructions: string) => {
+  const value = customInstructions.slice(0, CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+  if (value === useSettings.getState().customInstructions) {
+    return
+  }
+  write(KEYS.customInstructions, value)
+  useSettings.setState({ customInstructions: value })
+  markSyncedSettingsChanged()
+}
+
 export const setSearch = (search: boolean) => {
   if (search === useSettings.getState().search) {
     return
@@ -194,10 +211,11 @@ export const setSiderCollapsed = (siderCollapsed: boolean) => {
 }
 
 export const getSyncedSettings = (): SyncedSettingsPayload => {
-  const { thinkingMode, search, ttsVoice, location } = useSettings.getState()
+  const { thinkingMode, customInstructions, search, ttsVoice, location } = useSettings.getState()
   return {
     schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
     thinkingMode,
+    customInstructions,
     search,
     ttsVoice,
     location,
@@ -209,6 +227,7 @@ export const getSyncedSettings = (): SyncedSettingsPayload => {
 export const applySyncedSettings = (payload: SyncedSettingsPayload): void => {
   const location = normalizeLocation(payload.location)
   write(KEYS.thinkingMode, payload.thinkingMode)
+  write(KEYS.customInstructions, payload.customInstructions)
   write(KEYS.legacyThinking, null)
   write(KEYS.search, String(payload.search))
   write(KEYS.ttsVoice, payload.ttsVoice)
@@ -216,6 +235,7 @@ export const applySyncedSettings = (payload: SyncedSettingsPayload): void => {
   write(KEYS.settingsUpdatedAt, String(payload.updatedAt))
   useSettings.setState({
     thinkingMode: payload.thinkingMode,
+    customInstructions: payload.customInstructions,
     search: payload.search,
     ttsVoice: payload.ttsVoice,
     location,
@@ -232,6 +252,7 @@ export const prepareSyncedSettingsForUser = (userId: string): void => {
     applySyncedSettings({
       schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
       thinkingMode: 'disabled',
+      customInstructions: '',
       search: false,
       ttsVoice: 'stella',
       location: null,

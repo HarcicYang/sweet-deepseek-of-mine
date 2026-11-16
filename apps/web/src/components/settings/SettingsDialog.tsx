@@ -9,6 +9,7 @@ import {
   IconSettingsOutline16,
   IconUploadOutline14,
 } from '../base/icons.js'
+import { CUSTOM_INSTRUCTIONS_MAX_LENGTH } from '@sweet-deepseek/contracts/sync'
 import {
   BackupError,
   clearHistory,
@@ -24,6 +25,7 @@ import {
   setLocation,
   setThemePreference,
   setTtsVoice,
+  setCustomInstructions,
   useSettings,
   type ThemePreference,
 } from '../../services/settings.js'
@@ -101,6 +103,7 @@ const SettingsContent = () => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <LocationSetting />
+              <CustomInstructionsSetting />
             </>
           ) : (
             <>
@@ -268,6 +271,30 @@ const LocationSetting = () => {
         </div>
       }
     />
+  )
+}
+
+const CustomInstructionsSetting = () => {
+  const t = useTranslate()
+  const customInstructions = useSettings((state) => state.customInstructions)
+  return (
+    <div className={styles.customInstructions}>
+      <label className={styles.customInstructionsLabel} htmlFor="settings-custom-instructions">
+        {t('settingsCustomInstructions')}
+      </label>
+      <div className={styles.description}>{t('settingsCustomInstructionsDescription')}</div>
+      <textarea
+        id="settings-custom-instructions"
+        className={styles.customInstructionsInput}
+        value={customInstructions}
+        maxLength={CUSTOM_INSTRUCTIONS_MAX_LENGTH}
+        placeholder={t('settingsCustomInstructionsPlaceholder')}
+        onChange={(event) => setCustomInstructions(event.target.value)}
+      />
+      <div className={styles.customInstructionsCount}>
+        {customInstructions.length}/{CUSTOM_INSTRUCTIONS_MAX_LENGTH}
+      </div>
+    </div>
   )
 }
 

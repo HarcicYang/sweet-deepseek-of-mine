@@ -56,6 +56,6 @@ type ThinkingMode = 'disabled' | 'low' | 'high' | 'max'
 
 ## 设置同步
 
-设置同步 schema 版本为 `2`，使用 `thinkingMode` 字段。v1 的布尔 `thinking`
+设置同步 schema 版本为 `3`，使用 `thinkingMode` 和 `customInstructions` 字段。v1 的布尔 `thinking`
 在读取时迁移：`true` 对应 `high`（旧请求未传 effort 时 API 的默认值），
 `false` 对应 `disabled`。

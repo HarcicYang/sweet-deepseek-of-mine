@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { ThinkingEffortSchema, ThinkingModeSchema } from './deepseek.js'
 
 export const SYNC_SCHEMA_VERSION = 1
-export const SYNC_SETTINGS_SCHEMA_VERSION = 2
+export const SYNC_SETTINGS_SCHEMA_VERSION = 3
+export const CUSTOM_INSTRUCTIONS_MAX_LENGTH = 16_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 
@@ -223,10 +224,19 @@ const SyncedSettingsPayloadV1Schema = z
   })
   .strict()
 
+const SyncedSettingsPayloadV2Schema = z
+  .object({
+    schemaVersion: z.literal(2),
+    thinkingMode: ThinkingModeSchema,
+    ...SyncedSettingsFields,
+  })
+  .strict()
+
 export const SyncedSettingsPayloadSchema = z
   .object({
     schemaVersion: z.literal(SYNC_SETTINGS_SCHEMA_VERSION),
     thinkingMode: ThinkingModeSchema,
+    customInstructions: z.string().max(CUSTOM_INSTRUCTIONS_MAX_LENGTH),
     ...SyncedSettingsFields,
   })
   .strict()
@@ -239,10 +249,18 @@ export const SyncedSettingsPayloadReadSchema = z.union([
     (payload): SyncedSettingsPayload => ({
       schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
       thinkingMode: payload.thinking ? ('high' as const) : ('disabled' as const),
+      customInstructions: '',
       search: payload.search,
       ttsVoice: payload.ttsVoice,
       location: payload.location,
       updatedAt: payload.updatedAt,
+    })
+  ),
+  SyncedSettingsPayloadV2Schema.transform(
+    (payload): SyncedSettingsPayload => ({
+      ...payload,
+      schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
+      customInstructions: '',
     })
   ),
 ])
