@@ -9,8 +9,8 @@ An independent community chat tool (unofficial product) developed based on DeepS
 - **Multi-Session Management**: Supports auto-generated titles, renaming, deletion, message branch switching, and regeneration.
 - **Secure Proxy**: Authenticated via GitHub OAuth. DeepSeek API Keys are encrypted and stored on the server using AES-256-GCM, and all API requests are proxied by the same-origin backend, keeping them hidden from the browser.
 - **Cloud Sync & Caching**: Sessions and settings support cloud synchronization, account-isolated IndexedDB caching, offline outbox, and conflict replica handling.
-- **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
-- **Generative UI**: Server-validated JSON-Render cards, carousels, tables, charts, and code blocks with Markdown fallback and safe copy/continue actions.
+- **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown tables with copy/download/fullscreen tools, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
+- **Generative UI**: Server-validated JSON-Render cards, carousels, metrics, steps, charts, details, and code blocks with Markdown fallback and safe copy/continue actions.
 - **Multimedia Interaction**: Supports drag-and-drop attachment uploads, voice input, and text-to-speech reading.
 - **Personalization**: Supports bilingual (English/Chinese), dark/light themes, mobile adaptation, and history import/export.
 
@@ -68,23 +68,23 @@ docs/               Architecture and protocol documentation
 
 ## Development Commands
 
-| Command | Description |
-| --- | --- |
-| `pnpm dev` | Start frontend development server |
-| `pnpm dev:server` | Start Hono backend service |
-| `pnpm build` | Build production artifacts (`apps/web/dist/`) |
-| `pnpm type` | TypeScript type checking |
-| `pnpm lint` | oxlint code linting |
-| `pnpm test` | Run backend tests |
-| `pnpm format` | oxfmt code formatting |
+| Command           | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `pnpm dev`        | Start frontend development server             |
+| `pnpm dev:server` | Start Hono backend service                    |
+| `pnpm build`      | Build production artifacts (`apps/web/dist/`) |
+| `pnpm type`       | TypeScript type checking                      |
+| `pnpm lint`       | oxlint code linting                           |
+| `pnpm test`       | Run backend tests                             |
+| `pnpm format`     | oxfmt code formatting                         |
 
 ---
 
 ## Data & Privacy
 
-* **API Key Protection**: API keys are encrypted and stored exclusively on the server using AES-256-GCM and are never saved locally in the browser.
-* **Data Synchronization**: Session text, thinking processes, search results, and related settings are synchronized to the cloud and cached in `chat-demo:<userId>` IndexedDB.
-* **Import & Export**: Supports importing and exporting history in ZIP format (exported content includes sessions and raw images, excluding API keys and sensitive credentials).
+- **API Key Protection**: API keys are encrypted and stored exclusively on the server using AES-256-GCM and are never saved locally in the browser.
+- **Data Synchronization**: Session text, thinking processes, search results, and related settings are synchronized to the cloud and cached in `chat-demo:<userId>` IndexedDB.
+- **Import & Export**: Supports importing and exporting history in ZIP format (exported content includes sessions and raw images, excluding API keys and sensitive credentials).
 
 For more synchronization protocols and design details, please refer to the [Cloud Session Sync Guide](https://www.google.com/search?q=docs/sync.md).
 

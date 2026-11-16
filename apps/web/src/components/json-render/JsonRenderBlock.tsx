@@ -10,10 +10,14 @@ export const JsonRenderBlock = ({
   source,
   sessionId,
   interactive,
+  streaming,
+  limited = false,
 }: {
   source: string
   sessionId: string
   interactive: boolean
+  streaming: boolean
+  limited?: boolean
 }) => {
   const t = useTranslate()
   const local = useMemo(() => parseJsonRenderSource(source), [source])
@@ -23,8 +27,11 @@ export const JsonRenderBlock = ({
   useEffect(() => {
     setDocument(null)
     setFailed(false)
+    if (limited) {
+      return
+    }
     if (!local.success) {
-      setFailed(true)
+      setFailed(!streaming)
       return
     }
     let active = true
@@ -42,7 +49,16 @@ export const JsonRenderBlock = ({
     return () => {
       active = false
     }
-  }, [local, source])
+  }, [limited, local, source, streaming])
+
+  if (limited) {
+    return (
+      <details className={styles.fallback}>
+        <summary>{t('jsonRenderLimitReached')}</summary>
+        <pre>{source}</pre>
+      </details>
+    )
+  }
 
   if (failed) {
     return (
@@ -51,6 +67,9 @@ export const JsonRenderBlock = ({
         <pre>{source}</pre>
       </details>
     )
+  }
+  if (!local.success && streaming) {
+    return <JsonRenderPending />
   }
   if (!document) {
     return <JsonRenderPending />

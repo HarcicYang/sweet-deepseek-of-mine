@@ -44,11 +44,15 @@ const JSON_RENDER_PROMPT = `
 规则：
 - 简单结构化内容使用一个 json-render 块；复杂回答拆成 2 至 4 个单一用途的块，块之间保留简短 Markdown 过渡文字，每轮最多 4 个块。
 - 每个块闭合后会立即独立渲染，后续文字继续流式显示。不要把整页内容塞进一个超大块，也不要把所有界面集中到回答末尾。
-- 每个块只承担一个明确目的，例如比较卡片、数据表格、趋势图或后续操作；块外文字不要重复界面中的内容。
+- 每个块只承担一个明确目的，例如比较卡片、趋势图或后续操作；表格使用普通 Markdown 原生语法，不要放进 json-render；块外文字不要重复界面中的内容。
 - 用户要求卡片、图表、可视化或后续操作按钮时，最终回答必须包含至少一个有效 json-render 块；不要改用 Mermaid、HTML 或普通链接列表替代。
 - 后续操作、推荐选择或下一步按钮应放进 Card actions，不要只输出一组 Markdown 链接。
+- Badge 只用于状态或简短元数据；多项同级信息优先用 List，而不是堆叠很多小 Card。
+- List 保持 2 至 8 行，每行只有一个可选操作；不要用它重复普通 Markdown 表格。
+- Image 仅在图片是回答的一部分且 URL 可靠时使用，src 必须是 HTTPS；不要生成追踪参数或把图片当作装饰。
+- Form 只用于收集用户明确需要补充的输入；字段名使用英文标识符，promptTemplate 用 \`{{字段名}}\` 引用值，提交只会发送一条普通用户消息。
 - 普通 Markdown 使用标准标题语法（如 \`## 标题\`）和列表前后空行，不要用单独一行粗体文字充当标题。
-- 块内必须是有效 JSON，不要注释、尾逗号、HTML、CSS、脚本、任意 URL 或自定义颜色。
+- 块内必须是有效 JSON，不要注释、尾逗号、HTML、CSS、脚本、任意链接或自定义颜色；Image.src 是唯一允许的 URL 字段。
 - 所有数据都是候选内容；保持简洁，移动端可读，卡片最多两个操作。
 
 块格式：
@@ -59,12 +63,26 @@ const JSON_RENDER_PROMPT = `
 NODE 支持以下类型：
 - {"type":"Markdown","value":"..."}
 - {"type":"Stack","gap":"none|s|m|l","children":[NODE...]}
+- {"type":"Badge","label":"标签","color":"secondary|success|danger|warning|info|discovery","variant":"solid|soft|outline","pill":false}
 - {"type":"Callout","tone":"info|success|warning|danger","title":"可选","content":{"type":"Markdown","value":"..."}}
-- {"type":"Card","eyebrow":"可选","title":"可选","description":"可选","content":[NODE...],"actions":[ACTION...]}
-- {"type":"Carousel","items":[{"eyebrow":"可选","title":"可选","description":"可选","content":[NODE...],"actions":[ACTION...]}...]}，2 至 6 项
-- {"type":"Table","title":"可选","columns":[{"label":"列名","align":"left|center|right"}...],"rows":[["单元格"...]...]}，每行列数必须一致
+- {"type":"Card","eyebrow":"可选","badge":BADGE,"title":"可选","description":"可选","content":[NODE...],"actions":[ACTION...]}
+- {"type":"Carousel","items":[{"eyebrow":"可选","badge":BADGE,"title":"可选","description":"可选","content":[NODE...],"actions":[ACTION...]}...]}，2 至 6 项
+- {"type":"List","title":"可选","items":[{"title":"标题","description":"可选说明","meta":"可选元数据","badge":BADGE,"action":ACTION}...]}，2 至 8 项
 - {"type":"Chart","kind":"bar|line","title":"可选","unit":"可选","labels":["A","B"],"series":[{"name":"系列","values":[1,2]}]}，每个系列长度必须等于 labels
+- {"type":"Stats","items":[{"label":"指标名","value":"指标值","detail":"可选说明"}...]}，2 至 4 项
+- {"type":"Steps","items":[{"title":"步骤标题","description":{"type":"Markdown","value":"可选说明"},"status":"pending|active|done|error"}...]}，2 至 8 项
+- {"type":"Details","title":"折叠标题","open":false,"content":{"type":"Markdown","value":"..."}}，用于不打断主流程的补充细节
+- {"type":"Image","src":"https://...","alt":"必填替代文本","caption":"可选说明","aspectRatio":"auto|landscape|square|portrait","fit":"cover|contain"}
+- {"type":"Form","title":"可选标题","description":"可选说明","fields":[FIELD...],"submitLabel":"提交按钮","promptTemplate":"包含 {{字段名}} 的用户消息"}，1 至 6 个字段
 - {"type":"Code","title":"可选","language":"可选","code":"..."}
+
+BADGE 仅支持：
+- {"label":"标签","color":"secondary|success|danger|warning|info|discovery","variant":"solid|soft|outline","pill":false}
+
+FIELD 仅支持：
+- {"type":"text","name":"字段名","label":"标签","placeholder":"可选","description":"可选","required":true,"defaultValue":"可选"}
+- {"type":"textarea","name":"字段名","label":"标签","placeholder":"可选","description":"可选","required":true,"defaultValue":"可选"}
+- {"type":"select","name":"字段名","label":"标签","options":[{"label":"选项","value":"值"}...],"required":true,"defaultValue":"可选值"}
 
 ACTION 仅支持：
 - {"kind":"prompt","label":"按钮文字","value":"用户点击后发送的问题"}

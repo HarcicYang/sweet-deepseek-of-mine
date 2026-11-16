@@ -1,7 +1,6 @@
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
-import { stripJsonRenderBlocks } from '@sweet-deepseek/json-render'
 import { IconRefreshOutline16, IconWarningOutline16 } from '../base/icons.js'
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
@@ -11,8 +10,8 @@ import type { AssistantMessage as AssistantMessageType } from '../../services/ch
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '../base/IconButton.js'
 import { Button } from '../base/Button.js'
-import { RichMarkdown } from '../json-render/RichMarkdown.js'
 import { Markdown } from '../markdown/Markdown.js'
+import { stripJsonRenderCodeBlocks } from '../../services/markdown/stripJsonRender.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { ReadAloudButton } from './ReadAloudButton.js'
@@ -52,7 +51,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   // 安全拒绝：已下发的思考与正文按协议丢弃，只显示模板答复。
   const refused = message.stopReason === 'refusal'
   const answer = refused ? null : view.answer
-  const answerText = !streaming && answer ? stripJsonRenderBlocks(answer.text) : ''
+  const answerText = !streaming && answer ? stripJsonRenderCodeBlocks(answer.text) : ''
   const responseText = [answerText, notice?.presentation === 'response' ? notice.text : null]
     .filter(Boolean)
     .join('\n\n')
@@ -65,13 +64,14 @@ export const AssistantMessage = memo(function AssistantMessage({
         <ReplyArea message={message} view={view} streaming={streaming} hasResponse={!!answer} />
       )}
       {answer ? (
-        <RichMarkdown
+        <Markdown
           className="ds-assistant-message-main-content"
           content={answer.markdown}
           loading={streaming}
+          cacheKey={message.id}
+          disableLink={false}
           sources={view.sources}
-          sessionId={sessionId}
-          busy={busy}
+          jsonRender={{ sessionId, busy }}
         />
       ) : null}
       {waiting ? (

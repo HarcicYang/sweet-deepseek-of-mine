@@ -1,5 +1,6 @@
 import { createElement, memo, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 import clsx from 'clsx'
+import { JSON_RENDER_LANGUAGE, JSON_RENDER_LIMITS } from '@sweet-deepseek/json-render'
 import type {
   BlockContent,
   DefinitionContent,
@@ -8,10 +9,39 @@ import type {
   Root,
   Table as TableNode,
 } from 'mdast'
+import { JsonRenderBlock } from '../json-render/JsonRenderBlock.js'
+import type { JsonRenderContext } from '../json-render/JsonRenderContext.js'
 import { CitationLink } from '../search/CitationLink.js'
 import { CodeBlock } from './CodeBlock.js'
+import { DataTable } from './DataTable.js'
 import { ImageAsLink, Link } from './Link.js'
 import { InlineMath, MathBlock } from './MathFormula.js'
+
+type JsonRenderBudget = JsonRenderContext & { allowed: WeakSet<object> }
+
+const collectJsonRenderBudget = (
+  nodes: Array<BlockContent | DefinitionContent>,
+  allowed: WeakSet<object>
+) => {
+  let count = 0
+  const visit = (node: BlockContent | DefinitionContent) => {
+    if (node.type === 'code' && node.lang === JSON_RENDER_LANGUAGE) {
+      if (count < JSON_RENDER_LIMITS.maxBlocksPerMessage) {
+        allowed.add(node)
+      }
+      count += 1
+      return
+    }
+    if ('children' in node) {
+      for (const child of node.children) {
+        visit(child as BlockContent | DefinitionContent)
+      }
+    }
+  }
+  for (const node of nodes) {
+    visit(node)
+  }
+}
 
 const Html = memo(function Html({ value }: { value: string }) {
   if (/^<br\s*\/?>$/i.test(value)) {
@@ -20,7 +50,15 @@ const Html = memo(function Html({ value }: { value: string }) {
   return <span className="ds-markdown-html">{value}</span>
 })
 
-const List = memo(function List({ node, loading }: { node: ListNode; loading: boolean }) {
+const List = memo(function List({
+  node,
+  loading,
+  jsonRender,
+}: {
+  node: ListNode
+  loading: boolean
+  jsonRender?: JsonRenderBudget
+}) {
   const ListTag = node.ordered ? 'ol' : 'ul'
   return (
     <ListTag start={node.ordered ? node.start || undefined : undefined}>
@@ -34,7 +72,11 @@ const List = memo(function List({ node, loading }: { node: ListNode; loading: bo
               // □ U+25A1 / ☑ U+2611
               <span className="ds-markdown-task-checkbox">{checked ? '☑  ' : '□  '}</span>
             ) : null}
-            <MarkdownBlockContentOrDefinitionContent nodes={child.children} loading={loading} />
+            <MarkdownBlockContentOrDefinitionContent
+              nodes={child.children}
+              loading={loading}
+              jsonRender={jsonRender}
+            />
           </li>
         )
       })}
@@ -42,48 +84,45 @@ const List = memo(function List({ node, loading }: { node: ListNode; loading: bo
   )
 })
 
+const getPhrasingText = (nodes: PhrasingContent[]): string =>
+  nodes
+    .map((node) => {
+      switch (node.type) {
+        case 'text':
+        case 'inlineCode':
+        case 'inlineMath':
+        case 'html':
+          return node.value
+        case 'break':
+          return '\n'
+        case 'image':
+          return node.alt ?? node.url
+        case 'citation':
+          return `[${node.source.index}]`
+        default:
+          return 'children' in node ? getPhrasingText(node.children) : ''
+      }
+    })
+    .join('')
+
 const Table = memo(function Table({ node }: { node: TableNode }) {
-  const columnCount = node.children[0]?.children.length
+  const header = node.children[0]
+  const columns = header?.children ?? []
+  const rows = node.children.slice(1)
   return (
-    <div className="markdown-table-wrapper">
-      <table>
-        {node.children[0] ? (
-          <thead>
-            <tr>
-              {node.children[0].children.map((cell, cellIndex) => {
-                return (
-                  <th key={cellIndex}>
-                    <MarkdownPhrasingContent nodes={cell.children} />
-                  </th>
-                )
-              })}
-            </tr>
-          </thead>
-        ) : null}
-        {node.children[1] ? (
-          <tbody>
-            {node.children.slice(1).map((row, rowIndex) => {
-              const curColumnCount = row.children.length || 0
-              return (
-                <tr key={rowIndex}>
-                  {row.children.map((cell, cellIndex) => {
-                    return (
-                      <td key={cellIndex}>
-                        <MarkdownPhrasingContent nodes={cell.children} />
-                      </td>
-                    )
-                  })}
-                  {/* 补齐到列数 */}
-                  {Array.from({ length: columnCount - curColumnCount }).map((_, idx) => (
-                    <td key={`ptd_${idx}`} />
-                  ))}
-                </tr>
-              )
-            })}
-          </tbody>
-        ) : null}
-      </table>
-    </div>
+    <DataTable
+      columns={columns.map((cell, index) => (
+        <MarkdownPhrasingContent key={index} nodes={cell.children} />
+      ))}
+      rows={rows.map((row) =>
+        row.children.map((cell, index) => (
+          <MarkdownPhrasingContent key={index} nodes={cell.children} />
+        ))
+      )}
+      plainColumns={columns.map((cell) => getPhrasingText(cell.children))}
+      plainRows={rows.map((row) => row.children.map((cell) => getPhrasingText(cell.children)))}
+      alignments={node.align ?? undefined}
+    />
   )
 })
 
@@ -159,9 +198,11 @@ const MarkdownBlockContentOrDefinitionContent = memo(
   function MarkdownBlockContentOrDefinitionContent({
     nodes,
     loading,
+    jsonRender,
   }: {
     nodes: Array<BlockContent | DefinitionContent>
     loading: boolean
+    jsonRender?: JsonRenderBudget
   }) {
     return nodes.map((node, index) => {
       switch (node.type) {
@@ -172,7 +213,11 @@ const MarkdownBlockContentOrDefinitionContent = memo(
         case 'blockquote':
           return (
             <blockquote key={index}>
-              <MarkdownBlockContentOrDefinitionContent nodes={node.children} loading={loading} />
+              <MarkdownBlockContentOrDefinitionContent
+                nodes={node.children}
+                loading={loading}
+                jsonRender={jsonRender}
+              />
             </blockquote>
           )
         case 'html':
@@ -200,6 +245,18 @@ const MarkdownBlockContentOrDefinitionContent = memo(
             </p>
           )
         case 'code':
+          if (node.lang === JSON_RENDER_LANGUAGE && jsonRender) {
+            return (
+              <JsonRenderBlock
+                key={index}
+                source={node.value}
+                sessionId={jsonRender.sessionId}
+                interactive={!jsonRender.busy && !loading}
+                streaming={loading}
+                limited={!jsonRender.allowed.has(node)}
+              />
+            )
+          }
           return (
             <CodeBlock
               key={index}
@@ -211,7 +268,7 @@ const MarkdownBlockContentOrDefinitionContent = memo(
         case 'table':
           return <Table node={node} key={index} />
         case 'list':
-          return <List key={index} node={node} loading={loading} />
+          return <List key={index} node={node} loading={loading} jsonRender={jsonRender} />
         default:
           // 脚注与定义已在解析时换成段落
           return null
@@ -225,10 +282,12 @@ export const MarkdownAstRenderer = memo(function MarkdownAstRenderer({
   onUpdate,
   className,
   loading = false,
+  jsonRender,
 }: {
   ast: Root
   className?: string
   loading?: boolean
+  jsonRender?: JsonRenderContext
   /**
    * layoutEffect 之后触发 -> 进行页面滚动
    */
@@ -240,16 +299,25 @@ export const MarkdownAstRenderer = memo(function MarkdownAstRenderer({
     onUpdateRef.current()
   }, [ast.children])
 
-  return useMemo(
-    () => (
+  const jsonRenderBudget = useMemo(() => {
+    if (!jsonRender) {
+      return undefined
+    }
+    const allowed = new WeakSet<object>()
+    collectJsonRenderBudget(ast.children as Array<BlockContent | DefinitionContent>, allowed)
+    return { ...jsonRender, allowed }
+  }, [ast.children, jsonRender])
+
+  return useMemo(() => {
+    return (
       <div className={clsx('ds-markdown', className)}>
         {/* 解析器在根节点下产出块级内容。 */}
         <MarkdownBlockContentOrDefinitionContent
           nodes={ast.children as Array<BlockContent | DefinitionContent>}
           loading={loading}
+          jsonRender={jsonRenderBudget}
         />
       </div>
-    ),
-    [className, ast.children, loading]
-  )
+    )
+  }, [className, ast.children, loading, jsonRenderBudget])
 })

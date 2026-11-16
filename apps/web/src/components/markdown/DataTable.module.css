@@ -1,0 +1,171 @@
+.block {
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background-color: var(--dsw-alias-bg-layer-2);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 8px 4px 14px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.title {
+  min-width: 0;
+  flex: 1;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-spacing: 0;
+  border-collapse: separate;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-markdown-table);
+}
+
+.scroll th,
+.scroll td {
+  min-width: 104px;
+  max-width: 320px;
+  padding: 13px 16px;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.scroll th {
+  background-color: var(--dsw-alias-markdown-code-block-banner);
+  font: var(--dsw-font-markdown-table-head);
+  font-weight: 500;
+}
+
+.scroll tr:last-child td {
+  border-bottom: 0;
+}
+
+.scroll th:last-child,
+.scroll td:last-child {
+  border-right: 0;
+}
+
+.dialog {
+  box-sizing: border-box;
+  width: min(1100px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 16px;
+  background-color: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.54);
+  backdrop-filter: blur(2px);
+}
+
+.dialogPanel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 34px);
+}
+
+.dialogPanel .scroll {
+  min-height: 0;
+  overflow: auto;
+}
+
+.dialogPanel .scroll table {
+  font-size: 15px;
+  line-height: 25px;
+}
+
+.dialogPanel .scroll th,
+.dialogPanel .scroll td {
+  padding: 16px 20px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .block {
+    margin: 12px 0;
+    border-radius: 12px;
+  }
+
+  .toolbar {
+    min-height: 38px;
+    padding: 4px 6px 4px 12px;
+  }
+
+  .scroll th,
+  .scroll td {
+    min-width: 92px;
+    padding: 11px 12px;
+  }
+
+  .dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .dialogPanel {
+    max-height: calc(100vh - 18px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dialog[open] {
+    animation: dialogIn 160ms var(--ds-ease-in-out) both;
+  }
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

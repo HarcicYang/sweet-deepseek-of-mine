@@ -1,12 +1,19 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useId, useState } from 'react'
 import clsx from 'clsx'
 import type {
   JsonRenderAction,
+  JsonRenderBadge,
   JsonRenderCardItem,
   JsonRenderChartNode,
+  JsonRenderDetailsNode,
   JsonRenderDocument,
+  JsonRenderFormField,
+  JsonRenderFormNode,
+  JsonRenderImageNode,
+  JsonRenderListNode,
   JsonRenderNode,
-  JsonRenderTableNode,
+  JsonRenderStatsNode,
+  JsonRenderStepsNode,
 } from '@sweet-deepseek/json-render'
 import { useTranslate } from '../../i18n/index.js'
 import { sendPromptFromRender } from '../../services/chat/store.js'
@@ -30,8 +37,37 @@ const toneClass = {
   danger: styles.calloutDanger,
 } as const
 
+const badgeColorClass = {
+  secondary: styles.badgeSecondary,
+  success: styles.badgeSuccess,
+  danger: styles.badgeDanger,
+  warning: styles.badgeWarning,
+  info: styles.badgeInfo,
+  discovery: styles.badgeDiscovery,
+} as const
+
+const badgeVariantClass = {
+  solid: styles.badgeSolid,
+  soft: styles.badgeSoft,
+  outline: styles.badgeOutline,
+} as const
+
 const seriesClass = (index: number) =>
   [styles.series0, styles.series1, styles.series2, styles.series3][index % 4]
+
+const BadgeView = ({ badge, className }: { badge: JsonRenderBadge; className?: string }) => (
+  <span
+    className={clsx(
+      styles.badge,
+      badgeColorClass[badge.color ?? 'secondary'],
+      badgeVariantClass[badge.variant ?? 'soft'],
+      badge.pill && styles.badgePill,
+      className
+    )}
+  >
+    {badge.label}
+  </span>
+)
 
 const ActionButtons = ({
   actions,
@@ -65,11 +101,13 @@ const JsonActionButton = ({
   sessionId,
   interactive,
   primary,
+  compact,
 }: {
   action: JsonRenderAction
   sessionId: string
   interactive: boolean
   primary: boolean
+  compact?: boolean
 }) => {
   const t = useTranslate()
   const [copied, setCopied] = useState(false)
@@ -86,7 +124,8 @@ const JsonActionButton = ({
   return (
     <Button
       variant={primary ? 'primary' : 'outlined'}
-      size="m"
+      size={compact ? 's' : 'm'}
+      className={compact ? styles.rowAction : undefined}
       disabled={!interactive}
       onClick={async () => {
         if (action.kind === 'prompt') {
@@ -116,7 +155,12 @@ const CardContent = ({
   path: string
 }) => (
   <>
-    {item.eyebrow ? <div className={styles.eyebrow}>{item.eyebrow}</div> : null}
+    {item.eyebrow || item.badge ? (
+      <div className={styles.cardKicker}>
+        {item.eyebrow ? <div className={styles.eyebrow}>{item.eyebrow}</div> : null}
+        {item.badge ? <BadgeView badge={item.badge} /> : null}
+      </div>
+    ) : null}
     {item.title ? <div className={styles.cardTitle}>{item.title}</div> : null}
     {item.description ? (
       <Markdown
@@ -127,16 +171,18 @@ const CardContent = ({
         disableLink={false}
       />
     ) : null}
-    <div className={styles.cardBody}>
-      {item.content.map((node, index) => (
-        <NodeView
-          key={`${path}-${index}-${node.type}`}
-          node={node}
-          context={context}
-          path={`${path}-${index}`}
-        />
-      ))}
-    </div>
+    {item.content?.length ? (
+      <div className={styles.cardBody}>
+        {item.content.map((node, index) => (
+          <NodeView
+            key={`${path}-${index}-${node.type}`}
+            node={node}
+            context={context}
+            path={`${path}-${index}`}
+          />
+        ))}
+      </div>
+    ) : null}
     <ActionButtons
       actions={item.actions}
       sessionId={context.sessionId}
@@ -159,36 +205,6 @@ const Card = ({
   <article className={clsx(styles.card, carousel && styles.carouselCard)}>
     <CardContent item={item} context={context} path={path} />
   </article>
-)
-
-const TableView = ({ node }: { node: JsonRenderTableNode }) => (
-  <figure className={styles.tableFigure}>
-    <div className={styles.tableScroll}>
-      <table>
-        {node.title ? <caption>{node.title}</caption> : null}
-        <thead>
-          <tr>
-            {node.columns.map((column, index) => (
-              <th key={`${column.label}-${index}`} style={{ textAlign: column.align ?? 'left' }}>
-                {column.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {node.rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex} style={{ textAlign: node.columns[cellIndex]?.align ?? 'left' }}>
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </figure>
 )
 
 const formatValue = (value: number) => {
@@ -356,6 +372,268 @@ const ChartView = ({ node }: { node: JsonRenderChartNode }) => {
   )
 }
 
+const StatsView = ({ node }: { node: JsonRenderStatsNode }) => (
+  <div className={styles.stats}>
+    {node.items.map((item, index) => (
+      <div className={styles.stat} key={`${item.label}-${index}`}>
+        <div className={styles.statLabel}>{item.label}</div>
+        <div className={styles.statValue}>{item.value}</div>
+        {item.detail ? <div className={styles.statDetail}>{item.detail}</div> : null}
+      </div>
+    ))}
+  </div>
+)
+
+const StepsView = ({ node }: { node: JsonRenderStepsNode }) => {
+  const t = useTranslate()
+  const statusLabel = {
+    pending: t('jsonRenderStepPending'),
+    active: t('jsonRenderStepActive'),
+    done: t('jsonRenderStepDone'),
+    error: t('jsonRenderStepError'),
+  }
+  return (
+    <ol className={styles.steps}>
+      {node.items.map((item, index) => (
+        <li key={`${item.title}-${index}`} data-status={item.status}>
+          <span className={styles.stepMarker} aria-label={statusLabel[item.status]}>
+            <span aria-hidden="true">
+              {item.status === 'done'
+                ? '✓'
+                : item.status === 'error'
+                  ? '!'
+                  : item.status === 'active'
+                    ? '•'
+                    : ''}
+            </span>
+          </span>
+          <div className={styles.stepBody}>
+            <div className={styles.stepTitle}>{item.title}</div>
+            {item.description ? (
+              <Markdown
+                content={item.description.value}
+                loading={false}
+                cacheKey={`step-${index}`}
+                disableLink={false}
+              />
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+const DetailsView = ({ node }: { node: JsonRenderDetailsNode }) => (
+  <details className={styles.details} open={node.open}>
+    <summary>{node.title}</summary>
+    <div className={styles.detailsBody}>
+      <Markdown
+        content={node.content.value}
+        loading={false}
+        cacheKey={`details-${node.title}`}
+        disableLink={false}
+      />
+    </div>
+  </details>
+)
+
+const ListNodeView = ({
+  node,
+  context,
+  path,
+}: {
+  node: JsonRenderListNode
+  context: RenderContext
+  path: string
+}) => (
+  <section className={styles.list}>
+    {node.title ? <div className={styles.listTitle}>{node.title}</div> : null}
+    <ul className={styles.listItems}>
+      {node.items.map((item, index) => (
+        <li className={styles.listItem} key={`${path}-list-${index}-${item.title}`}>
+          <div className={styles.listItemBody}>
+            <div className={styles.listItemHeading}>
+              <span className={styles.listItemTitle}>{item.title}</span>
+              {item.badge ? <BadgeView badge={item.badge} /> : null}
+            </div>
+            {item.description ? (
+              <div className={styles.listItemDescription}>{item.description}</div>
+            ) : null}
+            {item.meta ? <div className={styles.listItemMeta}>{item.meta}</div> : null}
+          </div>
+          {item.action ? (
+            <JsonActionButton
+              action={item.action}
+              sessionId={context.sessionId}
+              interactive={context.interactive}
+              primary={false}
+              compact
+            />
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  </section>
+)
+
+const imageAspectClass = {
+  auto: styles.imageAuto,
+  landscape: styles.imageLandscape,
+  square: styles.imageSquare,
+  portrait: styles.imagePortrait,
+} as const
+
+const ImageView = ({ node }: { node: JsonRenderImageNode }) => {
+  const t = useTranslate()
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [node.src])
+
+  if (failed) {
+    return (
+      <div className={styles.imageFallback} role="status">
+        {t('jsonRenderImageUnavailable')}
+      </div>
+    )
+  }
+
+  return (
+    <figure className={clsx(styles.imageFigure, imageAspectClass[node.aspectRatio ?? 'landscape'])}>
+      <img
+        className={styles.image}
+        src={node.src}
+        alt={node.alt}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        data-fit={node.fit ?? 'cover'}
+        onError={() => setFailed(true)}
+      />
+      {node.caption ? (
+        <figcaption className={styles.imageCaption}>{node.caption}</figcaption>
+      ) : null}
+    </figure>
+  )
+}
+
+const initialFormValues = (fields: JsonRenderFormField[]): Record<string, string> =>
+  Object.fromEntries(
+    fields.map((field) => [
+      field.name,
+      field.defaultValue ??
+        (field.type === 'select' && field.options?.length ? field.options[0].value : ''),
+    ])
+  )
+
+const renderFormPrompt = (template: string, values: Record<string, string>): string =>
+  template.replace(/\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/gu, (_, name: string) => values[name] ?? '')
+
+const FormView = ({
+  node,
+  context,
+  path,
+}: {
+  node: JsonRenderFormNode
+  context: RenderContext
+  path: string
+}) => {
+  const t = useTranslate()
+  const formId = useId()
+  const [values, setValues] = useState<Record<string, string>>(() => initialFormValues(node.fields))
+
+  return (
+    <form
+      className={styles.form}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!context.interactive) {
+          return
+        }
+        const prompt = renderFormPrompt(node.promptTemplate, values)
+        if (!sendPromptFromRender(context.sessionId, prompt)) {
+          showToast({ key: 'jsonRenderFormSubmitFailed' })
+        }
+      }}
+    >
+      {node.title ? <div className={styles.formTitle}>{node.title}</div> : null}
+      {node.description ? <div className={styles.formDescription}>{node.description}</div> : null}
+      <div className={styles.formFields}>
+        {node.fields.map((field, index) => {
+          const fieldId = `${formId}-${index}`
+          const descriptionId = field.description ? `${fieldId}-description` : undefined
+          return (
+            <div className={styles.formField} key={`${path}-form-${field.name}`}>
+              <label className={styles.formLabel} htmlFor={fieldId}>
+                {field.label}
+                {field.required ? <span aria-hidden="true"> *</span> : null}
+              </label>
+              {field.description ? (
+                <div className={styles.formFieldDescription} id={descriptionId}>
+                  {field.description}
+                </div>
+              ) : null}
+              {field.type === 'select' ? (
+                <select
+                  className={styles.formControl}
+                  id={fieldId}
+                  value={values[field.name] ?? ''}
+                  required={field.required}
+                  aria-describedby={descriptionId}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                  }
+                >
+                  {!field.required && !field.options?.some((option) => option.value === '') ? (
+                    <option value="">{t('jsonRenderFormSelectPlaceholder')}</option>
+                  ) : null}
+                  {field.options?.map((option) => (
+                    <option value={option.value} key={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : field.type === 'textarea' ? (
+                <textarea
+                  className={clsx(styles.formControl, styles.formTextarea)}
+                  id={fieldId}
+                  value={values[field.name] ?? ''}
+                  placeholder={field.placeholder}
+                  required={field.required}
+                  aria-describedby={descriptionId}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                  }
+                />
+              ) : (
+                <input
+                  className={styles.formControl}
+                  id={fieldId}
+                  type="text"
+                  value={values[field.name] ?? ''}
+                  placeholder={field.placeholder}
+                  required={field.required}
+                  aria-describedby={descriptionId}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                  }
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className={styles.formActions}>
+        <Button type="submit" size="s" disabled={!context.interactive}>
+          {node.submitLabel}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 const NodeView = ({
   node,
   context,
@@ -368,6 +646,8 @@ const NodeView = ({
   switch (node.type) {
     case 'Markdown':
       return <Markdown content={node.value} loading={false} cacheKey={path} disableLink={false} />
+    case 'Badge':
+      return <BadgeView badge={node} />
     case 'Code':
       return (
         <div className={styles.code}>
@@ -392,10 +672,20 @@ const NodeView = ({
           </div>
         </aside>
       )
-    case 'Table':
-      return <TableView node={node} />
     case 'Chart':
       return <ChartView node={node} />
+    case 'Stats':
+      return <StatsView node={node} />
+    case 'Steps':
+      return <StepsView node={node} />
+    case 'Details':
+      return <DetailsView node={node} />
+    case 'List':
+      return <ListNodeView node={node} context={context} path={path} />
+    case 'Image':
+      return <ImageView node={node} />
+    case 'Form':
+      return <FormView node={node} context={context} path={path} />
     case 'Stack':
       return (
         <div className={styles.stack} data-gap={node.gap ?? 'm'}>

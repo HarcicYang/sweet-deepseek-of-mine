@@ -64,10 +64,7 @@ const notifyConflict = () => {
 }
 
 const updatePending = async () => {
-  const [outbox, settings] = await Promise.all([
-    db.listSyncOutbox(),
-    db.getSettingsSyncState(),
-  ])
+  const [outbox, settings] = await Promise.all([db.listSyncOutbox(), db.getSettingsSyncState()])
   const pending = outbox.length + (settings?.pending ? 1 : 0)
   useSync.setState({ pending })
 }

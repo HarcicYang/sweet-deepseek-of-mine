@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import type { Source } from '../../services/chat/view.js'
 import { toMdAst } from '../../services/markdown/parse.js'
+import type { JsonRenderContext } from '../json-render/JsonRenderContext.js'
 import { useScrollToBottom } from '../messages/scrollContext.js'
 import { MarkdownAstRenderer } from './MarkdownAstRenderer.js'
 import { useSmoothStreamingText } from './useSmoothStreamingText.js'
@@ -19,6 +20,7 @@ export const Markdown = memo(function Markdown({
   className,
   disableLink,
   sources,
+  jsonRender,
 }: {
   content: string
   loading: boolean
@@ -26,6 +28,7 @@ export const Markdown = memo(function Markdown({
   className?: string
   disableLink: boolean
   sources?: Source[]
+  jsonRender?: JsonRenderContext
 }) {
   const scrollToBottom = useScrollToBottom()
   const smoothContent = useSmoothStreamingText(content, loading)
@@ -40,6 +43,7 @@ export const Markdown = memo(function Markdown({
       className={className}
       ast={ast}
       loading={loading}
+      jsonRender={jsonRender}
       onUpdate={scrollToBottom}
     />
   ) : null
