@@ -40,6 +40,8 @@
 - 回调必须同时匹配登录会话和一次性 `state`；成功后轮换 `state`，旧回调不能重放。
 - 后续请求由 SDK 自动附带 Bearer token，并在过期时尝试 refresh token。
 - OAuth Client ID、Client Secret 和回调 URI 属于部署配置，不出现在用户设置页，也不由每个用户填写。
+- `0005` migration 会清空旧版本可能保存过的用户级 OAuth Client 字段；MCP 服务定义和已授权
+  token 不受影响。
 - 支持动态客户端注册的服务无需额外配置，会由 MCP SDK 自动注册。
 - 不支持动态注册的服务由部署方通过 `MCP_OAUTH_CLIENTS` 配置，例如：
 
