@@ -180,11 +180,11 @@ export const McpDiscovery = ({ installedServers, onImport }: McpDiscoveryProps) 
                   <span>{server.registryName}</span>
                 </div>
                 <span
-                  className={
+                  className={`${styles.mcpRegistryBadge} ${
                     remote.requiresAuthentication
-                      ? styles.mcpOAuthPending
-                      : styles.mcpOAuthConnected
-                  }
+                      ? styles.mcpRegistryBadgeAuth
+                      : styles.mcpRegistryBadgePublic
+                  }`}
                 >
                   {t(
                     remote.requiresAuthentication ? 'mcpRegistryRequiresAuth' : 'mcpRegistryPublic'
