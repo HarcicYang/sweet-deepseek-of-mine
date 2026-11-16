@@ -63,6 +63,7 @@ export const en = {
   mermaidRenderFail: 'Mermaid rendering failed.',
   mermaidSwitchLabel: 'Toggle between Mermaid diagram and code',
   jsonRenderGenerating: 'Generating interface...',
+  jsonRenderPartialPreview: 'Generating interface. Completed sections are shown as they arrive.',
   jsonRenderInvalid: 'This interface could not be rendered. Raw content is shown.',
   jsonRenderLimitReached: 'Too many interface blocks. Additional content is folded.',
   jsonRenderChart: 'Chart',
