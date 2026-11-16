@@ -1,6 +1,7 @@
 import type { AuthUser } from '@sweet-deepseek/contracts/api'
 import { create } from 'zustand'
 import { ApiError, beginGithubLogin, getSession, logout } from '../api/client.js'
+import { clearLocalSettings } from '../settings.js'
 
 export type AuthNotice = 'oauth_error' | 'session_expired' | 'network_error' | null
 
@@ -77,6 +78,7 @@ export const loginWithGithub = () => {
 
 export const signOut = async () => {
   await logout()
+  clearLocalSettings()
   useAuth.setState({ status: 'anonymous', user: null, notice: null })
 }
 
@@ -92,6 +94,7 @@ export const setApiKeyConfigured = (configured: boolean) => {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('sdom:auth-expired', () => {
+    clearLocalSettings()
     useAuth.setState({
       status: 'anonymous',
       user: null,

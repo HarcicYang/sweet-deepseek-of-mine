@@ -41,9 +41,11 @@ const KEYS = {
 
 export const SETTINGS_CHANGED_EVENT = 'sdom:settings-changed'
 
+const LEGACY_API_KEY = 'chat-demo:api-key'
+
 // 旧版本曾把 DeepSeek API Key 保存在浏览器；启动时主动清理遗留明文。
 try {
-  localStorage.removeItem('chat-demo:api-key')
+  localStorage.removeItem(LEGACY_API_KEY)
 } catch {
   // 存储不可用时无需处理
 }
@@ -239,6 +241,26 @@ export const applySyncedSettings = (payload: SyncedSettingsPayload): void => {
     search: payload.search,
     ttsVoice: payload.ttsVoice,
     location,
+  })
+}
+
+export const clearLocalSettings = (): void => {
+  try {
+    for (const key of new Set([...Object.values(KEYS), LEGACY_API_KEY])) {
+      localStorage.removeItem(key)
+    }
+  } catch {
+    // 存储不可用时仍需重置当前内存状态
+  }
+  useSettings.setState({
+    locale: isChineseBrowser() ? 'zh-CN' : 'en-US',
+    themePreference: 'system',
+    location: null,
+    ttsVoice: 'stella',
+    thinkingMode: 'disabled',
+    customInstructions: '',
+    search: false,
+    siderCollapsed: false,
   })
 }
 
