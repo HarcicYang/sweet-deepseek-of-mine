@@ -49,6 +49,14 @@ import {
   type McpToolSummary,
 } from '@sweet-deepseek/contracts/mcp'
 import {
+  SkillResponseSchema,
+  SkillsResponseSchema,
+  type SkillCreate,
+  type SkillDetail,
+  type SkillSummary,
+  type SkillUpdate,
+} from '@sweet-deepseek/contracts/skills'
+import {
   JsonRenderValidationResponseSchema,
   type JsonRenderDocument,
 } from '@sweet-deepseek/json-render'
@@ -227,6 +235,42 @@ export const getSharedSession = async (
 export const listMcpServers = async (): Promise<McpServerSummary[]> => {
   const response = await request(apiRoutes.mcpServers)
   return parseResponse(McpServersResponseSchema, await response.json()).servers
+}
+
+export const listSkills = async (signal?: AbortSignal): Promise<SkillSummary[]> => {
+  const response = await request(apiRoutes.skills, { signal })
+  return parseResponse(SkillsResponseSchema, await response.json()).skills
+}
+
+export const getSkill = async (skillId: string, signal?: AbortSignal): Promise<SkillDetail> => {
+  const response = await request(apiRoutes.skill.replace(':skillId', encodeURIComponent(skillId)), {
+    signal,
+  })
+  return parseResponse(SkillResponseSchema, await response.json()).skill
+}
+
+export const createSkill = async (input: SkillCreate): Promise<SkillDetail> => {
+  const response = await request(apiRoutes.skills, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseResponse(SkillResponseSchema, await response.json()).skill
+}
+
+export const updateSkill = async (skillId: string, update: SkillUpdate): Promise<SkillDetail> => {
+  const response = await request(apiRoutes.skill.replace(':skillId', encodeURIComponent(skillId)), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(update),
+  })
+  return parseResponse(SkillResponseSchema, await response.json()).skill
+}
+
+export const deleteSkill = async (skillId: string): Promise<void> => {
+  await request(apiRoutes.skill.replace(':skillId', encodeURIComponent(skillId)), {
+    method: 'DELETE',
+  })
 }
 
 export const listMcpRegistryServers = async ({

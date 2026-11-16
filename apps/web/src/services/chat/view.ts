@@ -5,6 +5,7 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from '@sweet-deepseek/contracts'
+import { SKILL_TOOL_NAME } from '@sweet-deepseek/skills'
 import { translate } from '../../i18n/index.js'
 import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
 
@@ -71,6 +72,13 @@ export type McpToolStep = {
   status: ToolStatus
 }
 
+export type SkillToolStep = {
+  type: 'skill'
+  key: string
+  name: string
+  status: ToolStatus
+}
+
 export const getMcpToolDisplayName = (name: string): string => {
   if (!name.startsWith('mcp__')) {
     return name
@@ -94,6 +102,7 @@ export type Step =
   | ReadLinkStep
   | ThinkingStep
   | McpToolStep
+  | SkillToolStep
   | PreambleStep
 
 export type ReplyView = {
@@ -280,6 +289,19 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     if (block.type === 'tool_use') {
       flushPreamble()
       const result = toolResults.get(block.id)
+      if (block.name === SKILL_TOOL_NAME) {
+        const input =
+          block.input !== null && typeof block.input === 'object' && !Array.isArray(block.input)
+            ? (block.input as Record<string, unknown>)
+            : {}
+        steps.push({
+          type: 'skill',
+          key: block.id,
+          name: typeof input.name === 'string' ? input.name : SKILL_TOOL_NAME,
+          status: result ? (result.isError ? 'failed' : 'done') : streaming ? 'wip' : 'failed',
+        })
+        return
+      }
       steps.push({
         type: 'mcp',
         key: block.id,
@@ -444,6 +466,9 @@ export const getAreaTitle = (
   }
   if (last?.type === 'mcp' && last.status === 'wip') {
     return translate('mcpToolCalling', { tool: last.name.split('__').at(-1) || last.name })
+  }
+  if (last?.type === 'skill' && last.status === 'wip') {
+    return translate('skillToolCalling', { name: last.name })
   }
   return translate('messageThinking')
 }

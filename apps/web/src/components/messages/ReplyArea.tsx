@@ -12,6 +12,7 @@ import {
   IconRightUpOutline14,
   IconSearchOutline16,
   IconSearchWarningOutline16,
+  IconSkillOutline16,
   IconThinkOutline16,
 } from '../base/icons.js'
 import type { AssistantMessage } from '../../services/chat/types.js'
@@ -26,6 +27,7 @@ import {
   type ReadLinkStep,
   type ReplyView,
   type SearchStep,
+  type SkillToolStep,
   type Source,
   type Step,
 } from '../../services/chat/view.js'
@@ -119,7 +121,11 @@ const getThinkingPreview = (steps: Step[], streaming: boolean): string | null =>
 }
 
 const stepKey = (step: Step, index: number) =>
-  step.type === 'thinking' || step.type === 'text' || step.type === 'search' || step.type === 'mcp'
+  step.type === 'thinking' ||
+  step.type === 'text' ||
+  step.type === 'search' ||
+  step.type === 'mcp' ||
+  step.type === 'skill'
     ? step.key
     : `${step.type}-${index}`
 
@@ -174,6 +180,8 @@ const StepItem = ({
       return <ReadLinkRow step={step} isLast={isLast} />
     case 'mcp':
       return <McpToolRow step={step} isLast={isLast} />
+    case 'skill':
+      return <SkillToolRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -302,6 +310,21 @@ const McpToolRow = ({ step, isLast }: { step: McpToolStep; isLast: boolean }) =>
         : t('mcpToolCalled', { tool: step.displayName })
   return (
     <ToolRow icon={<IconLinkOutline16 />} isLast={isLast}>
+      <span className={clsx(step.status === 'failed' && styles.toolFailed)}>{text}</span>
+    </ToolRow>
+  )
+}
+
+const SkillToolRow = ({ step, isLast }: { step: SkillToolStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const text =
+    step.status === 'wip'
+      ? t('skillToolCalling', { name: step.name })
+      : step.status === 'failed'
+        ? t('skillToolFailed', { name: step.name })
+        : t('skillToolCalled', { name: step.name })
+  return (
+    <ToolRow icon={<IconSkillOutline16 />} isLast={isLast}>
       <span className={clsx(step.status === 'failed' && styles.toolFailed)}>{text}</span>
     </ToolRow>
   )

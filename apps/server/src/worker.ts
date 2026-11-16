@@ -4,6 +4,7 @@ import { D1AccountStore } from './d1-account-store.js'
 import { D1McpStore } from './d1-mcp-store.js'
 import { D1McpOAuthStore } from './d1-mcp-oauth-store.js'
 import { D1ShareStore } from './d1-share-store.js'
+import { D1SkillStore } from './d1-skill-store.js'
 import { D1SyncStore } from './d1-sync-store.js'
 import { createMcpClient } from './mcp-client.js'
 import { parseMcpOAuthClients } from './mcp-oauth-clients.js'
@@ -61,6 +62,7 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
       shareStore: new D1ShareStore(env.DB),
       mcpStore: new D1McpStore(env.DB),
       mcpOAuthStore: new D1McpOAuthStore(env.DB),
+      skillStore: new D1SkillStore(env.DB),
       mcpClient: createMcpClient(),
       security,
       appOrigin: origin,

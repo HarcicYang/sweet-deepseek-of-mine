@@ -1,0 +1,28 @@
+{
+  "name": "@sweet-deepseek/skills",
+  "version": "0.0.0",
+  "description": "DeepSeek Harness-compatible skill parsing and rendering",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "node --import tsx --test src/*.test.ts",
+    "type": "tsc -p tsconfig.json",
+    "lint": "oxlint src"
+  },
+  "dependencies": {
+    "@sweet-deepseek/contracts": "workspace:*",
+    "yaml": "^2.8.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "~20.9.2",
+    "tsx": "^4.23.15"
+  }
+}

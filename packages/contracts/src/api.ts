@@ -23,6 +23,8 @@ export const apiRoutes = {
   mcpRegistryServers: '/api/mcp/registry/servers',
   mcpTools: '/api/mcp/tools',
   mcpToolCall: '/api/mcp/call',
+  skills: '/api/skills',
+  skill: '/api/skills/:skillId',
   shares: '/api/shares',
   sharedSession: '/api/shares/:token',
   syncSessions: '/api/sync/sessions',

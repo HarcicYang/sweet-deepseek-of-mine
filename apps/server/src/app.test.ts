@@ -10,6 +10,7 @@ import type { McpOAuthClientConfig } from './mcp-oauth-clients.js'
 import { MemoryMcpOAuthStore } from './mcp-oauth-store.js'
 import { createSecurityService } from './security.js'
 import { MemoryShareStore } from './share-store.js'
+import { MemorySkillStore } from './skill-store.js'
 import { MemorySyncStore } from './sync-store.js'
 
 const APP_ORIGIN = 'http://localhost:8090'
@@ -37,6 +38,7 @@ const createTestApp = async (
   const syncStore = new MemorySyncStore()
   const mcpStore = new MemoryMcpStore()
   const mcpOAuthStore = new MemoryMcpOAuthStore()
+  const skillStore = new MemorySkillStore()
   const defaultMcpClient: McpClient = {
     probe: async () => ({
       ok: true,
@@ -126,6 +128,7 @@ const createTestApp = async (
     shareStore: new MemoryShareStore(),
     mcpStore,
     mcpOAuthStore,
+    skillStore,
     mcpClient,
     security,
     appOrigin: APP_ORIGIN,
@@ -149,8 +152,19 @@ const createTestApp = async (
     allowedOrigins: options.allowedOrigins,
     mcpRegistryFetchImpl: options.mcpRegistryFetchImpl,
     fetchImpl,
+    logger: { warn: () => {} },
   })
-  return { app, calls, syncStore, mcpStore, mcpOAuthStore, mcpClient, security, store }
+  return {
+    app,
+    calls,
+    syncStore,
+    mcpStore,
+    mcpOAuthStore,
+    skillStore,
+    mcpClient,
+    security,
+    store,
+  }
 }
 
 const authenticate = async (app: Awaited<ReturnType<typeof createTestApp>>['app']) => {
@@ -267,6 +281,96 @@ test('JSON-Render validation requires auth and rejects unknown nodes', async () 
     body: JSON.stringify({ source: ' '.repeat(JSON_RENDER_LIMITS.maxDocumentBytes + 1024) }),
   })
   assert.equal(tooLarge.status, 413)
+})
+
+test('Skill CRUD is account-scoped and validates SKILL.md frontmatter', async () => {
+  const { app, store, security } = await createTestApp()
+  const unauthorized = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`)
+  assert.equal(unauthorized.status, 401)
+
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const source = `---
+name: weekly-review
+description: Summarize the week and plan the next one.
+whenToUse: When the user asks for a weekly review.
+---
+
+Lead with outcomes, then risks, then next actions.
+`
+
+  const created = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ source, enabled: true }),
+  })
+  assert.equal(created.status, 201)
+  const createdBody = (await created.json()) as {
+    skill: {
+      id: string
+      name: string
+      enabled: boolean
+      source: string
+      instructions: string
+    }
+  }
+  assert.equal(createdBody.skill.name, 'weekly-review')
+  assert.equal(createdBody.skill.enabled, true)
+  assert.match(createdBody.skill.instructions, /next actions/u)
+
+  const other = await authenticateTestUser(store, security, {
+    githubId: '67890',
+    githubLogin: 'other-user',
+  })
+  const otherHeaders = {
+    Cookie: `sdom_session=${other.token}`,
+    Origin: APP_ORIGIN,
+  }
+  const hidden = await app.request(
+    `${APP_ORIGIN}${apiRoutes.skill.replace(':skillId', createdBody.skill.id)}`,
+    { headers: otherHeaders }
+  )
+  assert.equal(hidden.status, 404)
+  const otherList = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`, {
+    headers: otherHeaders,
+  })
+  assert.deepEqual(((await otherList.json()) as { skills: unknown[] }).skills, [])
+
+  const list = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`, { headers })
+  assert.equal(list.status, 200)
+  const listBody = (await list.json()) as { skills: Array<{ name: string; enabled: boolean }> }
+  assert.deepEqual(
+    listBody.skills.map((skill) => [skill.name, skill.enabled]),
+    [['weekly-review', true]]
+  )
+
+  const updated = await app.request(
+    `${APP_ORIGIN}${apiRoutes.skill.replace(':skillId', createdBody.skill.id)}`,
+    {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    }
+  )
+  assert.equal(updated.status, 200)
+  assert.equal(((await updated.json()) as { skill: { enabled: boolean } }).skill.enabled, false)
+
+  const invalid = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ source: '# missing frontmatter', enabled: true }),
+  })
+  assert.equal(invalid.status, 400)
+
+  const removed = await app.request(
+    `${APP_ORIGIN}${apiRoutes.skill.replace(':skillId', createdBody.skill.id)}`,
+    { method: 'DELETE', headers }
+  )
+  assert.equal(removed.status, 204)
 })
 
 test('MCP servers are private per user and keep request headers encrypted', async () => {
@@ -992,6 +1096,22 @@ test('creates expiring public share snapshots without file credentials', async (
             content: [{ type: 'text' as const, text: 'private-mcp-output' }],
             isError: false,
           },
+          {
+            type: 'tool_use' as const,
+            id: 'skill-1',
+            name: 'skill',
+            input: { name: 'private-skill' },
+            startedAt: 2,
+            endedAt: 3,
+          },
+          {
+            type: 'tool_result' as const,
+            tool_use_id: 'skill-1',
+            content: [
+              { type: 'text' as const, text: '<skill_content>LOCAL_SKILL_SECRET</skill_content>' },
+            ],
+            isError: false,
+          },
         ],
         parentId: 'user-1',
       },
@@ -1030,6 +1150,7 @@ test('creates expiring public share snapshots without file credentials', async (
   }
   assert.equal(JSON.stringify(sharedBody).includes('private-mcp-argument'), false)
   assert.equal(JSON.stringify(sharedBody).includes('private-mcp-output'), false)
+  assert.equal(JSON.stringify(sharedBody).includes('LOCAL_SKILL_SECRET'), false)
 
   const invalid = await app.request(`${APP_ORIGIN}${apiRoutes.shares}`, {
     method: 'POST',

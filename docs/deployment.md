@@ -30,6 +30,7 @@ Node adapter 使用 `.data/` 下的文件存储，适合单实例自托管。复
 - `COOKIE_SAME_SITE`：同站使用 `lax`；独立站点的跨站前端使用 `none`，并必须启用 HTTPS。
 - `MCP_ALLOW_PRIVATE_NETWORK`：默认 `false`；单用户本地部署需要访问局域网 MCP 时才设为 `true`。
 - `MCP_OAUTH_DB_PATH`：Node 自托管时 OAuth 状态与 token 的加密存储文件路径。
+- `SKILL_DB_PATH`：Node 自托管时账号级 Skill 的存储文件路径，默认 `.data/skills.json`。
 - `MCP_OAUTH_CLIENTS`：可选 JSON 数组，用于给不支持动态客户端注册的 MCP 提供方配置部署级
   Client ID / Secret。普通用户无需接触该配置。
 
@@ -42,7 +43,7 @@ pnpm dev:server
 ## Cloudflare Workers
 
 Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号、设置、分块会话快照、
-分块临时分享快照和账号级 MCP 配置。
+分块临时分享快照、账号级 MCP 配置和账号级 Skill。
 
 1. 构建前端：`pnpm --filter @sweet-deepseek/web build`
 2. 应用远程数据库 migration：
@@ -52,8 +53,9 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    pnpm worker:migrate:remote
    ```
 
-   该命令会应用 `0001`–`0005`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
-   加密 OAuth 状态/token 存储，`0005` 清除旧版本中用户级 OAuth Client 配置的残留。
+   该命令会应用 `0001`–`0006`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
+   加密 OAuth 状态/token 存储，`0005` 清除旧版本中用户级 OAuth Client 配置的残留，
+   `0006` 创建账号级 Skill 表。
 
 3. 创建生产环境使用的 GitHub OAuth App：
    - 打开 GitHub 的 `Settings → Developer settings → OAuth Apps → New OAuth App`。

@@ -51,6 +51,15 @@ import {
   type McpServerSummary,
   type McpToolSummary,
 } from '@sweet-deepseek/contracts/mcp'
+import {
+  SKILL_SOURCE_MAX_LENGTH,
+  SkillCreateSchema,
+  SkillResponseSchema,
+  SkillUpdateSchema,
+  SkillsResponseSchema,
+  type SkillSummary,
+} from '@sweet-deepseek/contracts/skills'
+import { parseSkillSource, SkillParseError } from '@sweet-deepseek/skills'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -80,6 +89,7 @@ import {
 import { toMcpToolSummaries } from './mcp-tools.js'
 import type { SecurityService } from './security.js'
 import type { ShareStore } from './share-store.js'
+import type { SkillRecord, SkillStore, SkillWrite } from './skill-store.js'
 import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
 
 const SESSION_COOKIE = 'sdom_session'
@@ -101,6 +111,7 @@ const MAX_SHARE_BODY_BYTES = 20 * 1024 * 1024
 const MAX_JSON_RENDER_BODY_BYTES = JSON_RENDER_LIMITS.maxDocumentBytes + 1024
 const MAX_MCP_CONFIG_BODY_BYTES = 256 * 1024
 const MAX_MCP_CALL_BODY_BYTES = 2 * 1024 * 1024
+const MAX_SKILL_BODY_BYTES = SKILL_SOURCE_MAX_LENGTH * 2 + 16 * 1024
 
 class RequestBodyTooLargeError extends Error {
   constructor() {
@@ -126,6 +137,7 @@ export type AppOptions = {
   shareStore: ShareStore
   mcpStore: McpStore
   mcpOAuthStore: McpOAuthStore
+  skillStore: SkillStore
   mcpClient: McpClient
   security: SecurityService
   appOrigin: string
@@ -276,6 +288,34 @@ const toMcpServerSummary = async (
   }
 }
 
+const toSkillSummary = (skill: SkillRecord): SkillSummary => ({
+  id: skill.id,
+  name: skill.name,
+  description: skill.description,
+  whenToUse: skill.whenToUse,
+  enabled: skill.enabled,
+  userInvocable: skill.userInvocable,
+  modelInvocable: skill.modelInvocable,
+  createdAt: skill.createdAt,
+  updatedAt: skill.updatedAt,
+})
+
+const toSkillWrite = (
+  skill: ReturnType<typeof parseSkillSource>,
+  enabled: boolean,
+  source: string
+): SkillWrite => ({
+  name: skill.name,
+  description: skill.description,
+  whenToUse: skill.whenToUse,
+  enabled,
+  userInvocable: skill.userInvocable,
+  modelInvocable: skill.modelInvocable,
+  metadata: skill.metadata,
+  source,
+  instructions: skill.instructions,
+})
+
 const toSharedMessage = (
   message: SyncSessionPayload['messages'][number]
 ): SyncSessionPayload['messages'][number] => {
@@ -294,7 +334,7 @@ const toSharedMessage = (
       if (block.type === 'tool_result') {
         return {
           ...block,
-          content: [{ type: 'text' as const, text: '[MCP output hidden in public share]' }],
+          content: [{ type: 'text' as const, text: '[Tool output hidden in public share]' }],
         }
       }
       return block
@@ -432,6 +472,7 @@ export const createApp = ({
   shareStore,
   mcpStore,
   mcpOAuthStore,
+  skillStore,
   mcpClient,
   security,
   appOrigin,
@@ -462,6 +503,11 @@ export const createApp = ({
       context.req.method === 'GET' &&
       /^\/api\/shares\/[A-Za-z0-9_-]{20,128}$/u.test(context.req.path)
     if (origin && !publicShareGet && !trustedOrigins.has(origin)) {
+      logger.warn('Rejected cross-origin API request', {
+        origin,
+        method: context.req.method,
+        path: context.req.path,
+      })
       return apiError(context, 403, 'forbidden', 'Cross-origin request rejected')
     }
     if (origin) {
@@ -897,6 +943,149 @@ if(data.ok)setTimeout(()=>window.close(),250);
       return apiError(context, 400, 'invalid_request', result.error)
     }
     return context.json(JsonRenderValidationResponseSchema.parse({ document: result.data }))
+  })
+
+  app.get(apiRoutes.skills, requireAuth, async (context) => {
+    const skills = await skillStore.listSkills(context.get('auth').user.id)
+    return context.json(
+      SkillsResponseSchema.parse({
+        skills: skills.map(toSkillSummary),
+      })
+    )
+  })
+
+  app.get(apiRoutes.skill, requireAuth, async (context) => {
+    const skill = await skillStore.findSkill(
+      context.get('auth').user.id,
+      context.req.param('skillId')
+    )
+    if (!skill) {
+      return apiError(context, 404, 'invalid_request', 'Skill not found')
+    }
+    return context.json(
+      SkillResponseSchema.parse({
+        skill: {
+          ...toSkillSummary(skill),
+          source: skill.source,
+          instructions: skill.instructions,
+        },
+      })
+    )
+  })
+
+  app.post(apiRoutes.skills, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, MAX_SKILL_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Skill is too large')
+    }
+    const parsedBody = json.ok ? SkillCreateSchema.safeParse(json.value) : null
+    if (!parsedBody?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid skill')
+    }
+    let parsedSkill: ReturnType<typeof parseSkillSource>
+    try {
+      parsedSkill = parseSkillSource(parsedBody.data.source)
+    } catch (error) {
+      return apiError(
+        context,
+        400,
+        'invalid_request',
+        error instanceof SkillParseError ? error.message : 'Invalid skill'
+      )
+    }
+    const user = context.get('auth').user
+    try {
+      const skill = await skillStore.createSkill({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        ...toSkillWrite(parsedSkill, parsedBody.data.enabled, parsedBody.data.source),
+      })
+      return context.json(
+        SkillResponseSchema.parse({
+          skill: {
+            ...toSkillSummary(skill),
+            source: skill.source,
+            instructions: skill.instructions,
+          },
+        }),
+        201
+      )
+    } catch (error) {
+      if (/name|unique/iu.test(error instanceof Error ? error.message : '')) {
+        return apiError(context, 409, 'conflict', 'Skill name already exists')
+      }
+      logger.warn('Could not create skill', {
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return apiError(context, 500, 'server_error', 'Could not create skill')
+    }
+  })
+
+  app.put(apiRoutes.skill, requireAuth, async (context) => {
+    const user = context.get('auth').user
+    const skillId = context.req.param('skillId')
+    const current = await skillStore.findSkill(user.id, skillId)
+    if (!current) {
+      return apiError(context, 404, 'invalid_request', 'Skill not found')
+    }
+    const json = await readLimitedJson(context, MAX_SKILL_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Skill is too large')
+    }
+    const parsedBody = json.ok ? SkillUpdateSchema.safeParse(json.value) : null
+    if (!parsedBody?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid skill')
+    }
+    const source = parsedBody.data.source ?? current.source
+    let parsedSkill: ReturnType<typeof parseSkillSource>
+    try {
+      parsedSkill = parseSkillSource(source)
+    } catch (error) {
+      return apiError(
+        context,
+        400,
+        'invalid_request',
+        error instanceof SkillParseError ? error.message : 'Invalid skill'
+      )
+    }
+    try {
+      const skill = await skillStore.updateSkill(
+        user.id,
+        skillId,
+        toSkillWrite(parsedSkill, parsedBody.data.enabled ?? current.enabled, source)
+      )
+      if (!skill) {
+        return apiError(context, 404, 'invalid_request', 'Skill not found')
+      }
+      return context.json(
+        SkillResponseSchema.parse({
+          skill: {
+            ...toSkillSummary(skill),
+            source: skill.source,
+            instructions: skill.instructions,
+          },
+        })
+      )
+    } catch (error) {
+      if (/name|unique/iu.test(error instanceof Error ? error.message : '')) {
+        return apiError(context, 409, 'conflict', 'Skill name already exists')
+      }
+      logger.warn('Could not update skill', {
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return apiError(context, 500, 'server_error', 'Could not update skill')
+    }
+  })
+
+  app.delete(apiRoutes.skill, requireAuth, async (context) => {
+    const removed = await skillStore.deleteSkill(
+      context.get('auth').user.id,
+      context.req.param('skillId')
+    )
+    if (!removed) {
+      return apiError(context, 404, 'invalid_request', 'Skill not found')
+    }
+    return context.body(null, 204)
   })
 
   app.get(apiRoutes.mcpServers, requireAuth, async (context) => {

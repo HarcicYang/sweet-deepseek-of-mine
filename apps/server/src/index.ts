@@ -10,6 +10,7 @@ import { createMcpClient } from './mcp-client.js'
 import { parseMcpOAuthClients } from './mcp-oauth-clients.js'
 import { createSecurityService } from './security.js'
 import { FileShareStore } from './share-store.js'
+import { FileSkillStore } from './skill-store.js'
 import { FileSyncStore } from './sync-store.js'
 
 const readPositiveInt = (value: string | undefined, fallback: number): number => {
@@ -64,12 +65,16 @@ const mcpStore = new FileMcpStore(
 const mcpOAuthStore = new FileMcpOAuthStore(
   path.resolve(repositoryRoot, process.env.MCP_OAUTH_DB_PATH ?? '.data/mcp-oauth.json')
 )
+const skillStore = new FileSkillStore(
+  path.resolve(repositoryRoot, process.env.SKILL_DB_PATH ?? '.data/skills.json')
+)
 const app = createApp({
   store,
   syncStore,
   shareStore,
   mcpStore,
   mcpOAuthStore,
+  skillStore,
   mcpClient: createMcpClient(),
   security,
   appOrigin: origin,

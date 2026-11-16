@@ -8,6 +8,7 @@ import {
   IconLightOutline16,
   IconLinkOutline16,
   IconSettingsOutline16,
+  IconSkillOutline16,
   IconUploadOutline14,
 } from '../base/icons.js'
 import { CUSTOM_INSTRUCTIONS_MAX_LENGTH } from '@sweet-deepseek/contracts/sync'
@@ -38,6 +39,7 @@ import { showToast } from '../base/toastState.js'
 import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { AccountField } from './AccountField.js'
 import { McpServersSettings } from './McpServersSettings.js'
+import { SkillsSettings } from './SkillsSettings.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -57,6 +59,7 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     icon: <IconSettingsOutline16 />,
   },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
+  { value: 'skills', label: 'settingDialogAsideSkillsOptionLabel', icon: <IconSkillOutline16 /> },
   { value: 'mcp', label: 'settingDialogAsideMcpOptionLabel', icon: <IconLinkOutline16 /> },
 ]
 
@@ -131,6 +134,8 @@ const SettingsContent = () => {
               />
               {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
+          ) : section === 'skills' ? (
+            <SkillsSettings />
           ) : (
             <McpServersSettings />
           )}

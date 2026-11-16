@@ -266,6 +266,29 @@ export const IconSettingsOutline16 = () => (
   </svg>
 )
 
+export const IconSkillOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M3.25 2.5h6.6c1.05 0 1.9.85 1.9 1.9v8.1H5.15a1.9 1.9 0 0 1-1.9-1.9V2.5Z"
+      stroke="currentColor"
+      strokeWidth={1.3}
+      strokeLinejoin="round"
+    />
+    <path
+      d="M5.15 12.5a1.9 1.9 0 0 0 0-3.8h6.6"
+      stroke="currentColor"
+      strokeWidth={1.3}
+      strokeLinecap="round"
+    />
+    <path
+      d="M12.6 2.8v1.6M11.8 3.6h1.6"
+      stroke="currentColor"
+      strokeWidth={1.1}
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 export const IconStopFill16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

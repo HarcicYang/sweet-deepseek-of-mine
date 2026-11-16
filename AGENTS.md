@@ -50,6 +50,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - GitHub OAuth 登录、Key 设置以及聊天、附件、语音代理均已接入 Web 客户端。
 - Worker adapter 使用免费 D1 保存账号、设置和分块会话快照；Node adapter 继续使用本地文件存储。
 - 临时分享保存创建时的当前分支快照，token 公开只读，默认 3 天、可设置 1–30 天；不得暴露附件原件或 API Key。
+- 账号级 Skill 使用 Harness 兼容的 `SKILL.md`，通过渐进式 `skill` 工具加载，并支持 `/name` 显式调用。
 - MCP 设置包含官方 Registry 发现页，只导入 active、latest 且支持 Streamable HTTP 的远程服务；
   1–2 字符搜索筛选当前已加载结果，3 字符以上查询完整 Registry。
 - Registry 导入只预填配置并去重。用户选择 OAuth 时，“保存并授权”会在保存成功后立即打开授权窗口；
@@ -99,7 +100,9 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 
 ## Skills 与 MCP
 
-- Skill 使用带版本号的 manifest，至少包含 ID、说明、输入 schema、所需工具和权限声明。
+- Skill 首版采用 DeepSeek Harness 兼容的 Markdown 指令包格式：YAML frontmatter 提供名称、说明和调用开关，正文保存工作流指令。
+- Skill 本身不授予工具权限，也不声明可执行工具白名单；模型在 Skill 执行过程中调用 MCP 等工具时，仍走现有权限检查。
+- Skill 中的外部内容或模型生成内容仍视为不可信输入，不能覆盖安全、隐私、身份和工具权限边界。
 - 首期 MCP 支持远程 Streamable HTTP；边缘环境不假设可以启动 `stdio` 子进程。
 - MCP 凭据和连接默认由后端管理，浏览器只调用自己的后端会话。
 - MCP OAuth 的 Client ID、Secret 和回调 URI 属于部署配置，不由每个用户填写；GitHub MCP
