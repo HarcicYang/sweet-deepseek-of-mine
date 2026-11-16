@@ -36,14 +36,32 @@
 - 状态、client information、code verifier、discovery state、access token 和 refresh token 全部
   加密保存在 `mcp_oauth`，并绑定用户 ID 与服务器 ID。
 - 设置页在用户点击授权后打开独立窗口。后端返回授权地址，授权服务器回调到
-  `/api/mcp/oauth/callback`。
+  部署固定的 OAuth 回调地址。
 - 回调必须同时匹配登录会话和一次性 `state`；成功后轮换 `state`，旧回调不能重放。
 - 后续请求由 SDK 自动附带 Bearer token，并在过期时尝试 refresh token。
-- 如果服务不支持动态客户端注册，可以在 MCP 服务设置中填写预注册的 Client ID 和
-  Client Secret。Client Secret 与 token 分开加密保存。
-- GitHub Copilot MCP 会发布标准 protected-resource metadata，但 GitHub 不提供动态客户端注册。
-  使用时需要单独创建 GitHub OAuth App，并把回调地址配置为
-  `https://<你的域名>/api/mcp/oauth/callback`，然后填写其 Client ID / Client Secret。
+- OAuth Client ID、Client Secret 和回调 URI 属于部署配置，不出现在用户设置页，也不由每个用户填写。
+- 支持动态客户端注册的服务无需额外配置，会由 MCP SDK 自动注册。
+- 不支持动态注册的服务由部署方通过 `MCP_OAUTH_CLIENTS` 配置，例如：
+
+  ```json
+  [
+    {
+      "resource": "https://mcp.example.com",
+      "clientId": "<provider client id>",
+      "clientSecret": "<provider client secret>"
+    }
+  ]
+  ```
+
+  `resource` 可以是 MCP 服务 origin，也可以是精确 URL；精确 URL 优先。`redirectUrl`
+  通常无需填写，默认使用部署的 `/api/mcp/oauth/callback`。只有迁移到已有回调端点时才需要覆盖。
+
+- GitHub Copilot MCP 发布标准 protected-resource metadata，但 GitHub 不提供动态客户端注册。
+  本项目直接复用部署现有的 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和
+  `GITHUB_CALLBACK_URL`（默认 `/api/auth/github/callback`）。用户不需要创建 GitHub OAuth App，
+  也不需要填写 Client ID、Secret 或回调地址。
+- 如果部署方希望为 GitHub MCP 使用另一套 OAuth App，可以显式配置 `MCP_OAUTH_CLIENTS`；
+  精确配置会覆盖内置的 GitHub 默认映射。
 
 ## 模型工具循环
 

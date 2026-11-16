@@ -6,6 +6,7 @@ import { MemoryAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { McpApprovalRequiredError, type McpClient } from './mcp-client.js'
 import { MemoryMcpStore } from './mcp-store.js'
+import type { McpOAuthClientConfig } from './mcp-oauth-clients.js'
 import { MemoryMcpOAuthStore } from './mcp-oauth-store.js'
 import { createSecurityService } from './security.js'
 import { MemoryShareStore } from './share-store.js'
@@ -24,7 +25,11 @@ const cookieValue = (setCookie: string | null, name: string): string | null => {
 }
 
 const createTestApp = async (
-  options: { allowedOrigins?: string[]; mcpClient?: McpClient } = {}
+  options: {
+    allowedOrigins?: string[]
+    mcpClient?: McpClient
+    mcpOAuthClients?: McpOAuthClientConfig[]
+  } = {}
 ) => {
   const security = await createSecurityService(MASTER_KEY)
   const store = new MemoryAccountStore()
@@ -123,9 +128,19 @@ const createTestApp = async (
     mcpClient,
     security,
     appOrigin: APP_ORIGIN,
+    apiOrigin: APP_ORIGIN,
     githubClientId: 'github-client-id',
     githubClientSecret: 'github-client-secret',
     githubCallbackUrl: `${APP_ORIGIN}${apiRoutes.githubCallback}`,
+    mcpOAuthClients: options.mcpOAuthClients ?? [
+      {
+        resource: 'https://api.githubcopilot.com',
+        clientId: 'github-client-id',
+        clientSecret: 'github-client-secret',
+        redirectUrl: `${APP_ORIGIN}${apiRoutes.githubCallback}`,
+        clientAuthMethod: 'client_secret_post',
+      },
+    ],
     deepSeekBaseUrl: 'https://api.deepseek.test',
     requestTimeoutMs: 60_000,
     sessionTtlMs: 24 * 60 * 60 * 1000,
@@ -385,6 +400,15 @@ test('MCP OAuth start and callback persist an account-scoped authorization state
   }
   const { app, mcpOAuthStore, security, store } = await createTestApp({
     mcpClient: oauthClient,
+    mcpOAuthClients: [
+      {
+        resource: 'https://mcp.example.test/mcp',
+        clientId: 'deployment-client-id',
+        clientSecret: 'deployment-client-secret',
+        redirectUrl: `${APP_ORIGIN}${apiRoutes.mcpOAuthCallback}`,
+        clientAuthMethod: 'client_secret_post',
+      },
+    ],
   })
   const sessionToken = await authenticate(app)
   const headers = {
@@ -400,8 +424,6 @@ test('MCP OAuth start and callback persist an account-scoped authorization state
       slug: 'oauth',
       url: 'https://mcp.example.test/mcp',
       authMode: 'oauth',
-      oauthClientId: 'oauth-client-id',
-      oauthClientSecret: 'oauth-client-secret',
       enabled: true,
     }),
   })
@@ -411,15 +433,11 @@ test('MCP OAuth start and callback persist an account-scoped authorization state
       id: string
       authMode: string
       oauthConnected: boolean
-      oauthClientId: string | null
-      oauthClientSecretConfigured: boolean
     }
   }
   assert.equal(createdBody.server.authMode, 'oauth')
   assert.equal(createdBody.server.oauthConnected, false)
-  assert.equal(createdBody.server.oauthClientId, 'oauth-client-id')
-  assert.equal(createdBody.server.oauthClientSecretConfigured, true)
-  assert.doesNotMatch(JSON.stringify(createdBody), /oauth-client-secret/u)
+  assert.doesNotMatch(JSON.stringify(createdBody), /client_secret|clientSecret/u)
 
   const started = await app.request(
     `${APP_ORIGIN}${apiRoutes.mcpServerOAuthStart.replace(':serverId', createdBody.server.id)}`,
@@ -429,10 +447,21 @@ test('MCP OAuth start and callback persist an account-scoped authorization state
   const startedBody = (await started.json()) as { authorizationUrl: string }
   const state = new URL(startedBody.authorizationUrl).searchParams.get('state')
   assert.ok(state)
-  assert.equal(seenClientId, 'oauth-client-id')
+  assert.equal(seenClientId, 'deployment-client-id')
   const pending = await mcpOAuthStore.findByState(state)
   assert.ok(pending)
   assert.equal(pending.userId, (await store.findUserById(pending.userId))?.id)
+
+  const second = await authenticateTestUser(store, security, {
+    githubId: 'oauth-second',
+    githubLogin: 'oauth-second',
+  })
+  const wrongUserCallback = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpOAuthCallback}?state=${encodeURIComponent(state)}&code=code-1`,
+    { headers: { Cookie: `sdom_session=${second.token}` } }
+  )
+  assert.equal(wrongUserCallback.status, 200)
+  assert.match(await wrongUserCallback.text(), /invalid or expired/u)
 
   const callback = await app.request(
     `${APP_ORIGIN}${apiRoutes.mcpOAuthCallback}?state=${encodeURIComponent(state)}&code=code-1`,
@@ -449,17 +478,78 @@ test('MCP OAuth start and callback persist an account-scoped authorization state
     servers: Array<{ id: string; oauthConnected: boolean }>
   }
   assert.equal(listedBody.servers[0]?.oauthConnected, true)
+})
 
-  const second = await authenticateTestUser(store, security, {
-    githubId: 'oauth-second',
-    githubLogin: 'oauth-second',
+test('GitHub MCP OAuth reuses the deployment GitHub callback and session', async () => {
+  let seenRedirectUrl: string | undefined
+  let completed = false
+  const oauthClient: McpClient = {
+    probe: async () => ({
+      ok: true,
+      server: { name: 'github-mcp', version: '1.0.0' },
+      tools: [],
+      durationMs: 1,
+    }),
+    callTool: async () => ({ content: [{ type: 'text', text: 'ok' }], isError: false }),
+    beginOAuth: async (_config, provider) => {
+      seenRedirectUrl = provider.redirectUrl?.toString()
+      const state = await provider.state?.()
+      provider.redirectToAuthorization(
+        new URL(`https://github.com/login/oauth/authorize?state=${encodeURIComponent(state ?? '')}`)
+      )
+      return 'REDIRECT'
+    },
+    completeOAuth: async () => {
+      completed = true
+    },
+  }
+  const { app, mcpOAuthStore } = await createTestApp({ mcpClient: oauthClient })
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const created = await app.request(`${APP_ORIGIN}${apiRoutes.mcpServers}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: 'GitHub MCP',
+      slug: 'github',
+      url: 'https://api.githubcopilot.com/mcp',
+      authMode: 'oauth',
+      enabled: true,
+    }),
   })
-  const wrongUserCallback = await app.request(
-    `${APP_ORIGIN}${apiRoutes.mcpOAuthCallback}?state=${encodeURIComponent(security.createToken())}&code=code-1`,
-    { headers: { Cookie: `sdom_session=${second.token}` } }
+  assert.equal(created.status, 201)
+  const createdBody = (await created.json()) as { server: { id: string } }
+
+  const started = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpServerOAuthStart.replace(':serverId', createdBody.server.id)}`,
+    { method: 'POST', headers }
   )
-  assert.equal(wrongUserCallback.status, 200)
-  assert.match(await wrongUserCallback.text(), /invalid or expired/u)
+  assert.equal(started.status, 200)
+  const startedBody = (await started.json()) as { authorizationUrl: string }
+  const state = new URL(startedBody.authorizationUrl).searchParams.get('state')
+  assert.ok(state)
+  assert.equal(seenRedirectUrl, `${APP_ORIGIN}${apiRoutes.githubCallback}`)
+
+  const unauthenticated = await app.request(
+    `${APP_ORIGIN}${apiRoutes.githubCallback}?state=${encodeURIComponent(state)}&code=code-1`
+  )
+  assert.equal(unauthenticated.status, 200)
+  assert.match(await unauthenticated.text(), /Sign in again/u)
+  assert.equal(completed, false)
+
+  const callback = await app.request(
+    `${APP_ORIGIN}${apiRoutes.githubCallback}?state=${encodeURIComponent(state)}&code=code-1`,
+    { headers }
+  )
+  assert.equal(callback.status, 200)
+  assert.match(await callback.text(), /MCP authorization completed/u)
+  assert.equal(completed, true)
+  const connected = await mcpOAuthStore.findByState(state)
+  assert.equal(connected, null)
 })
 
 test('API key storage and DeepSeek proxies keep credentials on the server', async () => {

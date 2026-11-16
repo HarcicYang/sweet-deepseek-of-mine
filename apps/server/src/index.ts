@@ -7,6 +7,7 @@ import { createApp } from './app.js'
 import { FileMcpOAuthStore } from './mcp-oauth-store.js'
 import { FileMcpStore } from './mcp-store.js'
 import { createMcpClient } from './mcp-client.js'
+import { parseMcpOAuthClients } from './mcp-oauth-clients.js'
 import { createSecurityService } from './security.js'
 import { FileShareStore } from './share-store.js'
 import { FileSyncStore } from './sync-store.js'
@@ -31,6 +32,8 @@ const requireEnv = (name: string): string => {
 
 const origin = new URL(process.env.APP_ORIGIN ?? 'http://localhost:8090').origin
 const apiOrigin = new URL(process.env.API_ORIGIN ?? origin).origin
+const githubCallbackUrl =
+  process.env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, apiOrigin).toString()
 const allowedOrigins = (process.env.APP_ALLOWED_ORIGINS ?? '')
   .split(',')
   .map((value) => value.trim())
@@ -70,10 +73,21 @@ const app = createApp({
   mcpClient: createMcpClient(),
   security,
   appOrigin: origin,
+  apiOrigin,
   githubClientId: requireEnv('GITHUB_CLIENT_ID'),
   githubClientSecret: requireEnv('GITHUB_CLIENT_SECRET'),
-  githubCallbackUrl:
-    process.env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, apiOrigin).toString(),
+  githubCallbackUrl,
+  mcpOAuthClients: parseMcpOAuthClients(process.env.MCP_OAUTH_CLIENTS, {
+    fallbackRedirectUrl: new URL(apiRoutes.mcpOAuthCallback, apiOrigin).toString(),
+    defaults: [
+      {
+        resource: 'https://api.githubcopilot.com',
+        clientId: requireEnv('GITHUB_CLIENT_ID'),
+        clientSecret: requireEnv('GITHUB_CLIENT_SECRET'),
+        redirectUrl: githubCallbackUrl,
+      },
+    ],
+  }),
   deepSeekBaseUrl: process.env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
   requestTimeoutMs: readPositiveInt(process.env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
   sessionTtlMs: sessionTtlDays * 24 * 60 * 60 * 1000,

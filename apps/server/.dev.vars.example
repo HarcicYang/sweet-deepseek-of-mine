@@ -1,3 +1,5 @@
 APP_MASTER_KEY=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+# Optional JSON array for pre-registered MCP OAuth clients.
+MCP_OAUTH_CLIENTS=

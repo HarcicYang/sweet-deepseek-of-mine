@@ -42,8 +42,6 @@ export const McpServerInputSchema = z
     url: z.string().trim().url().max(2048),
     headers: McpHeadersSchema.optional(),
     authMode: McpAuthModeSchema.default('static'),
-    oauthClientId: z.string().trim().min(1).max(512).optional(),
-    oauthClientSecret: z.string().max(16_384).optional(),
     enabled: z.boolean(),
   })
   .strict()
@@ -61,8 +59,6 @@ export const McpServerSummarySchema = z
     url: z.string().url(),
     authMode: McpAuthModeSchema,
     oauthConnected: z.boolean(),
-    oauthClientId: z.string().nullable(),
-    oauthClientSecretConfigured: z.boolean(),
     enabled: z.boolean(),
     headerNames: z.array(HeaderNameSchema),
     createdAt: z.string(),

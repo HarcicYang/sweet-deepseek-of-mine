@@ -9,7 +9,6 @@ import type {
 import type { SecurityService } from './security.js'
 
 const MCP_OAUTH_AAD_PREFIX = 'mcp-oauth:v1:'
-const MCP_OAUTH_CLIENT_SECRET_AAD_PREFIX = 'mcp-oauth-client-secret:v1:'
 
 export class McpOAuthRequiredError extends Error {
   constructor() {
@@ -36,24 +35,6 @@ const isOAuthDiscoveryState = (value: unknown): value is OAuthDiscoveryState =>
 
 export const mcpOAuthAdditionalData = (userId: string, serverId: string): string =>
   `${MCP_OAUTH_AAD_PREFIX}${userId}:${serverId}`
-
-export const mcpOAuthClientSecretAdditionalData = (userId: string, serverId: string): string =>
-  `${MCP_OAUTH_CLIENT_SECRET_AAD_PREFIX}${userId}:${serverId}`
-
-export const encryptMcpOAuthClientSecret = async (
-  security: SecurityService,
-  userId: string,
-  serverId: string,
-  clientSecret: string
-) => await security.encryptValue(mcpOAuthClientSecretAdditionalData(userId, serverId), clientSecret)
-
-export const decryptMcpOAuthClientSecret = async (
-  security: SecurityService,
-  userId: string,
-  serverId: string,
-  encrypted: Parameters<SecurityService['decryptValue']>[1]
-): Promise<string> =>
-  await security.decryptValue(mcpOAuthClientSecretAdditionalData(userId, serverId), encrypted)
 
 export const encryptMcpOAuthPayload = async (
   security: SecurityService,

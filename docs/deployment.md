@@ -30,6 +30,8 @@ Node adapter 使用 `.data/` 下的文件存储，适合单实例自托管。复
 - `COOKIE_SAME_SITE`：同站使用 `lax`；独立站点的跨站前端使用 `none`，并必须启用 HTTPS。
 - `MCP_ALLOW_PRIVATE_NETWORK`：默认 `false`；单用户本地部署需要访问局域网 MCP 时才设为 `true`。
 - `MCP_OAUTH_DB_PATH`：Node 自托管时 OAuth 状态与 token 的加密存储文件路径。
+- `MCP_OAUTH_CLIENTS`：可选 JSON 数组，用于给不支持动态客户端注册的 MCP 提供方配置部署级
+  Client ID / Secret。普通用户无需接触该配置。
 
 推荐生产环境在 Node 服务前方使用反向代理，把前端静态资源和 `/api` 合并为同源部署。
 
@@ -50,8 +52,8 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    pnpm worker:migrate:remote
    ```
 
-   该命令会应用 `0001`–`0004`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式、
-   预注册 OAuth client 字段和加密 OAuth 状态/token 存储。
+   该命令会应用 `0001`–`0004`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
+   加密 OAuth 状态/token 存储。
 
 3. 创建生产环境使用的 GitHub OAuth App：
    - 打开 GitHub 的 `Settings → Developer settings → OAuth Apps → New OAuth App`。
@@ -93,6 +95,23 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    ```
 
 Worker 已存在后，单独更新某项 secret 可以使用 `wrangler secret put <NAME>`。
+
+MCP OAuth 的 Client ID、Secret 和回调由部署统一管理。GitHub MCP 会自动复用上面的
+GitHub 登录 OAuth App，因此不需要再创建一个 GitHub OAuth App。其他不支持动态客户端注册的
+MCP 提供方可以通过可选的 `MCP_OAUTH_CLIENTS` secret 配置：
+
+```json
+[
+  {
+    "resource": "https://mcp.example.com",
+    "clientId": "<provider client id>",
+    "clientSecret": "<provider client secret>"
+  }
+]
+```
+
+通常无需设置 `redirectUrl`，服务会使用 `API_ORIGIN` 下的 `/api/mcp/oauth/callback`。这些值只属于
+部署，不会返回浏览器，也不需要用户填写。
 
 Worker 默认同时提供 `apps/web/dist` 和 `/api`，这是最简单的单服务部署方式。前端也可以单独
 部署；此时设置 `SDOM_API_BASE_URL`，并把前端 origin 加入 `APP_ALLOWED_ORIGINS`。

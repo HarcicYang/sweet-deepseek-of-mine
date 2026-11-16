@@ -181,15 +181,8 @@ export const zh = {
   mcpOAuthPopupBlocked: '授权窗口被浏览器拦截，请允许弹出窗口后重试',
   mcpOAuthDisconnectFailed: '无法断开 OAuth 授权',
   mcpOAuthDisconnected: 'OAuth 授权已断开',
-  mcpOAuthClientId: 'OAuth Client ID',
-  mcpOAuthClientIdPlaceholder: '预注册客户端的 Client ID',
-  mcpOAuthClientIdDescription:
-    '支持动态客户端注册的服务可以留空；GitHub 等不支持注册的服务需要填写。',
-  mcpOAuthClientSecret: 'OAuth Client Secret',
-  mcpOAuthClientSecretPlaceholder: '预注册客户端的 Client Secret',
-  mcpOAuthClientSecretKeepPlaceholder: '留空表示保持已保存的 Client Secret',
-  mcpOAuthClientSecretDescription: '由服务端加密保存，不会返回浏览器。公开客户端可以留空。',
-  mcpOAuthClientIdValue: 'Client ID：{clientId}',
+  mcpOAuthDeploymentManaged:
+    'OAuth 客户端和回调地址由部署统一管理，你只需要在授权窗口中登录。支持动态注册的服务会自动注册。',
   mcpServerHeaders: '请求头',
   mcpServerHeadersDescription: '每行一个 Name: Value，敏感值只会在保存时提交。',
   mcpServerHeadersKeepHint: '留空表示继续使用已保存的请求头。',

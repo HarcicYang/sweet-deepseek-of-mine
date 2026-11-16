@@ -98,6 +98,8 @@ Cloudflare Workers、Deno、Bun 或 Node 等运行环境。数据库和对象存
 - Skill 使用带版本号的 manifest，至少包含 ID、说明、输入 schema、所需工具和权限声明。
 - 首期 MCP 支持远程 Streamable HTTP；边缘环境不假设可以启动 `stdio` 子进程。
 - MCP 凭据和连接默认由后端管理，浏览器只调用自己的后端会话。
+- MCP OAuth 的 Client ID、Secret 和回调 URI 属于部署配置，不由每个用户填写；GitHub MCP
+  默认复用部署的 GitHub 登录 OAuth App。
 - 工具调用保留权限检查，并对高风险副作用请求用户确认。
 - 当前不设计配额、速率限制或审计系统；除非后续明确要求，不要提前加入这些机制。
 - 超时不要设置得过于激进。长时间运行的 Skill 或 MCP 调用应使用宽松、可配置的超时，并允许用户取消。

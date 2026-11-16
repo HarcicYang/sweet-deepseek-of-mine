@@ -64,10 +64,9 @@ import {
 import { assertAllowedMcpUrl, mcpHeadersAdditionalData } from './mcp-policy.js'
 import type { McpServerRecord, McpStore } from './mcp-store.js'
 import type { McpOAuthRecord, McpOAuthStore } from './mcp-oauth-store.js'
+import { findMcpOAuthClient, type McpOAuthClientConfig } from './mcp-oauth-clients.js'
 import {
   decryptMcpOAuthPayload,
-  decryptMcpOAuthClientSecret,
-  encryptMcpOAuthClientSecret,
   encryptMcpOAuthPayload,
   McpOAuthRequiredError,
   McpOAuthProvider,
@@ -125,9 +124,11 @@ export type AppOptions = {
   mcpClient: McpClient
   security: SecurityService
   appOrigin: string
+  apiOrigin: string
   githubClientId: string
   githubClientSecret: string
   githubCallbackUrl: string
+  mcpOAuthClients?: McpOAuthClientConfig[]
   deepSeekBaseUrl: string
   requestTimeoutMs: number
   sessionTtlMs: number
@@ -262,8 +263,6 @@ const toMcpServerSummary = async (
     url: server.url,
     authMode: server.authMode,
     oauthConnected: oauth?.connected ?? false,
-    oauthClientId: server.oauthClientId,
-    oauthClientSecretConfigured: server.encryptedOAuthClientSecret !== null,
     enabled: server.enabled,
     headerNames: Object.keys(headers).sort(),
     createdAt: server.createdAt,
@@ -430,9 +429,11 @@ export const createApp = ({
   mcpClient,
   security,
   appOrigin,
+  apiOrigin,
   githubClientId,
   githubClientSecret,
   githubCallbackUrl,
+  mcpOAuthClients = [],
   deepSeekBaseUrl,
   requestTimeoutMs,
   sessionTtlMs,
@@ -478,24 +479,32 @@ export const createApp = ({
     return await next()
   })
 
-  const requireAuth: MiddlewareHandler<AppEnv> = async (context, next) => {
+  const readAuthContext = async (context: Context<AppEnv>): Promise<AuthContext | null> => {
     const token = getCookie(context, SESSION_COOKIE)
     if (!token) {
-      return apiError(context, 401, 'unauthorized', 'Sign in with GitHub to continue')
+      return null
     }
     const sessionTokenHash = await security.hashToken(token)
     const session = await store.findSessionByTokenHash(sessionTokenHash)
     if (!session) {
       deleteCookie(context, SESSION_COOKIE, { path: '/' })
-      return apiError(context, 401, 'unauthorized', 'Session expired')
+      return null
     }
     const user = await store.findUserById(session.userId)
     if (!user) {
       await store.deleteSession(sessionTokenHash)
       deleteCookie(context, SESSION_COOKIE, { path: '/' })
-      return apiError(context, 401, 'unauthorized', 'Account not found')
+      return null
     }
-    context.set('auth', { user, sessionTokenHash })
+    return { user, sessionTokenHash }
+  }
+
+  const requireAuth: MiddlewareHandler<AppEnv> = async (context, next) => {
+    const auth = await readAuthContext(context)
+    if (!auth) {
+      return apiError(context, 401, 'unauthorized', 'Sign in with GitHub to continue')
+    }
+    context.set('auth', auth)
     return await next()
   }
 
@@ -560,8 +569,7 @@ export const createApp = ({
     })
   }
 
-  const mcpOAuthRedirectUrl = (context: Context<AppEnv>): string =>
-    new URL(apiRoutes.mcpOAuthCallback, context.req.url).toString()
+  const mcpOAuthCallbackUrl = new URL(apiRoutes.mcpOAuthCallback, apiOrigin).toString()
 
   const readMcpOAuthPayload = async (record: McpOAuthRecord) =>
     await decryptMcpOAuthPayload(security, record.userId, record.serverId, record.encryptedPayload)
@@ -583,46 +591,43 @@ export const createApp = ({
       updatedAt: new Date().toISOString(),
     })
 
-  const mcpOAuthClientConfiguration = async (
-    server: McpServerRecord,
+  const mcpOAuthClientConfiguration = (
+    server: McpServerRecord
+  ): {
     redirectUrl: string
-  ): Promise<{
     clientInformation?: StoredOAuthClientInformation
     clientAuthMethod: 'none' | 'client_secret_post'
-  }> => {
-    if (!server.oauthClientId) {
-      return { clientAuthMethod: 'none' }
+  } => {
+    const configured = findMcpOAuthClient(mcpOAuthClients, server.url)
+    if (!configured) {
+      return {
+        redirectUrl: mcpOAuthCallbackUrl,
+        clientAuthMethod: 'none',
+      }
     }
-    const clientSecret = server.encryptedOAuthClientSecret
-      ? await decryptMcpOAuthClientSecret(
-          security,
-          server.userId,
-          server.id,
-          server.encryptedOAuthClientSecret
-        )
-      : undefined
     return {
+      redirectUrl: configured.redirectUrl,
       clientInformation: {
-        client_id: server.oauthClientId,
-        redirect_uris: [redirectUrl],
-        token_endpoint_auth_method: clientSecret ? 'client_secret_post' : 'none',
-        ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
+        client_id: configured.clientId,
+        redirect_uris: [configured.redirectUrl],
+        token_endpoint_auth_method: configured.clientAuthMethod,
+        ...(configured.clientSecret === undefined
+          ? {}
+          : { client_secret: configured.clientSecret }),
       } as StoredOAuthClientInformation,
-      clientAuthMethod: clientSecret ? 'client_secret_post' : 'none',
+      clientAuthMethod: configured.clientAuthMethod,
     }
   }
 
-  const createMcpOAuthProvider = async (
-    context: Context<AppEnv>,
+  const createMcpOAuthProvider = (
     server: McpServerRecord,
     record: McpOAuthRecord,
     payload: McpOAuthPayload
   ) => {
-    const redirectUrl = mcpOAuthRedirectUrl(context)
-    const client = await mcpOAuthClientConfiguration(server, redirectUrl)
+    const client = mcpOAuthClientConfiguration(server)
     return new McpOAuthProvider({
       state: record.state,
-      redirectUrl,
+      redirectUrl: client.redirectUrl,
       initialPayload: payload,
       ...(client.clientInformation === undefined
         ? {}
@@ -634,10 +639,7 @@ export const createApp = ({
     })
   }
 
-  const mcpConnectionConfig = async (
-    context: Context<AppEnv>,
-    server: McpServerRecord
-  ): Promise<McpConnectionConfig> => {
+  const mcpConnectionConfig = async (server: McpServerRecord): Promise<McpConnectionConfig> => {
     const headers = await readMcpHeaders(security, server)
     if (server.authMode !== 'oauth') {
       return { url: server.url, headers }
@@ -650,7 +652,7 @@ export const createApp = ({
     return {
       url: server.url,
       headers,
-      authProvider: await createMcpOAuthProvider(context, server, record, payload),
+      authProvider: createMcpOAuthProvider(server, record, payload),
     }
   }
 
@@ -690,6 +692,62 @@ if(data.ok)setTimeout(()=>window.close(),250);
     })
   }
 
+  const completeMcpOAuthCallback = async (
+    context: Context<AppEnv>,
+    auth: AuthContext,
+    record: McpOAuthRecord,
+    callbackParams: URLSearchParams
+  ): Promise<Response> => {
+    if (record.userId !== auth.user.id) {
+      return mcpOAuthResultPage(false, '', 'MCP authorization state is invalid or expired.')
+    }
+    if (callbackParams.get('error')) {
+      return mcpOAuthResultPage(false, record.serverId, 'MCP authorization was not completed.')
+    }
+    const server = await mcpStore.findServer(auth.user.id, record.serverId)
+    if (!server || server.authMode !== 'oauth') {
+      return mcpOAuthResultPage(false, record.serverId, 'MCP server no longer exists.')
+    }
+    let headers: McpHeaders
+    let payload: McpOAuthPayload
+    try {
+      assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
+      headers = await readMcpHeaders(security, server)
+      payload = await readMcpOAuthPayload(record)
+    } catch {
+      return mcpOAuthResultPage(
+        false,
+        record.serverId,
+        'MCP authorization configuration is invalid.'
+      )
+    }
+    const provider = createMcpOAuthProvider(server, record, payload)
+    try {
+      await mcpClient.completeOAuth(
+        {
+          url: server.url,
+          headers,
+          authProvider: provider,
+        },
+        provider,
+        callbackParams,
+        context.req.raw.signal
+      )
+      await saveMcpOAuthPayload(record, provider.snapshot(), {
+        state: security.createToken(),
+        connected: true,
+        expiresAt: 0,
+      })
+      return mcpOAuthResultPage(true, record.serverId)
+    } catch (error) {
+      logger.warn('MCP OAuth callback failed', {
+        serverId: record.serverId,
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return mcpOAuthResultPage(false, record.serverId, 'MCP authorization could not be completed.')
+    }
+  }
+
   const authRedirect = (context: Context<AppEnv>, result: 'success' | 'error', reason?: string) => {
     const target = new URL('/', appOrigin)
     target.searchParams.set('auth', result)
@@ -724,6 +782,23 @@ if(data.ok)setTimeout(()=>window.close(),250);
 
   app.get(apiRoutes.githubCallback, async (context) => {
     const state = context.req.query('state')
+    const mcpRecord = state ? await mcpOAuthStore.findByState(state) : null
+    if (mcpRecord) {
+      const auth = await readAuthContext(context)
+      if (!auth) {
+        return mcpOAuthResultPage(
+          false,
+          mcpRecord.serverId,
+          'Sign in again before completing MCP authorization.'
+        )
+      }
+      return await completeMcpOAuthCallback(
+        context,
+        auth,
+        mcpRecord,
+        new URL(context.req.url).searchParams
+      )
+    }
     const expectedState = getCookie(context, OAUTH_STATE_COOKIE)
     deleteCookie(context, OAUTH_STATE_COOKIE, { path: OAUTH_STATE_PATH })
     if (!state || !expectedState || state !== expectedState) {
@@ -857,15 +932,6 @@ if(data.ok)setTimeout(()=>window.close(),250);
         slug: parsed.data.slug,
         url: parsed.data.url,
         authMode: parsed.data.authMode,
-        oauthClientId: parsed.data.oauthClientId ?? null,
-        encryptedOAuthClientSecret: parsed.data.oauthClientSecret
-          ? await encryptMcpOAuthClientSecret(
-              security,
-              user.id,
-              serverId,
-              parsed.data.oauthClientSecret
-            )
-          : null,
         enabled: parsed.data.enabled,
         encryptedHeaders:
           (await encryptMcpHeaders(security, user.id, serverId, parsed.data.headers)) ?? null,
@@ -915,29 +981,11 @@ if(data.ok)setTimeout(()=>window.close(),250);
       }
     }
     try {
-      const oauthClientChanged =
-        parsed.data.oauthClientId !== undefined &&
-        parsed.data.oauthClientId !== current.oauthClientId
       const server = await mcpStore.updateServer(user.id, serverId, {
         ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
         ...(parsed.data.slug === undefined ? {} : { slug: parsed.data.slug }),
         ...(parsed.data.url === undefined ? {} : { url: parsed.data.url }),
         ...(parsed.data.authMode === undefined ? {} : { authMode: parsed.data.authMode }),
-        ...(parsed.data.oauthClientId === undefined
-          ? {}
-          : { oauthClientId: parsed.data.oauthClientId }),
-        ...(parsed.data.oauthClientSecret
-          ? {
-              encryptedOAuthClientSecret: await encryptMcpOAuthClientSecret(
-                security,
-                user.id,
-                serverId,
-                parsed.data.oauthClientSecret
-              ),
-            }
-          : oauthClientChanged
-            ? { encryptedOAuthClientSecret: null }
-            : {}),
         ...(parsed.data.enabled === undefined ? {} : { enabled: parsed.data.enabled }),
         ...(parsed.data.headers === undefined
           ? {}
@@ -994,7 +1042,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
     let config: McpConnectionConfig
     try {
       assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
-      config = await mcpConnectionConfig(context, server)
+      config = await mcpConnectionConfig(server)
     } catch (error) {
       if (error instanceof McpOAuthRequiredError) {
         return context.json(
@@ -1087,7 +1135,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
       expiresAt: Date.now() + OAUTH_STATE_TTL_MS,
     }
     await mcpOAuthStore.upsert(baseRecord)
-    const provider = await createMcpOAuthProvider(context, server, baseRecord, existingPayload)
+    const provider = createMcpOAuthProvider(server, baseRecord, existingPayload)
     try {
       await mcpClient.beginOAuth(
         {
@@ -1119,57 +1167,18 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.get(apiRoutes.mcpOAuthCallback, requireAuth, async (context) => {
-    const user = context.get('auth').user
+    const auth = context.get('auth')
     const state = context.req.query('state')?.trim()
     const record = state ? await mcpOAuthStore.findByState(state) : null
-    if (!record || record.userId !== user.id) {
+    if (!record) {
       return mcpOAuthResultPage(false, '', 'MCP authorization state is invalid or expired.')
     }
-    if (context.req.query('error')) {
-      return mcpOAuthResultPage(false, record.serverId, 'MCP authorization was not completed.')
-    }
-    const server = await mcpStore.findServer(user.id, record.serverId)
-    if (!server || server.authMode !== 'oauth') {
-      return mcpOAuthResultPage(false, record.serverId, 'MCP server no longer exists.')
-    }
-    let headers: McpHeaders
-    let payload: McpOAuthPayload
-    try {
-      assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
-      headers = await readMcpHeaders(security, server)
-      payload = await readMcpOAuthPayload(record)
-    } catch {
-      return mcpOAuthResultPage(
-        false,
-        record.serverId,
-        'MCP authorization configuration is invalid.'
-      )
-    }
-    const provider = await createMcpOAuthProvider(context, server, record, payload)
-    try {
-      await mcpClient.completeOAuth(
-        {
-          url: server.url,
-          headers,
-          authProvider: provider,
-        },
-        provider,
-        new URL(context.req.url).searchParams,
-        context.req.raw.signal
-      )
-      await saveMcpOAuthPayload(record, provider.snapshot(), {
-        state: security.createToken(),
-        connected: true,
-        expiresAt: 0,
-      })
-      return mcpOAuthResultPage(true, record.serverId)
-    } catch (error) {
-      logger.warn('MCP OAuth callback failed', {
-        serverId: record.serverId,
-        name: error instanceof Error ? error.name : 'unknown',
-      })
-      return mcpOAuthResultPage(false, record.serverId, 'MCP authorization could not be completed.')
-    }
+    return await completeMcpOAuthCallback(
+      context,
+      auth,
+      record,
+      new URL(context.req.url).searchParams
+    )
   })
 
   app.post(apiRoutes.mcpServerOAuthDisconnect, requireAuth, async (context) => {
@@ -1190,7 +1199,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
         servers.map(async (server): Promise<McpToolSummary[]> => {
           try {
             assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
-            const config = await mcpConnectionConfig(context, server)
+            const config = await mcpConnectionConfig(server)
             const result = await mcpClient.probe(config, context.req.raw.signal)
             if (!result.ok) {
               logger.warn('MCP server tool discovery failed', {
@@ -1233,7 +1242,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
     let config: McpConnectionConfig
     try {
       assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
-      config = await mcpConnectionConfig(context, server)
+      config = await mcpConnectionConfig(server)
     } catch (error) {
       if (error instanceof McpOAuthRequiredError) {
         return apiError(context, 409, 'mcp_auth_required', error.message)

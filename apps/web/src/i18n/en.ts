@@ -190,16 +190,8 @@ export const en = {
   mcpOAuthPopupBlocked: 'The authorization window was blocked. Allow pop-ups and try again.',
   mcpOAuthDisconnectFailed: 'Unable to disconnect OAuth authorization',
   mcpOAuthDisconnected: 'OAuth authorization disconnected',
-  mcpOAuthClientId: 'OAuth Client ID',
-  mcpOAuthClientIdPlaceholder: 'Client ID for a pre-registered client',
-  mcpOAuthClientIdDescription:
-    'Leave blank when the server supports dynamic client registration. Providers such as GitHub require a pre-registered client.',
-  mcpOAuthClientSecret: 'OAuth Client Secret',
-  mcpOAuthClientSecretPlaceholder: 'Client Secret for a pre-registered client',
-  mcpOAuthClientSecretKeepPlaceholder: 'Leave blank to keep the saved Client Secret',
-  mcpOAuthClientSecretDescription:
-    'Encrypted on the server and never returned to the browser. Public clients can leave this blank.',
-  mcpOAuthClientIdValue: 'Client ID: {clientId}',
+  mcpOAuthDeploymentManaged:
+    'OAuth clients and callback URLs are managed by the deployment. You only need to sign in through the authorization window. Servers that support dynamic registration are handled automatically.',
   mcpServerHeaders: 'Request headers',
   mcpServerHeadersDescription:
     'Enter one Name: Value pair per line. Sensitive values are submitted only when saved.',

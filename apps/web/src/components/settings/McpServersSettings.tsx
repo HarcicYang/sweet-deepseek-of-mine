@@ -21,8 +21,6 @@ type Draft = {
   slug: string
   url: string
   authMode: McpAuthMode
-  oauthClientId: string
-  oauthClientSecret: string
   headers: string
   enabled: boolean
 }
@@ -33,8 +31,6 @@ const emptyDraft = (): Draft => ({
   slug: '',
   url: '',
   authMode: 'static',
-  oauthClientId: '',
-  oauthClientSecret: '',
   headers: '',
   enabled: true,
 })
@@ -146,10 +142,6 @@ export const McpServersSettings = () => {
           slug: draft.slug.trim(),
           url: draft.url.trim(),
           authMode: draft.authMode,
-          ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
-          ...(draft.oauthClientSecret.trim()
-            ? { oauthClientSecret: draft.oauthClientSecret.trim() }
-            : {}),
           enabled: draft.enabled,
           ...(draft.headers.trim() ? { headers } : {}),
         })
@@ -159,10 +151,6 @@ export const McpServersSettings = () => {
           slug: draft.slug.trim(),
           url: draft.url.trim(),
           authMode: draft.authMode,
-          ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
-          ...(draft.oauthClientSecret.trim()
-            ? { oauthClientSecret: draft.oauthClientSecret.trim() }
-            : {}),
           headers,
           enabled: draft.enabled,
         })
@@ -270,8 +258,6 @@ export const McpServersSettings = () => {
     }
   }
 
-  const editingServer = draft.id ? servers.find((server) => server.id === draft.id) : undefined
-
   return (
     <div className={styles.mcpSettings}>
       <div className={styles.sectionHeading}>{t('mcpServersTitle')}</div>
@@ -302,11 +288,6 @@ export const McpServersSettings = () => {
                 ) : null}
               </div>
               <div className={styles.mcpServerUrl}>{server.url}</div>
-              {server.authMode === 'oauth' && server.oauthClientId ? (
-                <div className={styles.mcpHeaderNames}>
-                  {t('mcpOAuthClientIdValue', { clientId: server.oauthClientId })}
-                </div>
-              ) : null}
               {server.headerNames.length > 0 ? (
                 <div className={styles.mcpHeaderNames}>
                   {t('mcpServerHeaderNames', { names: server.headerNames.join(', ') })}
@@ -362,8 +343,6 @@ export const McpServersSettings = () => {
                     slug: server.slug,
                     url: server.url,
                     authMode: server.authMode,
-                    oauthClientId: server.oauthClientId ?? '',
-                    oauthClientSecret: '',
                     headers: '',
                     enabled: server.enabled,
                   })
@@ -448,42 +427,7 @@ export const McpServersSettings = () => {
           />
         </div>
         {draft.authMode === 'oauth' ? (
-          <>
-            <label className={styles.mcpField}>
-              <span>{t('mcpOAuthClientId')}</span>
-              <input
-                value={draft.oauthClientId}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    oauthClientId: event.target.value,
-                  }))
-                }
-                placeholder={t('mcpOAuthClientIdPlaceholder')}
-              />
-              <small>{t('mcpOAuthClientIdDescription')}</small>
-            </label>
-            <label className={styles.mcpField}>
-              <span>{t('mcpOAuthClientSecret')}</span>
-              <input
-                type="password"
-                value={draft.oauthClientSecret}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    oauthClientSecret: event.target.value,
-                  }))
-                }
-                autoComplete="new-password"
-                placeholder={t(
-                  editingServer?.oauthClientSecretConfigured
-                    ? 'mcpOAuthClientSecretKeepPlaceholder'
-                    : 'mcpOAuthClientSecretPlaceholder'
-                )}
-              />
-              <small>{t('mcpOAuthClientSecretDescription')}</small>
-            </label>
-          </>
+          <p className={styles.sectionDescription}>{t('mcpOAuthDeploymentManaged')}</p>
         ) : null}
         <label className={styles.mcpField}>
           <span>{t('mcpServerUrl')}</span>

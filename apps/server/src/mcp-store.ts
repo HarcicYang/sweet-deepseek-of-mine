@@ -10,8 +10,6 @@ export type McpServerRecord = {
   slug: string
   url: string
   authMode: McpAuthMode
-  oauthClientId: string | null
-  encryptedOAuthClientSecret: EncryptedValue | null
   enabled: boolean
   encryptedHeaders: EncryptedValue | null
   createdAt: string
@@ -25,8 +23,6 @@ export type McpServerCreate = {
   slug: string
   url: string
   authMode: McpAuthMode
-  oauthClientId: string | null
-  encryptedOAuthClientSecret: EncryptedValue | null
   enabled: boolean
   encryptedHeaders: EncryptedValue | null
 }
@@ -36,8 +32,6 @@ export type McpServerUpdate = {
   slug?: string
   url?: string
   authMode?: McpAuthMode
-  oauthClientId?: string | null
-  encryptedOAuthClientSecret?: EncryptedValue | null
   enabled?: boolean
   encryptedHeaders?: EncryptedValue | null
 }
@@ -102,8 +96,6 @@ export class MemoryMcpStore implements McpStore {
       slug: input.slug,
       url: input.url,
       authMode: input.authMode,
-      oauthClientId: input.oauthClientId,
-      encryptedOAuthClientSecret: input.encryptedOAuthClientSecret,
       enabled: input.enabled,
       encryptedHeaders: input.encryptedHeaders,
       createdAt: now,
@@ -178,8 +170,6 @@ export class FileMcpStore implements McpStore {
       this.database.servers = this.database.servers.map((server) => ({
         ...server,
         authMode: server.authMode === 'oauth' ? 'oauth' : 'static',
-        oauthClientId: server.oauthClientId ?? null,
-        encryptedOAuthClientSecret: server.encryptedOAuthClientSecret ?? null,
       }))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -229,8 +219,6 @@ export class FileMcpStore implements McpStore {
         slug: input.slug,
         url: input.url,
         authMode: input.authMode,
-        oauthClientId: input.oauthClientId,
-        encryptedOAuthClientSecret: input.encryptedOAuthClientSecret,
         enabled: input.enabled,
         encryptedHeaders: input.encryptedHeaders,
         createdAt: now,

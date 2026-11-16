@@ -6,12 +6,14 @@ import { D1McpOAuthStore } from './d1-mcp-oauth-store.js'
 import { D1ShareStore } from './d1-share-store.js'
 import { D1SyncStore } from './d1-sync-store.js'
 import { createMcpClient } from './mcp-client.js'
+import { parseMcpOAuthClients } from './mcp-oauth-clients.js'
 import { createSecurityService } from './security.js'
 
 type WorkerEnv = Env & {
   API_ORIGIN?: string
   GITHUB_CALLBACK_URL?: string
   MCP_ALLOW_PRIVATE_NETWORK?: string
+  MCP_OAUTH_CLIENTS?: string
 }
 
 const readPositiveInt = (value: string | undefined, fallback: number): number => {
@@ -45,6 +47,8 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
   const promise = (async () => {
     const origin = new URL(env.APP_ORIGIN).origin
     const apiOrigin = new URL(env.API_ORIGIN ?? origin).origin
+    const githubCallbackUrl =
+      env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, apiOrigin).toString()
     const security = await createSecurityService(env.APP_MASTER_KEY)
     const allowedOrigins = (env.APP_ALLOWED_ORIGINS ?? '')
       .split(',')
@@ -60,13 +64,24 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
       mcpClient: createMcpClient(),
       security,
       appOrigin: origin,
+      apiOrigin,
       allowedOrigins,
       cookieSameSite: cookieSameSite(env.COOKIE_SAME_SITE),
       cookieSecure: true,
       githubClientId: env.GITHUB_CLIENT_ID,
       githubClientSecret: env.GITHUB_CLIENT_SECRET,
-      githubCallbackUrl:
-        env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, apiOrigin).toString(),
+      githubCallbackUrl,
+      mcpOAuthClients: parseMcpOAuthClients(env.MCP_OAUTH_CLIENTS, {
+        fallbackRedirectUrl: new URL(apiRoutes.mcpOAuthCallback, apiOrigin).toString(),
+        defaults: [
+          {
+            resource: 'https://api.githubcopilot.com',
+            clientId: env.GITHUB_CLIENT_ID,
+            clientSecret: env.GITHUB_CLIENT_SECRET,
+            redirectUrl: githubCallbackUrl,
+          },
+        ],
+      }),
       deepSeekBaseUrl: env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
       requestTimeoutMs: readPositiveInt(env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
       sessionTtlMs: readPositiveInt(env.SESSION_TTL_DAYS, 30) * 24 * 60 * 60 * 1000,
