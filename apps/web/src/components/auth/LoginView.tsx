@@ -1,4 +1,5 @@
 import { Button } from '../base/Button.js'
+import { BrandMark } from '../base/BrandMark.js'
 import { useTranslate } from '../../i18n/index.js'
 import { initAuth, loginWithGithub, useAuth } from '../../services/auth/store.js'
 import styles from './LoginView.module.css'
@@ -11,7 +12,10 @@ export const LoginView = () => {
   return (
     <main className={styles.page}>
       <section className={styles.card} aria-live="polite">
-        <div className={styles.brand}>{"Sweet DeepSeek O'Mine"}</div>
+        <div className={styles.brand}>
+          <BrandMark variant="app" className={styles.brandMark} />
+          <span>{"Sweet DeepSeek O'Mine"}</span>
+        </div>
         <h1 className={styles.title}>{t('loginTitle')}</h1>
         <p className={styles.description}>{t('loginDescription')}</p>
         {status === 'loading' ? (

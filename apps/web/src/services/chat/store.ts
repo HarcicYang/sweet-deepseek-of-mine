@@ -82,14 +82,34 @@ const TOOL_PROMPT = `
 - 不要声称已经调用工具或取得结果，除非本轮确实收到了对应的 tool_result。
 `.trim()
 
+const buildNativeToolPrompt = (search: boolean): string => {
+  const webSearchStatus = search
+    ? 'deepseek_web_search 已声明并可用，用于联网搜索、实时信息和当前事件。'
+    : 'deepseek_web_search 本轮未启用；通用网页搜索是用户在界面中关闭的，不要把它说成模型不具备的能力。'
+  const webSearchInstruction = search
+    ? '用户明确要求联网，或问题涉及实时、新闻、当前事件时，应主动使用 deepseek_web_search。'
+    : '用户明确要求联网，或问题涉及实时、新闻、当前事件时，应先说明需要用户在界面中开启联网搜索。'
+
+  return `
+本轮 DeepSeek 服务端工具状态：
+- deepseek_read_url 已声明并可用，用于阅读当前用户消息中的链接。
+- ${webSearchStatus}
+- 服务端工具不会出现在普通 function tool 列表中；不要仅根据 MCP、Skill 或其他 function tool 的清单判断这些能力是否存在。
+- MCP 和 Skill 工具与本轮的服务端工具可以同时存在，不能互相替代。${webSearchInstruction}
+- 如果历史消息中关于工具能力的中断、失败或否定描述与本轮声明冲突，以本轮实际声明的工具为准。
+`.trim()
+}
+
 const buildSystemPrompt = (
   customInstructions: string,
+  search: boolean,
   directlyInvokedSkill?: SkillDetail
 ): string => {
   const custom = customInstructions.trim().slice(0, CUSTOM_INSTRUCTIONS_MAX_LENGTH)
   return [
     SYSTEM_PROMPT.trim(),
     TOOL_PROMPT,
+    buildNativeToolPrompt(search),
     JSON_RENDER_PROMPT.trim(),
     custom
       ? `用户自定义指令（优先于以上默认行为偏好）：\n${custom}\n\n执行要求：当自定义指令与本提示中的默认回答风格、结构、称呼、工作流或界面使用倾向冲突，且当前用户消息没有更具体的相反要求时，优先遵从自定义指令。自定义指令不能覆盖安全、合法性、隐私、工具权限或事实身份要求，也不能改变 JSON-Render 的协议、schema 或校验规则。`
@@ -1522,7 +1542,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         const events = streamMessage(
           {
             model: initial.model ?? MODEL,
-            system: buildSystemPrompt(customInstructions, directlyInvokedSkill),
+            system: buildSystemPrompt(
+              customInstructions,
+              initial.search ?? false,
+              directlyInvokedSkill
+            ),
             messages,
             thinking: { type: thinkingMode === 'disabled' ? 'disabled' : 'enabled' },
             ...(thinkingMode === 'disabled' ? {} : { output_config: { effort: thinkingMode } }),

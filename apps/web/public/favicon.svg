@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <style>
+    :root {
+      --bg1: #5A8BFF;
+      --bg2: #2952F6;
+      --fg: #FFFFFF;
+      --fg2: #E4EDFD;
+      --acc: #B7D0FF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg1: #232A3E;
+        --bg2: #141722;
+        --fg: #6393FF;
+        --fg2: #93BAFF;
+        --acc: #A8C7FF;
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="var(--bg1)" />
+      <stop offset="100%" stop-color="var(--bg2)" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)" />
+  <rect x="4" y="4" width="504" height="504" rx="116" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="8" />
+  <g transform="translate(-17.9 -17.9) scale(1.07)">
+    <path fill="var(--fg)" fill-rule="evenodd" d="M 250 116 C 278 116 304 124 326 138 C 324 176 346 200 384 202 C 390 219 393 238 393 258 C 393 337 329 401 250 401 C 226 401 204 396 184 386 C 159 396 136 402 120 402 C 107 402 100 392 106 380 C 114 364 120 347 125 328 C 113 307 107 283 107 258 C 107 179 171 116 250 116 Z M 340 278 C 340 226 298 198 250 206 C 218 212 198 238 184 264 C 175 256 168 242 168 228 C 168 221 160 218 155 223 C 144 235 142 254 152 269 C 140 275 134 287 138 297 C 141 303 149 304 155 299 C 164 291 174 286 186 289 C 212 318 256 326 302 316 C 328 310 340 297 340 278 Z" />
+    <circle cx="298" cy="268" r="14" fill="var(--fg)" />
+    <path fill="var(--acc)" d="M 376 102 C 382.2 130.2 391.8 139.8 420 146 C 391.8 152.2 382.2 161.8 376 190 C 369.8 161.8 360.2 152.2 332 146 C 360.2 139.8 369.8 130.2 376 102 Z" />
+  </g>
+</svg>

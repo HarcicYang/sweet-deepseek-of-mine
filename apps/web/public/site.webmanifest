@@ -1,0 +1,17 @@
+{
+  "name": "Sweet DeepSeek O'Mine",
+  "short_name": "SDoM",
+  "description": "Sweet DeepSeek O'Mine 在线聊天客户端",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2952F6",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
