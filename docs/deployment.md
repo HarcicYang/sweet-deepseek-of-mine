@@ -61,10 +61,10 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    pnpm worker:migrate:remote
    ```
 
-   该命令会应用 `0001`–`0007`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
+   该命令会应用 `0001`–`0008`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
    加密 OAuth 状态/token 存储，`0005` 清除旧版本中用户级 OAuth Client 配置的残留，
    `0006` 创建账号级 Skill 表，`0007` 增加 Skill Bundle 文本资源并将旧单文件 Skill
-   迁移为包含 `SKILL.md` 的单文件 Bundle。
+   迁移为包含 `SKILL.md` 的单文件 Bundle，`0008` 增加 MCP 工具审批模式。
 
 3. 创建生产环境使用的 GitHub OAuth App：
    - 打开 GitHub 的 `Settings → Developer settings → OAuth Apps → New OAuth App`。

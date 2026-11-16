@@ -55,6 +55,16 @@ pnpm dev:server  # 启动 Hono 后端服务 (http://localhost:8787)
 
 > **注意**：在线聊天要靠 Hono 服务端做同源 `/api` 转发，只打开静态的 `index.html` 是用不了的。部署细节见[认证与 API Key](docs/authentication.md)和[部署说明](docs/deployment.md)。
 
+### 4. 交给 Agent 部署
+
+> **如果你很懒**
+>
+> 把这个发给你的 Agent：
+>
+> > 请你根据 https://github.com/HarcicYang/sweet-deepseek-of-mine/blob/main/docs/AGENT_INSTRUCTION.md 帮我部署 Sweet DeepSeek O' Mine，并完成真实浏览器验收。
+
+Agent 应阅读 [AGENT_INSTRUCTION.md](docs/AGENT_INSTRUCTION.md)，与你确认使用 Cloudflare Workers Free 还是 Node 部署，并且不得打印、提交或泄露任何密钥。
+
 ---
 
 ## 项目结构

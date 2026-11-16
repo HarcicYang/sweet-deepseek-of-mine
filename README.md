@@ -55,6 +55,16 @@ pnpm dev:server  # Hono backend (http://localhost:8787)
 
 > **Note**: online chat needs the Hono server to proxy same-origin `/api` requests — opening the static `index.html` on its own won't work. For deployment details, see [Authentication and API keys](docs/authentication.md) and [Deployment](docs/deployment.md).
 
+### 4. Agent-assisted deployment
+
+> **Too lazy to follow the manual steps?**
+>
+> Send this to your coding agent:
+>
+> > Please deploy Sweet DeepSeek O' Mine according to https://github.com/HarcicYang/sweet-deepseek-of-mine/blob/main/docs/AGENT_INSTRUCTION.md and complete the real browser acceptance checks.
+
+The agent should read [AGENT_INSTRUCTION.md](docs/AGENT_INSTRUCTION.md), choose Cloudflare Workers Free or a Node deployment with you, and never print or commit secrets.
+
 ---
 
 ## Project layout
@@ -74,15 +84,15 @@ docs/                Architecture and protocol notes
 
 ## Development commands
 
-| Command           | What it does                        |
-| ----------------- | ----------------------------------- |
-| `pnpm dev`        | Start the frontend dev server       |
-| `pnpm dev:server` | Start the Hono backend              |
+| Command           | What it does                            |
+| ----------------- | --------------------------------------- |
+| `pnpm dev`        | Start the frontend dev server           |
+| `pnpm dev:server` | Start the Hono backend                  |
 | `pnpm build`      | Build for production (`apps/web/dist/`) |
-| `pnpm type`       | TypeScript type check               |
-| `pnpm lint`       | Lint with oxlint                    |
-| `pnpm test`       | Run server tests                    |
-| `pnpm format`     | Format with oxfmt                   |
+| `pnpm type`       | TypeScript type check                   |
+| `pnpm lint`       | Lint with oxlint                        |
+| `pnpm test`       | Run server tests                        |
+| `pnpm format`     | Format with oxfmt                       |
 
 ---
 
