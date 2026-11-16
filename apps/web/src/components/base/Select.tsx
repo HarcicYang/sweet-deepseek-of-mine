@@ -17,24 +17,35 @@ export const Select = <T extends string>({
   onChange,
   placeholder,
   ariaLabel,
+  ariaDescribedby,
   className,
   disabled = false,
+  id,
+  required = false,
+  block = false,
+  variant = 'pill',
 }: {
   value: T
   options: SelectOption<T>[]
   onChange: (value: T) => void
   placeholder?: string
   ariaLabel?: string
+  ariaDescribedby?: string
   className?: string
   disabled?: boolean
+  id?: string
+  required?: boolean
+  block?: boolean
+  variant?: 'pill' | 'field'
 }) => {
   const [open, setOpen] = useState(false)
   const current = options.find((option) => option.value === value)
+  const field = variant === 'field'
   // 菜单贴右侧展开，最多 320px 高，超出在菜单内滚动
   const { anchorRef, floatingRef, position } = useAnchoredPosition<
     HTMLButtonElement,
     HTMLDivElement
-  >(open, { align: 'end', maxHeight: 320, minSpace: 160 })
+  >(open, { align: 'end', maxHeight: 320, minSpace: 160, matchAnchorWidth: field })
   // Esc 只关菜单，不让外层弹窗一起关闭
   useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), { captureEscape: true })
 
@@ -42,9 +53,18 @@ export const Select = <T extends string>({
     <>
       <button
         ref={anchorRef}
+        id={id}
         type="button"
-        className={clsx(styles.trigger, open && styles.open, className)}
+        className={clsx(
+          styles.trigger,
+          field && styles.triggerField,
+          block && styles.block,
+          open && styles.open,
+          className
+        )}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedby}
+        aria-required={required || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         disabled={disabled}
@@ -63,7 +83,7 @@ export const Select = <T extends string>({
         ? createPortal(
             <div
               ref={floatingRef}
-              className={styles.menu}
+              className={clsx(styles.menu, field && styles.menuField)}
               style={position ?? undefined}
               role="listbox"
               aria-label={ariaLabel}

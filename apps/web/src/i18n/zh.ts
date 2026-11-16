@@ -63,6 +63,7 @@ export const zh = {
   jsonRenderChart: '图表',
   jsonRenderImageUnavailable: '图片加载失败',
   jsonRenderFormSelectPlaceholder: '请选择',
+  jsonRenderFormRequired: '请填写必填字段',
   jsonRenderFormSubmitFailed: '无法提交表单，请重试',
   jsonRenderStepPending: '待处理',
   jsonRenderStepActive: '进行中',

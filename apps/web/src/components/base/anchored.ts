@@ -18,6 +18,7 @@ export type AnchoredPosition = {
   top: number
   left?: number
   right?: number
+  width?: number
   maxHeight?: number
 }
 
@@ -37,6 +38,8 @@ export type AnchoredOptions = {
   maxHeight?: number
   /** 判定「空间不足、需要翻面」的最小纵向空间 */
   minSpace?: number
+  /** 使用触发元素的宽度，适合输入框式的下拉菜单。 */
+  matchAnchorWidth?: boolean
   /**
    * 用触发元素的第一个子元素作为测量与对齐基准。触发元素自身不产生盒子时
    * （如 display: contents），它的 getBoundingClientRect 是空矩形。
@@ -91,6 +94,7 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
     offset = 4,
     maxHeight,
     minSpace = 160,
+    matchAnchorWidth = false,
     measureFirstChild = false,
     measureKey,
   }: AnchoredOptions = {}
@@ -106,6 +110,7 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       previous.top === next.top &&
       previous.left === next.left &&
       previous.right === next.right &&
+      previous.width === next.width &&
       previous.maxHeight === next.maxHeight
         ? previous
         : next
@@ -133,11 +138,13 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
     const spaceBelow = window.innerHeight - rect.bottom - offset - VIEWPORT_PADDING
 
     if (maxHeight === undefined) {
-      const { width, height } = floating.getBoundingClientRect()
+      const { width: floatingWidth, height } = floating.getBoundingClientRect()
+      const width = matchAnchorWidth ? rect.width : floatingWidth
       const resolved = resolveSide(spaceAbove, spaceBelow, side, height)
       applyPosition({
         top: resolved === 'top' ? rect.top - offset - height : rect.bottom + offset,
         left: alignLeft(rect, width, align, alignOffset),
+        ...(matchAnchorWidth ? { width } : {}),
       })
       return
     }
@@ -152,9 +159,21 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
           ? Math.max(VIEWPORT_PADDING, rect.top - offset - height)
           : rect.bottom + offset,
       right: Math.max(VIEWPORT_PADDING, window.innerWidth - rect.right),
+      ...(matchAnchorWidth ? { width: rect.width } : {}),
       maxHeight: height,
     })
-  }, [align, alignOffset, applyPosition, floatingRef, getAnchor, maxHeight, minSpace, offset, side])
+  }, [
+    align,
+    alignOffset,
+    applyPosition,
+    floatingRef,
+    getAnchor,
+    matchAnchorWidth,
+    maxHeight,
+    minSpace,
+    offset,
+    side,
+  ])
 
   // 打开时与内容变化时同步测量，必须在绘制前完成
   useLayoutEffect(() => {

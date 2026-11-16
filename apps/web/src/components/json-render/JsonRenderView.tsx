@@ -19,6 +19,7 @@ import { useTranslate } from '../../i18n/index.js'
 import { sendPromptFromRender } from '../../services/chat/store.js'
 import { copyText } from '../../utils/clipboard.js'
 import { Button } from '../base/Button.js'
+import { Select } from '../base/Select.js'
 import { IconCheckOutline16 } from '../base/icons.js'
 import { showToast } from '../base/toastState.js'
 import { CodeBlock } from '../markdown/CodeBlock.js'
@@ -520,13 +521,7 @@ const ImageView = ({ node }: { node: JsonRenderImageNode }) => {
 }
 
 const initialFormValues = (fields: JsonRenderFormField[]): Record<string, string> =>
-  Object.fromEntries(
-    fields.map((field) => [
-      field.name,
-      field.defaultValue ??
-        (field.type === 'select' && field.options?.length ? field.options[0].value : ''),
-    ])
-  )
+  Object.fromEntries(fields.map((field) => [field.name, field.defaultValue ?? '']))
 
 const renderFormPrompt = (template: string, values: Record<string, string>): string =>
   template.replace(/\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/gu, (_, name: string) => values[name] ?? '')
@@ -550,6 +545,10 @@ const FormView = ({
       onSubmit={(event) => {
         event.preventDefault()
         if (!context.interactive) {
+          return
+        }
+        if (node.fields.some((field) => field.required && !(values[field.name] ?? '').trim())) {
+          showToast({ key: 'jsonRenderFormRequired' })
           return
         }
         const prompt = renderFormPrompt(node.promptTemplate, values)
@@ -576,25 +575,21 @@ const FormView = ({
                 </div>
               ) : null}
               {field.type === 'select' ? (
-                <select
-                  className={styles.formControl}
+                <Select
                   id={fieldId}
                   value={values[field.name] ?? ''}
+                  options={field.options ?? []}
+                  placeholder={t('jsonRenderFormSelectPlaceholder')}
+                  ariaLabel={field.label}
+                  ariaDescribedby={descriptionId}
+                  disabled={!context.interactive}
                   required={field.required}
-                  aria-describedby={descriptionId}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                  block
+                  variant="field"
+                  onChange={(value) =>
+                    setValues((current) => ({ ...current, [field.name]: value }))
                   }
-                >
-                  {!field.required && !field.options?.some((option) => option.value === '') ? (
-                    <option value="">{t('jsonRenderFormSelectPlaceholder')}</option>
-                  ) : null}
-                  {field.options?.map((option) => (
-                    <option value={option.value} key={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                />
               ) : field.type === 'textarea' ? (
                 <textarea
                   className={clsx(styles.formControl, styles.formTextarea)}

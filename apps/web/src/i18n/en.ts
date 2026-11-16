@@ -68,6 +68,7 @@ export const en = {
   jsonRenderChart: 'Chart',
   jsonRenderImageUnavailable: 'Unable to load this image.',
   jsonRenderFormSelectPlaceholder: 'Select an option',
+  jsonRenderFormRequired: 'Complete the required fields before submitting.',
   jsonRenderFormSubmitFailed: 'Unable to submit this form. Please try again.',
   jsonRenderStepPending: 'Pending',
   jsonRenderStepActive: 'In progress',

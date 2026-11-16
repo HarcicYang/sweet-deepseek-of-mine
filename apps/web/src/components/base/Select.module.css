@@ -41,6 +41,28 @@
   }
 }
 
+.triggerField {
+  height: var(--ds-control-height-m);
+  padding: 0 38px 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+
+  &:hover:not(:disabled) {
+    border-color: var(--dsw-alias-border-l3);
+    background: var(--dsw-alias-bg-base);
+  }
+
+  &:focus-visible {
+    border-color: var(--dsw-alias-brand-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+  }
+}
+
+.block {
+  width: 100%;
+}
+
 .open {
   color: var(--dsw-alias-label-tertiary);
 }
@@ -75,6 +97,11 @@
     0 0 1px 0 rgba(0, 0, 0, 0.2),
     0 0 4px 0 rgba(0, 0, 0, 0.02),
     0 12px 32px 0 rgba(0, 0, 0, 0.08);
+}
+
+.menuField {
+  min-width: 0;
+  max-width: calc(100vw - 16px);
 }
 
 .option {
