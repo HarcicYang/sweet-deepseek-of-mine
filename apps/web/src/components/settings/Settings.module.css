@@ -94,6 +94,20 @@
   color: var(--dsw-alias-label-caption);
 }
 
+.mcpOAuthConnected,
+.mcpOAuthPending {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.mcpOAuthConnected {
+  color: var(--dsw-static-green-500);
+}
+
+.mcpOAuthPending {
+  color: var(--dsw-static-amber-500);
+}
+
 .mcpServerUrl,
 .mcpHeaderNames,
 .mcpServerStatus {

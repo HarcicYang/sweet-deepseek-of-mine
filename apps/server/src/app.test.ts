@@ -6,6 +6,7 @@ import { MemoryAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { McpApprovalRequiredError, type McpClient } from './mcp-client.js'
 import { MemoryMcpStore } from './mcp-store.js'
+import { MemoryMcpOAuthStore } from './mcp-oauth-store.js'
 import { createSecurityService } from './security.js'
 import { MemoryShareStore } from './share-store.js'
 import { MemorySyncStore } from './sync-store.js'
@@ -22,12 +23,15 @@ const cookieValue = (setCookie: string | null, name: string): string | null => {
   return match?.[1] ?? null
 }
 
-const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
+const createTestApp = async (
+  options: { allowedOrigins?: string[]; mcpClient?: McpClient } = {}
+) => {
   const security = await createSecurityService(MASTER_KEY)
   const store = new MemoryAccountStore()
   const syncStore = new MemorySyncStore()
   const mcpStore = new MemoryMcpStore()
-  const mcpClient: McpClient = {
+  const mcpOAuthStore = new MemoryMcpOAuthStore()
+  const defaultMcpClient: McpClient = {
     probe: async () => ({
       ok: true,
       server: { name: 'test-mcp', version: '1.0.0' },
@@ -56,7 +60,10 @@ const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
         isError: false,
       }
     },
+    beginOAuth: async () => 'REDIRECT',
+    completeOAuth: async () => undefined,
   }
+  const mcpClient = options.mcpClient ?? defaultMcpClient
   const calls: Array<{ url: string; init?: RequestInit; body?: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (input, init) => {
     const url =
@@ -112,6 +119,7 @@ const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
     syncStore,
     shareStore: new MemoryShareStore(),
     mcpStore,
+    mcpOAuthStore,
     mcpClient,
     security,
     appOrigin: APP_ORIGIN,
@@ -125,7 +133,7 @@ const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
     allowedOrigins: options.allowedOrigins,
     fetchImpl,
   })
-  return { app, calls, syncStore, mcpStore, mcpClient, security, store }
+  return { app, calls, syncStore, mcpStore, mcpOAuthStore, mcpClient, security, store }
 }
 
 const authenticate = async (app: Awaited<ReturnType<typeof createTestApp>>['app']) => {
@@ -346,6 +354,112 @@ test('MCP servers are private per user and keep request headers encrypted', asyn
     { method: 'POST', headers: secondHeaders }
   )
   assert.equal(secondProbe.status, 404)
+})
+
+test('MCP OAuth start and callback persist an account-scoped authorization state', async () => {
+  let seenClientId: string | undefined
+  const oauthClient: McpClient = {
+    probe: async () => ({
+      ok: true,
+      server: { name: 'oauth-mcp', version: '1.0.0' },
+      tools: [
+        {
+          name: 'lookup',
+          description: 'Look up',
+          inputSchema: { type: 'object' },
+          readOnly: true,
+        },
+      ],
+      durationMs: 1,
+    }),
+    callTool: async () => ({ content: [{ type: 'text', text: 'ok' }], isError: false }),
+    beginOAuth: async (_config, provider) => {
+      seenClientId = (await provider.clientInformation())?.client_id
+      const state = await provider.state?.()
+      provider.redirectToAuthorization(
+        new URL(`https://auth.example.test/authorize?state=${encodeURIComponent(state ?? '')}`)
+      )
+      return 'REDIRECT'
+    },
+    completeOAuth: async () => undefined,
+  }
+  const { app, mcpOAuthStore, security, store } = await createTestApp({
+    mcpClient: oauthClient,
+  })
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const created = await app.request(`${APP_ORIGIN}${apiRoutes.mcpServers}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: 'OAuth MCP',
+      slug: 'oauth',
+      url: 'https://mcp.example.test/mcp',
+      authMode: 'oauth',
+      oauthClientId: 'oauth-client-id',
+      oauthClientSecret: 'oauth-client-secret',
+      enabled: true,
+    }),
+  })
+  assert.equal(created.status, 201)
+  const createdBody = (await created.json()) as {
+    server: {
+      id: string
+      authMode: string
+      oauthConnected: boolean
+      oauthClientId: string | null
+      oauthClientSecretConfigured: boolean
+    }
+  }
+  assert.equal(createdBody.server.authMode, 'oauth')
+  assert.equal(createdBody.server.oauthConnected, false)
+  assert.equal(createdBody.server.oauthClientId, 'oauth-client-id')
+  assert.equal(createdBody.server.oauthClientSecretConfigured, true)
+  assert.doesNotMatch(JSON.stringify(createdBody), /oauth-client-secret/u)
+
+  const started = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpServerOAuthStart.replace(':serverId', createdBody.server.id)}`,
+    { method: 'POST', headers }
+  )
+  assert.equal(started.status, 200)
+  const startedBody = (await started.json()) as { authorizationUrl: string }
+  const state = new URL(startedBody.authorizationUrl).searchParams.get('state')
+  assert.ok(state)
+  assert.equal(seenClientId, 'oauth-client-id')
+  const pending = await mcpOAuthStore.findByState(state)
+  assert.ok(pending)
+  assert.equal(pending.userId, (await store.findUserById(pending.userId))?.id)
+
+  const callback = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpOAuthCallback}?state=${encodeURIComponent(state)}&code=code-1`,
+    { headers }
+  )
+  assert.equal(callback.status, 200)
+  assert.match(await callback.text(), /MCP authorization completed/u)
+  const connected = await mcpOAuthStore.find(pending.userId, createdBody.server.id)
+  assert.equal(connected?.connected, true)
+
+  const listed = await app.request(`${APP_ORIGIN}${apiRoutes.mcpServers}`, { headers })
+  assert.equal(listed.status, 200)
+  const listedBody = (await listed.json()) as {
+    servers: Array<{ id: string; oauthConnected: boolean }>
+  }
+  assert.equal(listedBody.servers[0]?.oauthConnected, true)
+
+  const second = await authenticateTestUser(store, security, {
+    githubId: 'oauth-second',
+    githubLogin: 'oauth-second',
+  })
+  const wrongUserCallback = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpOAuthCallback}?state=${encodeURIComponent(security.createToken())}&code=code-1`,
+    { headers: { Cookie: `sdom_session=${second.token}` } }
+  )
+  assert.equal(wrongUserCallback.status, 200)
+  assert.match(await wrongUserCallback.text(), /invalid or expired/u)
 })
 
 test('API key storage and DeepSeek proxies keep credentials on the server', async () => {

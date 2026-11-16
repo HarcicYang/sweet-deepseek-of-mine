@@ -1,14 +1,17 @@
-import type { McpServerSummary } from '@sweet-deepseek/contracts/mcp'
+import type { McpAuthMode, McpServerSummary } from '@sweet-deepseek/contracts/mcp'
 import { useEffect, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
   createMcpServer,
   deleteMcpServer,
+  disconnectMcpOAuth,
   listMcpServers,
   probeMcpServer,
+  startMcpOAuth,
   updateMcpServer,
 } from '../../services/api/client.js'
 import { Button } from '../base/Button.js'
+import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
 import styles from './Settings.module.css'
 
@@ -17,6 +20,9 @@ type Draft = {
   name: string
   slug: string
   url: string
+  authMode: McpAuthMode
+  oauthClientId: string
+  oauthClientSecret: string
   headers: string
   enabled: boolean
 }
@@ -26,6 +32,9 @@ const emptyDraft = (): Draft => ({
   name: '',
   slug: '',
   url: '',
+  authMode: 'static',
+  oauthClientId: '',
+  oauthClientSecret: '',
   headers: '',
   enabled: true,
 })
@@ -61,6 +70,7 @@ export const McpServersSettings = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
+  const [oauthBusyId, setOauthBusyId] = useState<string | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [status, setStatus] = useState<Record<string, string>>({})
 
@@ -78,6 +88,44 @@ export const McpServersSettings = () => {
   useEffect(() => {
     void load()
   }, [])
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (event.origin !== window.location.origin) {
+        return
+      }
+      const data = event.data
+      if (data === null || typeof data !== 'object') {
+        return
+      }
+      const message = data as Record<string, unknown>
+      if (
+        message.type !== 'sdom:mcp-oauth' ||
+        typeof message.serverId !== 'string' ||
+        typeof message.ok !== 'boolean'
+      ) {
+        return
+      }
+      const { serverId, ok } = message
+      setOauthBusyId(null)
+      if (!ok) {
+        setStatus((current) => ({
+          ...current,
+          [serverId]: t('mcpOAuthFailed'),
+        }))
+        return
+      }
+      setStatus((current) => ({
+        ...current,
+        [serverId]: t('mcpOAuthConnected'),
+      }))
+      void listMcpServers()
+        .then(setServers)
+        .catch(() => undefined)
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [t])
 
   const save = async () => {
     if (saving) {
@@ -97,6 +145,11 @@ export const McpServersSettings = () => {
           name: draft.name.trim(),
           slug: draft.slug.trim(),
           url: draft.url.trim(),
+          authMode: draft.authMode,
+          ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
+          ...(draft.oauthClientSecret.trim()
+            ? { oauthClientSecret: draft.oauthClientSecret.trim() }
+            : {}),
           enabled: draft.enabled,
           ...(draft.headers.trim() ? { headers } : {}),
         })
@@ -105,6 +158,11 @@ export const McpServersSettings = () => {
           name: draft.name.trim(),
           slug: draft.slug.trim(),
           url: draft.url.trim(),
+          authMode: draft.authMode,
+          ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
+          ...(draft.oauthClientSecret.trim()
+            ? { oauthClientSecret: draft.oauthClientSecret.trim() }
+            : {}),
           headers,
           enabled: draft.enabled,
         })
@@ -151,6 +209,54 @@ export const McpServersSettings = () => {
     }
   }
 
+  const authorize = async (server: McpServerSummary) => {
+    if (oauthBusyId) {
+      return
+    }
+    const popup = window.open('about:blank', 'sdom-mcp-oauth', 'popup,width=560,height=720')
+    if (!popup) {
+      showToast({ key: 'mcpOAuthPopupBlocked', type: 'error' })
+      return
+    }
+    setOauthBusyId(server.id)
+    window.setTimeout(
+      () => {
+        setOauthBusyId((current) => (current === server.id ? null : current))
+      },
+      5 * 60 * 1000
+    )
+    setStatus((current) => ({
+      ...current,
+      [server.id]: t('mcpOAuthWaiting'),
+    }))
+    try {
+      const result = await startMcpOAuth(server.id)
+      popup.location.href = result.authorizationUrl
+    } catch (error) {
+      popup.close()
+      setOauthBusyId(null)
+      setStatus((current) => ({
+        ...current,
+        [server.id]: t('mcpOAuthStartFailed', {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      }))
+    }
+  }
+
+  const disconnectOAuth = async (server: McpServerSummary) => {
+    try {
+      await disconnectMcpOAuth(server.id)
+      await load()
+      setStatus((current) => ({
+        ...current,
+        [server.id]: t('mcpOAuthDisconnected'),
+      }))
+    } catch {
+      showToast({ key: 'mcpOAuthDisconnectFailed', type: 'error' })
+    }
+  }
+
   const remove = async (server: McpServerSummary) => {
     try {
       await deleteMcpServer(server.id)
@@ -163,6 +269,8 @@ export const McpServersSettings = () => {
       showToast({ key: 'mcpServerDeleteFailed', type: 'error' })
     }
   }
+
+  const editingServer = draft.id ? servers.find((server) => server.id === draft.id) : undefined
 
   return (
     <div className={styles.mcpSettings}>
@@ -183,8 +291,22 @@ export const McpServersSettings = () => {
                 <span className={server.enabled ? styles.mcpEnabled : styles.mcpDisabled}>
                   {t(server.enabled ? 'mcpServerEnabled' : 'mcpServerDisabled')}
                 </span>
+                {server.authMode === 'oauth' ? (
+                  <span
+                    className={
+                      server.oauthConnected ? styles.mcpOAuthConnected : styles.mcpOAuthPending
+                    }
+                  >
+                    {t(server.oauthConnected ? 'mcpOAuthConnectedBadge' : 'mcpOAuthNotConnected')}
+                  </span>
+                ) : null}
               </div>
               <div className={styles.mcpServerUrl}>{server.url}</div>
+              {server.authMode === 'oauth' && server.oauthClientId ? (
+                <div className={styles.mcpHeaderNames}>
+                  {t('mcpOAuthClientIdValue', { clientId: server.oauthClientId })}
+                </div>
+              ) : null}
               {server.headerNames.length > 0 ? (
                 <div className={styles.mcpHeaderNames}>
                   {t('mcpServerHeaderNames', { names: server.headerNames.join(', ') })}
@@ -203,6 +325,33 @@ export const McpServersSettings = () => {
               >
                 {t(testingId === server.id ? 'mcpServerTesting' : 'mcpServerTest')}
               </Button>
+              {server.authMode === 'oauth' ? (
+                <>
+                  <Button
+                    size="s"
+                    variant="outlined"
+                    disabled={oauthBusyId !== null}
+                    onClick={() => void authorize(server)}
+                  >
+                    {t(
+                      oauthBusyId === server.id
+                        ? 'mcpOAuthAuthorizing'
+                        : server.oauthConnected
+                          ? 'mcpOAuthReauthorize'
+                          : 'mcpOAuthAuthorize'
+                    )}
+                  </Button>
+                  {server.oauthConnected ? (
+                    <Button
+                      size="s"
+                      variant="outlined"
+                      onClick={() => void disconnectOAuth(server)}
+                    >
+                      {t('mcpOAuthDisconnect')}
+                    </Button>
+                  ) : null}
+                </>
+              ) : null}
               <Button
                 size="s"
                 variant="outlined"
@@ -212,6 +361,9 @@ export const McpServersSettings = () => {
                     name: server.name,
                     slug: server.slug,
                     url: server.url,
+                    authMode: server.authMode,
+                    oauthClientId: server.oauthClientId ?? '',
+                    oauthClientSecret: '',
                     headers: '',
                     enabled: server.enabled,
                   })
@@ -281,6 +433,58 @@ export const McpServersSettings = () => {
           />
           <small>{t('mcpServerSlugDescription')}</small>
         </label>
+        <div className={styles.mcpField}>
+          <span>{t('mcpAuthMode')}</span>
+          <Select
+            value={draft.authMode}
+            options={[
+              { value: 'static', label: t('mcpAuthModeStatic') },
+              { value: 'oauth', label: t('mcpAuthModeOAuth') },
+            ]}
+            onChange={(authMode) => setDraft((current) => ({ ...current, authMode }))}
+            variant="field"
+            block
+            ariaLabel={t('mcpAuthMode')}
+          />
+        </div>
+        {draft.authMode === 'oauth' ? (
+          <>
+            <label className={styles.mcpField}>
+              <span>{t('mcpOAuthClientId')}</span>
+              <input
+                value={draft.oauthClientId}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    oauthClientId: event.target.value,
+                  }))
+                }
+                placeholder={t('mcpOAuthClientIdPlaceholder')}
+              />
+              <small>{t('mcpOAuthClientIdDescription')}</small>
+            </label>
+            <label className={styles.mcpField}>
+              <span>{t('mcpOAuthClientSecret')}</span>
+              <input
+                type="password"
+                value={draft.oauthClientSecret}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    oauthClientSecret: event.target.value,
+                  }))
+                }
+                autoComplete="new-password"
+                placeholder={t(
+                  editingServer?.oauthClientSecretConfigured
+                    ? 'mcpOAuthClientSecretKeepPlaceholder'
+                    : 'mcpOAuthClientSecretPlaceholder'
+                )}
+              />
+              <small>{t('mcpOAuthClientSecretDescription')}</small>
+            </label>
+          </>
+        ) : null}
         <label className={styles.mcpField}>
           <span>{t('mcpServerUrl')}</span>
           <input

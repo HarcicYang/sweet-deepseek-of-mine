@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { McpAuthMode } from '@sweet-deepseek/contracts/mcp'
 import type { EncryptedValue } from './security.js'
 
 export type McpServerRecord = {
@@ -8,6 +9,9 @@ export type McpServerRecord = {
   name: string
   slug: string
   url: string
+  authMode: McpAuthMode
+  oauthClientId: string | null
+  encryptedOAuthClientSecret: EncryptedValue | null
   enabled: boolean
   encryptedHeaders: EncryptedValue | null
   createdAt: string
@@ -20,6 +24,9 @@ export type McpServerCreate = {
   name: string
   slug: string
   url: string
+  authMode: McpAuthMode
+  oauthClientId: string | null
+  encryptedOAuthClientSecret: EncryptedValue | null
   enabled: boolean
   encryptedHeaders: EncryptedValue | null
 }
@@ -28,6 +35,9 @@ export type McpServerUpdate = {
   name?: string
   slug?: string
   url?: string
+  authMode?: McpAuthMode
+  oauthClientId?: string | null
+  encryptedOAuthClientSecret?: EncryptedValue | null
   enabled?: boolean
   encryptedHeaders?: EncryptedValue | null
 }
@@ -91,6 +101,9 @@ export class MemoryMcpStore implements McpStore {
       name: input.name,
       slug: input.slug,
       url: input.url,
+      authMode: input.authMode,
+      oauthClientId: input.oauthClientId,
+      encryptedOAuthClientSecret: input.encryptedOAuthClientSecret,
       enabled: input.enabled,
       encryptedHeaders: input.encryptedHeaders,
       createdAt: now,
@@ -162,6 +175,12 @@ export class FileMcpStore implements McpStore {
         throw new Error('Unsupported MCP database format')
       }
       this.database = parsed as McpDatabase
+      this.database.servers = this.database.servers.map((server) => ({
+        ...server,
+        authMode: server.authMode === 'oauth' ? 'oauth' : 'static',
+        oauthClientId: server.oauthClientId ?? null,
+        encryptedOAuthClientSecret: server.encryptedOAuthClientSecret ?? null,
+      }))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error
@@ -209,6 +228,9 @@ export class FileMcpStore implements McpStore {
         name: input.name,
         slug: input.slug,
         url: input.url,
+        authMode: input.authMode,
+        oauthClientId: input.oauthClientId,
+        encryptedOAuthClientSecret: input.encryptedOAuthClientSecret,
         enabled: input.enabled,
         encryptedHeaders: input.encryptedHeaders,
         createdAt: now,

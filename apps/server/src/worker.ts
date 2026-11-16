@@ -2,6 +2,7 @@ import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import { createApp } from './app.js'
 import { D1AccountStore } from './d1-account-store.js'
 import { D1McpStore } from './d1-mcp-store.js'
+import { D1McpOAuthStore } from './d1-mcp-oauth-store.js'
 import { D1ShareStore } from './d1-share-store.js'
 import { D1SyncStore } from './d1-sync-store.js'
 import { createMcpClient } from './mcp-client.js'
@@ -55,6 +56,7 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
       syncStore: new D1SyncStore(env.DB),
       shareStore: new D1ShareStore(env.DB),
       mcpStore: new D1McpStore(env.DB),
+      mcpOAuthStore: new D1McpOAuthStore(env.DB),
       mcpClient: createMcpClient(),
       security,
       appOrigin: origin,

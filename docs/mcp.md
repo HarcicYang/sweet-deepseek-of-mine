@@ -19,11 +19,31 @@
 - `PUT /api/mcp/servers/:serverId`：更新服务；省略 `headers` 时保留原请求头。
 - `DELETE /api/mcp/servers/:serverId`：删除服务。
 - `POST /api/mcp/servers/:serverId/probe`：连接、读取服务信息并发现工具。
+- `POST /api/mcp/servers/:serverId/oauth/start`：启动 OAuth 授权并返回授权地址。
+- `POST /api/mcp/servers/:serverId/oauth/disconnect`：清除该服务的 OAuth 授权。
+- `GET /api/mcp/oauth/callback`：接收授权码并交换 token。
 - `GET /api/mcp/tools`：汇总当前账号所有已启用服务的工具。
 - `POST /api/mcp/call`：执行一个经过确认的 MCP 工具。
 
 `probe` 的失败作为 `{ "ok": false, "stage": "connect" | "list", ... }` 返回，
 不会让设置页把超时和空工具列表混为一谈。
+
+## OAuth
+
+每个 MCP 服务可以选择静态请求头或 OAuth 授权：
+
+- OAuth 使用 MCP SDK 的 `OAuthClientProvider`、RFC 9728 资源元数据发现、PKCE 和动态客户端注册。
+- 状态、client information、code verifier、discovery state、access token 和 refresh token 全部
+  加密保存在 `mcp_oauth`，并绑定用户 ID 与服务器 ID。
+- 设置页在用户点击授权后打开独立窗口。后端返回授权地址，授权服务器回调到
+  `/api/mcp/oauth/callback`。
+- 回调必须同时匹配登录会话和一次性 `state`；成功后轮换 `state`，旧回调不能重放。
+- 后续请求由 SDK 自动附带 Bearer token，并在过期时尝试 refresh token。
+- 如果服务不支持动态客户端注册，可以在 MCP 服务设置中填写预注册的 Client ID 和
+  Client Secret。Client Secret 与 token 分开加密保存。
+- GitHub Copilot MCP 会发布标准 protected-resource metadata，但 GitHub 不提供动态客户端注册。
+  使用时需要单独创建 GitHub OAuth App，并把回调地址配置为
+  `https://<你的域名>/api/mcp/oauth/callback`，然后填写其 Client ID / Client Secret。
 
 ## 模型工具循环
 
@@ -62,7 +82,6 @@ MCP 工具不是单独页面或单独聊天模式，而是和 `deepseek_web_sear
 - 支持工具发现和工具调用，不支持 MCP prompts/resources。
 - 工具结果目前只把文本投影到模型上下文；图片、音频和嵌入资源会以诊断文本代替。
 - 连接按探测或调用请求建立，Workers 不依赖持久连接、Durable Objects 或队列。
-- 尚未实现 MCP OAuth 交互流程；当前可在请求头中配置静态凭据。
 
 ## 归属
 

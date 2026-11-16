@@ -29,6 +29,7 @@ Node adapter 使用 `.data/` 下的文件存储，适合单实例自托管。复
 - `COOKIE_SECURE`：HTTPS 部署必须为 `true`。
 - `COOKIE_SAME_SITE`：同站使用 `lax`；独立站点的跨站前端使用 `none`，并必须启用 HTTPS。
 - `MCP_ALLOW_PRIVATE_NETWORK`：默认 `false`；单用户本地部署需要访问局域网 MCP 时才设为 `true`。
+- `MCP_OAUTH_DB_PATH`：Node 自托管时 OAuth 状态与 token 的加密存储文件路径。
 
 推荐生产环境在 Node 服务前方使用反向代理，把前端静态资源和 `/api` 合并为同源部署。
 
@@ -49,7 +50,8 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    pnpm worker:migrate:remote
    ```
 
-   该命令会应用 `0001`–`0003`，其中 `0003_mcp_servers.sql` 创建账号级 MCP 服务表。
+   该命令会应用 `0001`–`0004`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式、
+   预注册 OAuth client 字段和加密 OAuth 状态/token 存储。
 
 3. 创建生产环境使用的 GitHub OAuth App：
    - 打开 GitHub 的 `Settings → Developer settings → OAuth Apps → New OAuth App`。
@@ -99,5 +101,6 @@ Worker 默认同时提供 `apps/web/dist` 和 `/api`，这是最简单的单服�
 
 - 账号、设置、会话元数据和会话快照位于后端存储。
 - MCP 服务地址按账号保存，请求头使用服务端主密钥加密；浏览器只读取请求头名称。
+- MCP OAuth 的 client information、PKCE verifier、discovery state 和 token 同样由服务端加密保存。
 - 附件元数据随会话同步，附件原件目前只保存在设备本地。
 - API Key 只保存服务端加密密文，不进入浏览器持久化。

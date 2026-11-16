@@ -3,6 +3,8 @@ import { z } from 'zod'
 export const MCP_SERVER_SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/u
 export const MCP_PUBLIC_TOOL_NAME_MAX_LENGTH = 64
 
+export const McpAuthModeSchema = z.enum(['static', 'oauth'])
+
 const HeaderNameSchema = z
   .string()
   .trim()
@@ -39,6 +41,9 @@ export const McpServerInputSchema = z
     slug: z.string().regex(MCP_SERVER_SLUG_PATTERN),
     url: z.string().trim().url().max(2048),
     headers: McpHeadersSchema.optional(),
+    authMode: McpAuthModeSchema.default('static'),
+    oauthClientId: z.string().trim().min(1).max(512).optional(),
+    oauthClientSecret: z.string().max(16_384).optional(),
     enabled: z.boolean(),
   })
   .strict()
@@ -54,6 +59,10 @@ export const McpServerSummarySchema = z
     name: z.string().min(1),
     slug: z.string().regex(MCP_SERVER_SLUG_PATTERN),
     url: z.string().url(),
+    authMode: McpAuthModeSchema,
+    oauthConnected: z.boolean(),
+    oauthClientId: z.string().nullable(),
+    oauthClientSecretConfigured: z.boolean(),
     enabled: z.boolean(),
     headerNames: z.array(HeaderNameSchema),
     createdAt: z.string(),
@@ -139,7 +148,14 @@ export const McpToolCallResponseSchema = z
   })
   .strict()
 
+export const McpOAuthStartResponseSchema = z
+  .object({
+    authorizationUrl: z.string().url(),
+  })
+  .strict()
+
 export type McpHeaders = z.infer<typeof McpHeadersSchema>
+export type McpAuthMode = z.infer<typeof McpAuthModeSchema>
 export type McpServerInput = z.infer<typeof McpServerInputSchema>
 export type McpServerUpdate = z.infer<typeof McpServerUpdateSchema>
 export type McpServerSummary = z.infer<typeof McpServerSummarySchema>
@@ -147,3 +163,4 @@ export type McpToolSummary = z.infer<typeof McpToolSummarySchema>
 export type McpProbeResponse = z.infer<typeof McpProbeResponseSchema>
 export type McpToolCallRequest = z.infer<typeof McpToolCallRequestSchema>
 export type McpToolCallResponse = z.infer<typeof McpToolCallResponseSchema>
+export type McpOAuthStartResponse = z.infer<typeof McpOAuthStartResponseSchema>

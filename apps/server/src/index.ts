@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FileAccountStore } from './account-store.js'
 import { createApp } from './app.js'
+import { FileMcpOAuthStore } from './mcp-oauth-store.js'
 import { FileMcpStore } from './mcp-store.js'
 import { createMcpClient } from './mcp-client.js'
 import { createSecurityService } from './security.js'
@@ -57,11 +58,15 @@ const shareStore = new FileShareStore(
 const mcpStore = new FileMcpStore(
   path.resolve(repositoryRoot, process.env.MCP_DB_PATH ?? '.data/mcp.json')
 )
+const mcpOAuthStore = new FileMcpOAuthStore(
+  path.resolve(repositoryRoot, process.env.MCP_OAUTH_DB_PATH ?? '.data/mcp-oauth.json')
+)
 const app = createApp({
   store,
   syncStore,
   shareStore,
   mcpStore,
+  mcpOAuthStore,
   mcpClient: createMcpClient(),
   security,
   appOrigin: origin,

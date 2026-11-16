@@ -47,6 +47,8 @@ declare const styles: {
   readonly mcpSlug: string
   readonly mcpEnabled: string
   readonly mcpDisabled: string
+  readonly mcpOAuthConnected: string
+  readonly mcpOAuthPending: string
   readonly mcpServerUrl: string
   readonly mcpHeaderNames: string
   readonly mcpServerStatus: string

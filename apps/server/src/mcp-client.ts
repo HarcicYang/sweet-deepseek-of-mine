@@ -1,4 +1,11 @@
-import { Client, StreamableHTTPClientTransport, type FetchLike } from '@modelcontextprotocol/client'
+import {
+  auth,
+  Client,
+  StreamableHTTPClientTransport,
+  type AuthResult,
+  type FetchLike,
+  type OAuthClientProvider,
+} from '@modelcontextprotocol/client'
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 15_000
 const DEFAULT_CALL_TIMEOUT_MS = 60_000
@@ -7,6 +14,7 @@ const MAX_RESULT_TEXT_LENGTH = 1_000_000
 export type McpConnectionConfig = {
   url: string
   headers: Record<string, string>
+  authProvider?: OAuthClientProvider
 }
 
 export type McpRemoteTool = {
@@ -63,6 +71,17 @@ export type McpClient = {
     approved: boolean,
     signal?: AbortSignal
   ) => Promise<McpToolCallResult>
+  beginOAuth: (
+    config: McpConnectionConfig,
+    provider: OAuthClientProvider,
+    signal?: AbortSignal
+  ) => Promise<AuthResult>
+  completeOAuth: (
+    config: McpConnectionConfig,
+    provider: OAuthClientProvider,
+    callbackParams: URLSearchParams,
+    signal?: AbortSignal
+  ) => Promise<void>
 }
 
 export type McpClientOptions = {
@@ -94,6 +113,14 @@ const createSignal = (signal: AbortSignal | undefined, timeoutMs: number): Abort
   signal
     ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
     : AbortSignal.timeout(timeoutMs)
+
+const fetchWithSignal =
+  (fetchImpl: FetchLike, signal: AbortSignal): FetchLike =>
+  async (input, init) =>
+    await fetchImpl(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
+    })
 
 const readTools = (tools: readonly unknown[]): McpRemoteTool[] =>
   tools.map((value) => {
@@ -153,6 +180,7 @@ const connect = async (
     // Workers only supports follow/manual; manual keeps redirects from becoming an SSRF path.
     requestInit: { headers: config.headers, redirect: 'manual' },
     fetch: fetchImpl,
+    ...(config.authProvider === undefined ? {} : { authProvider: config.authProvider }),
   })
   try {
     await client.connect(transport, { signal })
@@ -240,5 +268,28 @@ export const createMcpClient = ({ fetchImpl = fetch }: McpClientOptions = {}): M
         await closeConnection(connection.client, connection.transport)
       }
     }
+  },
+  beginOAuth: async (config, provider, signal) => {
+    const operationSignal = createSignal(signal, DEFAULT_STARTUP_TIMEOUT_MS)
+    return await auth(provider, {
+      serverUrl: config.url,
+      fetchFn: fetchWithSignal(fetchImpl, operationSignal),
+      forceReauthorization: true,
+    })
+  },
+  completeOAuth: async (config, provider, callbackParams, signal) => {
+    const operationSignal = createSignal(signal, DEFAULT_STARTUP_TIMEOUT_MS)
+    const code = callbackParams.get('code')
+    if (!code) {
+      throw new Error('MCP OAuth callback is missing a code')
+    }
+    await auth(provider, {
+      serverUrl: config.url,
+      authorizationCode: code,
+      ...(callbackParams.get('iss') === null
+        ? {}
+        : { iss: callbackParams.get('iss') ?? undefined }),
+      fetchFn: fetchWithSignal(fetchImpl, operationSignal),
+    })
   },
 })

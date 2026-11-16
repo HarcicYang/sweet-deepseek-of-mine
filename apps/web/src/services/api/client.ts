@@ -33,11 +33,13 @@ import {
 } from '@sweet-deepseek/contracts/share'
 import {
   McpProbeResponseSchema,
+  McpOAuthStartResponseSchema,
   McpServerResponseSchema,
   McpServersResponseSchema,
   McpToolCallResponseSchema,
   McpToolsResponseSchema,
   type McpProbeResponse,
+  type McpOAuthStartResponse,
   type McpServerInput,
   type McpServerSummary,
   type McpServerUpdate,
@@ -261,6 +263,21 @@ export const probeMcpServer = async (serverId: string): Promise<McpProbeResponse
     { method: 'POST' }
   )
   return parseResponse(McpProbeResponseSchema, await response.json())
+}
+
+export const startMcpOAuth = async (serverId: string): Promise<McpOAuthStartResponse> => {
+  const response = await request(
+    apiRoutes.mcpServerOAuthStart.replace(':serverId', encodeURIComponent(serverId)),
+    { method: 'POST' }
+  )
+  return parseResponse(McpOAuthStartResponseSchema, await response.json())
+}
+
+export const disconnectMcpOAuth = async (serverId: string): Promise<void> => {
+  await request(
+    apiRoutes.mcpServerOAuthDisconnect.replace(':serverId', encodeURIComponent(serverId)),
+    { method: 'POST' }
+  )
 }
 
 export const listMcpTools = async (signal?: AbortSignal): Promise<McpToolSummary[]> => {
