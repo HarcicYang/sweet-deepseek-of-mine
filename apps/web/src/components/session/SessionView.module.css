@@ -51,11 +51,11 @@
   width: calc(var(--message-list-max-width) - 64px);
   max-width: calc(100% - 32px);
   margin: auto auto 0;
+  padding-top: 14px;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    transparent 30%,
-    var(--dsw-alias-bg-base) 30%,
+    var(--dsw-alias-bg-base) 20px,
     var(--dsw-alias-bg-base) 100%
   );
 }
@@ -76,6 +76,7 @@
     bottom: auto;
     flex-shrink: 0;
     margin: 0 auto;
+    padding-top: 12px;
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
