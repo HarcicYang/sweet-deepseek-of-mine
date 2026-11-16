@@ -7,6 +7,7 @@ import { createMcpClient, McpApprovalRequiredError } from './mcp-client.js'
 
 test('MCP client discovers and calls tools through Streamable HTTP', async () => {
   let authorization: string | null | undefined
+  let redirectMode: RequestRedirect | undefined
   const handler = createMcpHandler((context) => {
     authorization ??= context.requestInfo?.headers.get('authorization')
     const server = new McpServer({ name: 'test-mcp', version: '1.0.0' })
@@ -34,6 +35,7 @@ test('MCP client discovers and calls tools through Streamable HTTP', async () =>
     return server
   })
   const fetchImpl: FetchLike = async (input, init) => {
+    redirectMode ??= init?.redirect
     const request = new Request(String(input), init)
     return await handler.fetch(request)
   }
@@ -56,6 +58,7 @@ test('MCP client discovers and calls tools through Streamable HTTP', async () =>
       ]
     )
     assert.equal(authorization, 'Bearer test-secret')
+    assert.equal(redirectMode, 'manual')
 
     const result = await client.callTool(
       { url: 'https://mcp.example.test/mcp', headers: {} },

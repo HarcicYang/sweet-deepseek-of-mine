@@ -150,7 +150,8 @@ const connect = async (
     { capabilities: {}, versionNegotiation: { mode: 'auto' } }
   )
   const transport = new StreamableHTTPClientTransport(new URL(config.url), {
-    requestInit: { headers: config.headers, redirect: 'error' },
+    // Workers only supports follow/manual; manual keeps redirects from becoming an SSRF path.
+    requestInit: { headers: config.headers, redirect: 'manual' },
     fetch: fetchImpl,
   })
   try {
