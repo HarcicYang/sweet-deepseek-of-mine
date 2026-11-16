@@ -1,4 +1,6 @@
 .ds-markdown {
+  min-width: 0;
+  max-width: 100%;
   font: var(--dsw-font-markdown-base);
   color: var(--dsw-alias-label-primary);
 }
@@ -201,13 +203,38 @@
   }
 }
 
+.ds-markdown-inline-math {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.ds-markdown-inline-math > .katex {
+  display: inline-block;
+}
+
 .ds-markdown-math.katex-display {
   display: block;
+  box-sizing: border-box;
+  width: 100%;
   text-align: center;
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
   padding: 4px;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.ds-markdown-math.katex-display > .katex {
+  display: block;
+  width: max-content;
+  min-width: 100%;
 }
 
 .ds-markdown > * .ds-markdown-math {

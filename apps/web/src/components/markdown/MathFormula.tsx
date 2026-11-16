@@ -63,5 +63,9 @@ export const InlineMath = memo(function InlineMath({ value }: { value: string })
   if (renderMode === 'fallback') {
     return html
   }
-  return <span className="katex" dangerouslySetInnerHTML={{ __html: html }}></span>
+  return (
+    <span className="ds-markdown-inline-math">
+      <span className="katex" dangerouslySetInnerHTML={{ __html: html }}></span>
+    </span>
+  )
 })
