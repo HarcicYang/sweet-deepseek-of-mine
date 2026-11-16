@@ -183,6 +183,10 @@ export const en = {
     'Edit SKILL.md and text resources. Import a single file, a directory ZIP, or a complete skill bundle. Scripts are readable as text and never execute in Workers.',
   skillSaving: 'Saving...',
   skillSaved: 'Skill saved',
+  skillUnsupportedFrontmatterKeys:
+    'Skill saved. These frontmatter fields are not currently supported, but the original text was preserved: {keys}',
+  skillUnsupportedFrontmatterKeysMore:
+    'Skill saved. These frontmatter fields are not currently supported, but the original text was preserved: {keys}; {count} more not shown',
   skillSaveFailed: 'Unable to save skill',
   skillLoadFailed: 'Unable to load skill',
   skillExportFailed: 'Unable to export skill',

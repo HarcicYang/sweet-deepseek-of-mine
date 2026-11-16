@@ -12,6 +12,7 @@ import {
   type SkillDetail,
   type SkillFileInput,
   type SkillSummary,
+  type SkillWarning,
 } from '@sweet-deepseek/contracts/skills'
 import { parse } from 'yaml'
 import { z } from 'zod'
@@ -40,6 +41,7 @@ export type ParsedSkill = {
   modelInvocable: boolean
   metadata: Record<string, unknown>
   instructions: string
+  warnings: SkillWarning[]
 }
 
 export class SkillParseError extends Error {
@@ -76,29 +78,60 @@ export const inferSkillMediaType = (filePath: string): string => {
   return MEDIA_TYPES[extension] ?? 'text/plain'
 }
 
-const FrontmatterSchema = z
-  .object({
-    name: z
-      .string()
-      .trim()
-      .min(1)
-      .max(SKILL_NAME_MAX_LENGTH)
-      .regex(SKILL_NAME_PATTERN, 'Skill name must use lowercase kebab-case'),
-    description: z.string().trim().min(1).max(SKILL_DESCRIPTION_MAX_LENGTH),
-    whenToUse: z.string().trim().min(1).max(SKILL_DESCRIPTION_MAX_LENGTH).optional(),
-    'disable-model-invocation': z.boolean().optional(),
-    'user-invocable': z.boolean().optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-  })
-  .strict()
+const SUPPORTED_FRONTMATTER_KEYS = new Set([
+  'name',
+  'description',
+  'whenToUse',
+  'disable-model-invocation',
+  'user-invocable',
+  'metadata',
+])
+const WARNING_KEY_LIMIT = 32
+
+const FrontmatterSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(SKILL_NAME_MAX_LENGTH)
+    .regex(SKILL_NAME_PATTERN, 'Skill name must use lowercase kebab-case'),
+  description: z.string().trim().min(1).max(SKILL_DESCRIPTION_MAX_LENGTH),
+  whenToUse: z.string().trim().min(1).max(SKILL_DESCRIPTION_MAX_LENGTH).optional(),
+  'disable-model-invocation': z.boolean().optional(),
+  'user-invocable': z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+})
 
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u
 
 const normalizeSource = (source: string): string => source.replace(/^\uFEFF/u, '')
 
+const unsupportedFrontmatterWarnings = (raw: unknown): SkillWarning[] => {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return []
+  }
+  const keys = Object.keys(raw)
+    .filter((key) => !SUPPORTED_FRONTMATTER_KEYS.has(key))
+    .sort()
+  if (keys.length === 0) {
+    return []
+  }
+  return [
+    {
+      code: 'unsupported_frontmatter_keys',
+      keys: keys.slice(0, WARNING_KEY_LIMIT).map((key) => key.slice(0, 120) || '<empty>'),
+      omittedCount: Math.max(0, keys.length - WARNING_KEY_LIMIT),
+    },
+  ]
+}
+
 const parseFrontmatter = (
   source: string
-): { data: z.infer<typeof FrontmatterSchema>; body: string } => {
+): {
+  data: z.infer<typeof FrontmatterSchema>
+  body: string
+  warnings: SkillWarning[]
+} => {
   const match = FRONTMATTER_PATTERN.exec(normalizeSource(source))
   if (!match) {
     throw new SkillParseError('SKILL.md must start with YAML frontmatter')
@@ -117,14 +150,18 @@ const parseFrontmatter = (
     const path = issue?.path.length ? `${issue.path.join('.')}: ` : ''
     throw new SkillParseError(`${path}${issue?.message ?? 'Invalid skill frontmatter'}`)
   }
-  return { data: parsed.data, body: match[2] ?? '' }
+  return {
+    data: parsed.data,
+    body: match[2] ?? '',
+    warnings: unsupportedFrontmatterWarnings(raw),
+  }
 }
 
 export const parseSkillSource = (source: string): ParsedSkill => {
   if (source.length > SKILL_SOURCE_MAX_LENGTH) {
     throw new SkillParseError('SKILL.md is too large')
   }
-  const { data, body } = parseFrontmatter(source)
+  const { data, body, warnings } = parseFrontmatter(source)
   const instructions = body.trim()
   if (!instructions) {
     throw new SkillParseError('SKILL.md must include instructions after frontmatter')
@@ -140,6 +177,7 @@ export const parseSkillSource = (source: string): ParsedSkill => {
     modelInvocable: !(data['disable-model-invocation'] ?? false),
     metadata: data.metadata ?? {},
     instructions,
+    warnings,
   }
 }
 

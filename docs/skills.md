@@ -36,6 +36,9 @@ Use `references/report-template.md` for the final structure.
 - `disable-model-invocation`：是否禁止模型自动加载，默认 `false`。
 - `metadata`：可选 JSON 对象，供导入导出和后续扩展使用。
 
+其他 frontmatter 字段不会被当前版本使用，但也不会阻断保存。设置页会在保存后显示警告，
+并在 Bundle 原文中保留这些字段，便于导出或兼容其他 Harness 实现。
+
 资源路径必须位于当前 Bundle 内，不允许绝对路径、`..`、反斜杠、隐藏配置目录或嵌套
 `SKILL.md`。首版只保存 UTF-8 文本；不支持的二进制文件会在导入时拒绝。
 

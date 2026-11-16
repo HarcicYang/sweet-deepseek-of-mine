@@ -175,6 +175,10 @@ export const zh = {
     '编辑 SKILL.md 和文本资源。可导入单文件、目录压缩的 ZIP 或完整 Skill 包；脚本只会作为文本读取，不会在 Workers 中执行。',
   skillSaving: '保存中...',
   skillSaved: 'Skill 已保存',
+  skillUnsupportedFrontmatterKeys:
+    'Skill 已保存。以下 frontmatter 字段当前不受支持，但原文已保留：{keys}',
+  skillUnsupportedFrontmatterKeysMore:
+    'Skill 已保存。以下 frontmatter 字段当前不受支持，但原文已保留：{keys}，另有 {count} 个未列出',
   skillSaveFailed: 'Skill 保存失败',
   skillLoadFailed: 'Skill 读取失败',
   skillExportFailed: 'Skill 导出失败',

@@ -59,6 +59,37 @@ description: valid
   )
 })
 
+test('keeps unsupported frontmatter keys as warnings and validates supported fields', () => {
+  const parsed = parseSkillSource(`---
+name: portable-skill
+description: Preserve metadata used by other Harness implementations.
+license: MIT
+allowed-tools: read_file
+---
+Follow the portable workflow.
+`)
+  assert.equal(parsed.name, 'portable-skill')
+  assert.deepEqual(parsed.warnings, [
+    {
+      code: 'unsupported_frontmatter_keys',
+      keys: ['allowed-tools', 'license'],
+      omittedCount: 0,
+    },
+  ])
+
+  assert.throws(
+    () =>
+      parseSkillSource(`---
+name: invalid-supported-field
+description: Invalid values still fail.
+user-invocable: "yes"
+---
+Body
+`),
+    /user-invocable/u
+  )
+})
+
 test('normalizes a text skill bundle and preserves its resource paths', () => {
   const bundle = parseSkillBundle([
     { path: 'SKILL.md', content: source },

@@ -298,6 +298,7 @@ test('Skill CRUD is account-scoped and validates SKILL.md frontmatter', async ()
 name: weekly-review
 description: Summarize the week and plan the next one.
 whenToUse: When the user asks for a weekly review.
+license: MIT
 ---
 
 Lead with outcomes, then risks, then next actions.
@@ -321,12 +322,20 @@ Lead with outcomes, then risks, then next actions.
       name: string
       enabled: boolean
       instructions: string
+      warnings: Array<{ code: string; keys: string[]; omittedCount: number }>
       files: Array<{ path: string; content: string }>
     }
   }
   assert.equal(createdBody.skill.name, 'weekly-review')
   assert.equal(createdBody.skill.enabled, true)
   assert.match(createdBody.skill.instructions, /next actions/u)
+  assert.deepEqual(createdBody.skill.warnings, [
+    {
+      code: 'unsupported_frontmatter_keys',
+      keys: ['license'],
+      omittedCount: 0,
+    },
+  ])
   assert.deepEqual(
     createdBody.skill.files.map((file) => file.path),
     ['SKILL.md', 'references/checklist.md']

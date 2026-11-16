@@ -288,6 +288,16 @@
   line-height: 18px;
 }
 
+.skillWarning {
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--dsw-static-amber-500) 40%, transparent);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-static-amber-500) 8%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .mcpList {
   display: flex;
   flex-direction: column;

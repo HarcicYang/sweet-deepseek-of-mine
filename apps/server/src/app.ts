@@ -321,6 +321,7 @@ const toSkillDetail = (skill: SkillRecord) => {
   return {
     ...toSkillSummary(skill),
     instructions: bundle.skill.instructions,
+    warnings: bundle.skill.warnings,
     files: bundle.files,
   }
 }

@@ -7,6 +7,7 @@ import {
   type SkillDetail,
   type SkillFileInput,
   type SkillSummary,
+  type SkillWarning,
 } from '@sweet-deepseek/contracts/skills'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 import { useEffect, useRef, useState } from 'react'
@@ -120,6 +121,7 @@ export const SkillsSettings = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warnings, setWarnings] = useState<SkillWarning[]>([])
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -143,6 +145,7 @@ export const SkillsSettings = () => {
     setSelectedPath(SKILL_ENTRYPOINT)
     setNewPath('references/')
     setError(null)
+    setWarnings([])
   }
 
   const save = async () => {
@@ -156,6 +159,7 @@ export const SkillsSettings = () => {
         ? await updateSkill(draft.id, { files: draft.files, enabled: draft.enabled })
         : await createSkill({ files: draft.files, enabled: draft.enabled })
       setDraft({ id: saved.id, files: draftFiles(saved), enabled: saved.enabled })
+      setWarnings(saved.warnings)
       setSelectedPath(
         saved.files.some((file) => file.path === selectedPath) ? selectedPath : SKILL_ENTRYPOINT
       )
@@ -174,6 +178,7 @@ export const SkillsSettings = () => {
       setDraft({ id: detail.id, files: draftFiles(detail), enabled: detail.enabled })
       setSelectedPath(SKILL_ENTRYPOINT)
       setError(null)
+      setWarnings(detail.warnings)
       requestAnimationFrame(() => {
         document.getElementById('skill-editor')?.scrollIntoView({
           behavior: 'smooth',
@@ -241,6 +246,7 @@ export const SkillsSettings = () => {
       }
       setSelectedPath(SKILL_ENTRYPOINT)
       setError(null)
+      setWarnings([])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -263,6 +269,7 @@ export const SkillsSettings = () => {
     setSelectedPath(path)
     setNewPath('references/')
     setError(null)
+    setWarnings([])
   }
 
   const selectedFile = draft.files.find((file) => file.path === selectedPath) ?? draft.files[0]
@@ -440,6 +447,9 @@ export const SkillsSettings = () => {
               spellCheck={false}
               onChange={(event) => {
                 const content = event.target.value
+                if (selectedFile?.path === SKILL_ENTRYPOINT) {
+                  setWarnings([])
+                }
                 setDraft((current) => ({
                   ...current,
                   files: current.files.map((file) =>
@@ -474,6 +484,21 @@ export const SkillsSettings = () => {
           </div>
         </div>
         {error ? <div className={styles.skillError}>{error}</div> : null}
+        {warnings.map((warning) =>
+          warning.code === 'unsupported_frontmatter_keys' ? (
+            <div className={styles.skillWarning} key={warning.code} role="status">
+              {t(
+                warning.omittedCount > 0
+                  ? 'skillUnsupportedFrontmatterKeysMore'
+                  : 'skillUnsupportedFrontmatterKeys',
+                {
+                  keys: warning.keys.join(', '),
+                  count: warning.omittedCount,
+                }
+              )}
+            </div>
+          ) : null
+        )}
         <div className={styles.skillFormatHint}>{t('skillFormatHint')}</div>
       </form>
     </div>

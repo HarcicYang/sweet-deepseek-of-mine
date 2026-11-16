@@ -10,6 +10,14 @@ export const SKILL_MAX_FILES = 128
 export const SKILL_FILE_MAX_LENGTH = 256 * 1024
 export const SKILL_BUNDLE_MAX_BYTES = 512 * 1024
 
+export const SkillWarningSchema = z
+  .object({
+    code: z.literal('unsupported_frontmatter_keys'),
+    keys: z.array(z.string().max(120)).min(1).max(32),
+    omittedCount: z.number().int().nonnegative(),
+  })
+  .strict()
+
 export const isSafeSkillFilePath = (value: string): boolean => {
   if (
     !value ||
@@ -57,6 +65,7 @@ export const SkillSummarySchema = z
 
 export const SkillDetailSchema = SkillSummarySchema.extend({
   instructions: z.string().min(1).max(SKILL_INSTRUCTIONS_MAX_LENGTH),
+  warnings: z.array(SkillWarningSchema).max(8).default([]),
   files: z
     .array(
       z
@@ -110,6 +119,7 @@ export const SkillUpdateSchema = z
 
 export type SkillSummary = z.infer<typeof SkillSummarySchema>
 export type SkillDetail = z.infer<typeof SkillDetailSchema>
+export type SkillWarning = z.infer<typeof SkillWarningSchema>
 export type SkillFileInput = z.infer<typeof SkillFileInputSchema>
 export type SkillCreate = z.infer<typeof SkillCreateSchema>
 export type SkillUpdate = z.infer<typeof SkillUpdateSchema>
