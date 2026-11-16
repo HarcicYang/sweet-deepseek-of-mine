@@ -22,11 +22,26 @@
 - `POST /api/mcp/servers/:serverId/oauth/start`：启动 OAuth 授权并返回授权地址。
 - `POST /api/mcp/servers/:serverId/oauth/disconnect`：清除该服务的 OAuth 授权。
 - `GET /api/mcp/oauth/callback`：接收授权码并交换 token。
+- `GET /api/mcp/registry/servers`：代理官方 MCP Registry 的服务发现查询。
 - `GET /api/mcp/tools`：汇总当前账号所有已启用服务的工具。
 - `POST /api/mcp/call`：执行一个经过确认的 MCP 工具。
 
 `probe` 的失败作为 `{ "ok": false, "stage": "connect" | "list", ... }` 返回，
 不会让设置页把超时和空工具列表混为一谈。
+
+## Registry 发现
+
+- 设置页从官方 `https://registry.modelcontextprotocol.io/v0.1/servers` 读取 `version=latest`
+  的服务，并只展示状态为 `active`、包含 Streamable HTTP `remotes` 的条目。
+- 官方搜索只匹配服务名称；1–2 个字符时客户端筛选当前已加载结果，3 个字符以上才请求完整
+  Registry。分页 cursor 原样使用，不自行构造。
+- Registry 中的 stdio/npm/PyPI 包不会显示。服务描述、请求头名称、仓库地址和版本都按不可信数据
+  校验，远程地址必须通过现有 HTTPS / 私网策略。
+- 导入只会预填名称、命名空间、URL 和静态认证方式，仍需用户确认后保存。重复 URL 会标记为已添加。
+- Registry 只提供服务元数据，不提供工具清单。添加后通过现有“测试”操作建立连接并调用
+  `tools/list`；SDK 会自动聚合多页工具列表。
+- Registry 标记需要认证时，用户可填写静态请求头，或选择 OAuth。选择 OAuth 后“保存并授权”会在
+  保存成功后立即打开授权窗口；Registry 提供的占位值不会作为凭据保存。
 
 ## OAuth
 

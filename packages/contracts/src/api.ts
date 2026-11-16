@@ -20,6 +20,7 @@ export const apiRoutes = {
   mcpServerOAuthStart: '/api/mcp/servers/:serverId/oauth/start',
   mcpServerOAuthDisconnect: '/api/mcp/servers/:serverId/oauth/disconnect',
   mcpOAuthCallback: '/api/mcp/oauth/callback',
+  mcpRegistryServers: '/api/mcp/registry/servers',
   mcpTools: '/api/mcp/tools',
   mcpToolCall: '/api/mcp/call',
   shares: '/api/shares',

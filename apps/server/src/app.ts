@@ -62,6 +62,11 @@ import {
   type McpConnectionConfig,
 } from './mcp-client.js'
 import { assertAllowedMcpUrl, mcpHeadersAdditionalData } from './mcp-policy.js'
+import {
+  fetchOfficialMcpRegistryServers,
+  McpRegistrySearchTooShortError,
+  McpRegistryUpstreamError,
+} from './mcp-registry.js'
 import type { McpServerRecord, McpStore } from './mcp-store.js'
 import type { McpOAuthRecord, McpOAuthStore } from './mcp-oauth-store.js'
 import { findMcpOAuthClient, type McpOAuthClientConfig } from './mcp-oauth-clients.js'
@@ -136,6 +141,7 @@ export type AppOptions = {
   cookieSameSite?: 'Lax' | 'Strict' | 'None'
   allowedOrigins?: string[]
   mcpAllowPrivateNetwork?: boolean
+  mcpRegistryFetchImpl?: typeof fetch
   fetchImpl?: typeof fetch
   logger?: Pick<Console, 'warn'>
 }
@@ -441,6 +447,7 @@ export const createApp = ({
   cookieSameSite = 'Lax',
   allowedOrigins = [],
   mcpAllowPrivateNetwork = false,
+  mcpRegistryFetchImpl = fetch,
   fetchImpl = fetch,
   logger = globalThis.console,
 }: AppOptions) => {
@@ -901,6 +908,41 @@ if(data.ok)setTimeout(()=>window.close(),250);
         ),
       })
     )
+  })
+
+  app.get(apiRoutes.mcpRegistryServers, requireAuth, async (context) => {
+    const search = (context.req.query('search') ?? '').trim()
+    const cursor = context.req.query('cursor')?.trim()
+    const limitValue = context.req.query('limit')?.trim()
+    if (search.length > 128 || (cursor?.length ?? 0) > 4096) {
+      return apiError(context, 400, 'invalid_request', 'Invalid MCP Registry query')
+    }
+    const limit = limitValue === undefined ? 30 : Number(limitValue)
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      return apiError(context, 400, 'invalid_request', 'Invalid MCP Registry page size')
+    }
+    try {
+      return context.json(
+        await fetchOfficialMcpRegistryServers({
+          search,
+          ...(cursor ? { cursor } : {}),
+          limit,
+          signal: context.req.raw.signal,
+          fetchImpl: mcpRegistryFetchImpl,
+        })
+      )
+    } catch (error) {
+      if (error instanceof McpRegistrySearchTooShortError) {
+        return apiError(context, 400, 'invalid_request', error.message)
+      }
+      if (error instanceof McpRegistryUpstreamError) {
+        return apiError(context, 502, 'upstream_error', error.message)
+      }
+      logger.warn('MCP Registry request failed', {
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return apiError(context, 502, 'upstream_error', 'MCP Registry request failed')
+    }
   })
 
   app.post(apiRoutes.mcpServers, requireAuth, async (context) => {

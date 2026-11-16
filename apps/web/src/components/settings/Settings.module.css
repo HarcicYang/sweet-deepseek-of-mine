@@ -192,6 +192,204 @@
   gap: 8px;
 }
 
+.mcpSectionTabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 11px;
+  background: var(--dsw-alias-bg-skeleton);
+}
+
+.mcpSectionTab,
+.mcpSectionTabActive {
+  min-height: 32px;
+  padding: 5px 13px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mcpSectionTabActive {
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 14%, transparent);
+}
+
+.mcpDiscovery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mcpRegistrySearch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+
+  input {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 10px;
+    outline: none;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font: inherit;
+
+    &:focus {
+      border-color: var(--dsw-alias-brand-primary);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+    }
+  }
+}
+
+.mcpRegistryHint,
+.mcpRegistryNotice,
+.mcpRegistryAuthHint {
+  margin: -4px 0 0;
+  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.mcpRegistryNotice {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.mcpRegistryError {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+}
+
+.mcpRegistryList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mcpRegistryCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 92%, transparent);
+}
+
+.mcpRegistryCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mcpRegistryCardTitle {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    overflow: hidden;
+    color: var(--dsw-alias-label-primary);
+    font-size: 14px;
+    line-height: 21px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    overflow: hidden;
+    color: var(--dsw-alias-label-caption);
+    font: 11px/17px var(--ds-font-family-code);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.mcpRegistryDescription {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 19px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.mcpRegistryMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+  line-height: 17px;
+
+  a {
+    color: var(--dsw-alias-brand-primary);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.mcpRegistryUrl,
+.mcpRegistryHeaders {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font: 11px/17px var(--ds-font-family-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcpRegistryRemote {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+
+  select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 7px 9px;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 9px;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font: 11px/17px var(--ds-font-family-code);
+  }
+}
+
+.mcpRegistryActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+
+.mcpRegistryMore {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
 @media not all and (min-width: 768px) {
   .mcpServer {
     flex-direction: column;
@@ -200,6 +398,19 @@
   .mcpServerActions {
     justify-content: flex-start;
     max-width: none;
+  }
+
+  .mcpRegistryList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mcpSectionTabs {
+    align-self: stretch;
+  }
+
+  .mcpSectionTab,
+  .mcpSectionTabActive {
+    flex: 1;
   }
 }
 

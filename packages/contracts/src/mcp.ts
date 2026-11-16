@@ -150,6 +150,35 @@ export const McpOAuthStartResponseSchema = z
   })
   .strict()
 
+export const McpRegistryRemoteSchema = z
+  .object({
+    url: z.string().url(),
+    requiredHeaderNames: z.array(HeaderNameSchema).max(32),
+    requiresAuthentication: z.boolean(),
+  })
+  .strict()
+
+export const McpRegistryServerSchema = z
+  .object({
+    registryName: z.string().min(1).max(512),
+    publisher: z.string().min(1).max(256),
+    title: z.string().min(1).max(200),
+    description: z.string().max(4000),
+    version: z.string().min(1).max(128),
+    updatedAt: z.string().nullable(),
+    repositoryUrl: z.string().url().nullable(),
+    remotes: z.array(McpRegistryRemoteSchema).min(1).max(10),
+  })
+  .strict()
+
+export const McpRegistryServersResponseSchema = z
+  .object({
+    servers: z.array(McpRegistryServerSchema),
+    nextCursor: z.string().nullable(),
+    search: z.string(),
+  })
+  .strict()
+
 export type McpHeaders = z.infer<typeof McpHeadersSchema>
 export type McpAuthMode = z.infer<typeof McpAuthModeSchema>
 export type McpServerInput = z.infer<typeof McpServerInputSchema>
@@ -160,3 +189,6 @@ export type McpProbeResponse = z.infer<typeof McpProbeResponseSchema>
 export type McpToolCallRequest = z.infer<typeof McpToolCallRequestSchema>
 export type McpToolCallResponse = z.infer<typeof McpToolCallResponseSchema>
 export type McpOAuthStartResponse = z.infer<typeof McpOAuthStartResponseSchema>
+export type McpRegistryRemote = z.infer<typeof McpRegistryRemoteSchema>
+export type McpRegistryServer = z.infer<typeof McpRegistryServerSchema>
+export type McpRegistryServersResponse = z.infer<typeof McpRegistryServersResponseSchema>

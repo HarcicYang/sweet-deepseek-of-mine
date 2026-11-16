@@ -34,12 +34,14 @@ import {
 import {
   McpProbeResponseSchema,
   McpOAuthStartResponseSchema,
+  McpRegistryServersResponseSchema,
   McpServerResponseSchema,
   McpServersResponseSchema,
   McpToolCallResponseSchema,
   McpToolsResponseSchema,
   type McpProbeResponse,
   type McpOAuthStartResponse,
+  type McpRegistryServersResponse,
   type McpServerInput,
   type McpServerSummary,
   type McpServerUpdate,
@@ -225,6 +227,30 @@ export const getSharedSession = async (
 export const listMcpServers = async (): Promise<McpServerSummary[]> => {
   const response = await request(apiRoutes.mcpServers)
   return parseResponse(McpServersResponseSchema, await response.json()).servers
+}
+
+export const listMcpRegistryServers = async ({
+  search,
+  cursor,
+  limit = 30,
+  signal,
+}: {
+  search?: string
+  cursor?: string | null
+  limit?: number
+  signal?: AbortSignal
+} = {}): Promise<McpRegistryServersResponse> => {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (search?.trim()) {
+    query.set('search', search.trim())
+  }
+  if (cursor) {
+    query.set('cursor', cursor)
+  }
+  const response = await request(`${apiRoutes.mcpRegistryServers}?${query.toString()}`, {
+    signal,
+  })
+  return parseResponse(McpRegistryServersResponseSchema, await response.json())
 }
 
 export const createMcpServer = async (input: McpServerInput): Promise<McpServerSummary> => {

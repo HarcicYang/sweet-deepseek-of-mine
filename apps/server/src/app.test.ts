@@ -29,6 +29,7 @@ const createTestApp = async (
     allowedOrigins?: string[]
     mcpClient?: McpClient
     mcpOAuthClients?: McpOAuthClientConfig[]
+    mcpRegistryFetchImpl?: typeof fetch
   } = {}
 ) => {
   const security = await createSecurityService(MASTER_KEY)
@@ -146,6 +147,7 @@ const createTestApp = async (
     sessionTtlMs: 24 * 60 * 60 * 1000,
     cookieSecure: false,
     allowedOrigins: options.allowedOrigins,
+    mcpRegistryFetchImpl: options.mcpRegistryFetchImpl,
     fetchImpl,
   })
   return { app, calls, syncStore, mcpStore, mcpOAuthStore, mcpClient, security, store }
@@ -369,6 +371,55 @@ test('MCP servers are private per user and keep request headers encrypted', asyn
     { method: 'POST', headers: secondHeaders }
   )
   assert.equal(secondProbe.status, 404)
+})
+
+test('MCP Registry proxy requires auth and normalizes remote servers', async () => {
+  const { app } = await createTestApp({
+    mcpRegistryFetchImpl: async () =>
+      Response.json({
+        servers: [
+          {
+            server: {
+              name: 'io.github.example/remote',
+              title: 'Remote Example',
+              description: 'Remote MCP server',
+              version: '1.0.0',
+              remotes: [
+                {
+                  type: 'streamable-http',
+                  url: 'https://mcp.example.test/mcp',
+                },
+              ],
+            },
+            _meta: {
+              'io.modelcontextprotocol.registry/official': {
+                status: 'active',
+                updatedAt: '2026-11-16T00:00:00Z',
+              },
+            },
+          },
+        ],
+        metadata: { nextCursor: null },
+      }),
+  })
+  const unauthorized = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpRegistryServers}?search=remote`
+  )
+  assert.equal(unauthorized.status, 401)
+
+  const sessionToken = await authenticate(app)
+  const response = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpRegistryServers}?search=remote&limit=10`,
+    { headers: { Cookie: `sdom_session=${sessionToken}` } }
+  )
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as {
+    servers: Array<{ registryName: string; remotes: Array<{ url: string }> }>
+    nextCursor: string | null
+  }
+  assert.equal(body.servers[0]?.registryName, 'io.github.example/remote')
+  assert.equal(body.servers[0]?.remotes[0]?.url, 'https://mcp.example.test/mcp')
+  assert.equal(body.nextCursor, null)
 })
 
 test('MCP OAuth start and callback persist an account-scoped authorization state', async () => {
