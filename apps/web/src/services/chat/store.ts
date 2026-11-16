@@ -1,7 +1,7 @@
 import type { ChatModel, CreateMessageRequest, ThinkingMode } from '@sweet-deepseek/contracts'
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError, getCloudSession, streamMessage } from '../api/client.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
@@ -358,14 +358,31 @@ export const refreshChatFromStorage = async (): Promise<void> => {
     return
   }
   try {
-    const summaries = await db.loadSessionSummaries()
-    set({ ready: true, sessions: sortSessions(summaries) })
+    const [summaries, bodyIds] = await Promise.all([db.loadSessionSummaries(), db.listSessionIds()])
+    const bodyIdSet = new Set(bodyIds)
+    set((state) => ({
+      ready: true,
+      sessions: sortSessions(summaries),
+      sessionCache: Object.fromEntries(
+        Object.entries(state.sessionCache).filter(
+          ([id]) =>
+            bodyIdSet.has(id) ||
+            id === state.activeId ||
+            Object.hasOwn(state.streaming, id) ||
+            unsavedSessions.has(id)
+        )
+      ),
+    }))
     const activeId = get().activeId
     if (activeId === null || getStreamController(activeId)) {
       return
     }
     const stored = await db.loadSession(activeId)
     if (!stored) {
+      if (summaries.some((summary) => summary.id === activeId)) {
+        void ensureSessionLoaded(activeId)
+        return
+      }
       set((state) => ({
         activeId: null,
         sessionCache: Object.fromEntries(
@@ -427,16 +444,28 @@ const ensureSessionLoaded = (id: string): Promise<void> => {
   sessionLoads.set(id, load)
   load.promise = (async () => {
     try {
-      const stored = await db.loadSession(id)
+      let stored = await db.loadSession(id)
+      if (!stored) {
+        const remote = await getCloudSession(id)
+        if (!remote.payload) {
+          throw new Error(`Session ${id} has no payload`)
+        }
+        stored = normalizeSession({
+          id: remote.payload.id,
+          title: remote.payload.title,
+          createdAt: remote.payload.createdAt,
+          updatedAt: remote.payload.updatedAt,
+          messages: remote.payload.messages as Session['messages'],
+          rootMessageId: remote.payload.rootMessageId,
+        })
+        await db.saveSession(stored)
+      }
       if (epoch !== historyEpoch || sessionLoads.get(id) !== load) {
         return
       }
       const summary = get().sessions.find((session) => session.id === id)
       if (!summary) {
         return
-      }
-      if (!stored) {
-        throw new Error(`Session ${id} is missing from local storage`)
       }
       const settled = settleInterrupted(normalizeSession(stored))
       // 读取期间可能已在列表重命名，保留最新元数据，不能让旧读取覆盖它。

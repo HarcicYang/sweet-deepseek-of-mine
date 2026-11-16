@@ -165,6 +165,24 @@ export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
 
+export const listSessionIds = async (): Promise<string[]> =>
+  (await (await getDB()).getAllKeys('sessions')) as string[]
+
+/** 只更新列表摘要；已有本地附件引用要保留，供稍后按需打开时复用。 */
+export const saveSessionSummary = async (summary: SessionSummary): Promise<void> => {
+  const database = await getDB()
+  const current = await database.get('sessionSummaries', summary.id)
+  await database.put('sessionSummaries', {
+    ...summary,
+    fileIds: current?.fileIds ?? [],
+  })
+}
+
+/** 保留摘要和本地附件，只丢弃已过期的消息正文，让下次打开时重新拉取。 */
+export const dropSessionBody = async (id: string): Promise<void> => {
+  await (await getDB()).delete('sessions', id)
+}
+
 export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')

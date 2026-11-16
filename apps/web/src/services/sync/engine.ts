@@ -3,6 +3,7 @@ import {
   type SyncSettingsRecord,
   type SyncSessionPayload,
   type SyncSessionRecord,
+  type SyncSessionSummary,
 } from '@sweet-deepseek/contracts/sync'
 import { create } from 'zustand'
 import { translate } from '../../i18n/index.js'
@@ -19,7 +20,7 @@ import {
 } from '../api/client.js'
 import { normalizeSession } from '../chat/branches.js'
 import * as db from '../chat/db.js'
-import type { Session } from '../chat/types.js'
+import type { Session, SessionSummary } from '../chat/types.js'
 import {
   SETTINGS_CHANGED_EVENT,
   applySyncedSettings,
@@ -349,14 +350,15 @@ const pushOutbox = async (): Promise<boolean> => {
   return conflicted
 }
 
-const applyRemote = async (record: SyncSessionRecord) => {
-  if (!record.payload) {
-    await db.deleteSession(record.id)
-  } else {
-    await db.saveSession(toLocalSession(record.payload))
-  }
-  await db.putSyncState(stateFromRecord(record))
-}
+const summaryFromRemote = (
+  remote: SyncSessionSummary,
+  existing?: SessionSummary
+): SessionSummary => ({
+  id: remote.id,
+  title: remote.title,
+  createdAt: existing?.createdAt ?? remote.clientUpdatedAt,
+  updatedAt: remote.clientUpdatedAt,
+})
 
 const pullRemote = async (): Promise<void> => {
   const [remoteSessions, localSessions, states, outbox] = await Promise.all([
@@ -385,10 +387,21 @@ const pullRemote = async (): Promise<void> => {
       await db.putSyncState(stateFromRecord({ ...remote, payload: null }))
       continue
     }
-    if (local && state?.revision === remote.revision) {
+    const summary = summaryFromRemote(remote, local)
+    if (!local) {
+      await db.saveSessionSummary(summary)
+      await db.putSyncState(stateFromRecord({ ...remote, payload: null }))
+      changed = true
       continue
     }
-    if (local && !state && local.updatedAt > remote.clientUpdatedAt) {
+    if (local && state?.revision === remote.revision) {
+      if (local.title !== remote.title || local.updatedAt !== remote.clientUpdatedAt) {
+        await db.saveSessionSummary(summary)
+        changed = true
+      }
+      continue
+    }
+    if (!state && local.updatedAt > remote.clientUpdatedAt) {
       await db.putSyncOutbox({
         sessionId: remote.id,
         operation: 'upsert',
@@ -397,8 +410,10 @@ const pullRemote = async (): Promise<void> => {
       })
       continue
     }
-    const record = await getCloudSession(remote.id)
-    await applyRemote(record)
+    // 会话正文只在用户点击打开时拉取；同步只更新摘要和索引。
+    await db.dropSessionBody(remote.id)
+    await db.saveSessionSummary(summary)
+    await db.putSyncState(stateFromRecord({ ...remote, payload: null }))
     changed = true
   }
 
