@@ -25,6 +25,7 @@ export const UserMessage = memo(function UserMessage({
   isFirst,
   isLast,
   busy,
+  readOnly = false,
   versions,
   onSelectVersion,
 }: {
@@ -35,6 +36,7 @@ export const UserMessage = memo(function UserMessage({
   isFirst: boolean
   isLast: boolean
   busy: boolean
+  readOnly?: boolean
   versions: MessageVersions
   onSelectVersion: SelectMessageVersion
 }) {
@@ -73,6 +75,7 @@ export const UserMessage = memo(function UserMessage({
             <MessageFile
               key={file.id}
               file={file}
+              readOnly={readOnly}
               onRetry={retryUploadId ? () => retryUpload(sessionId, retryUploadId) : null}
             />
           ))}
@@ -116,18 +119,22 @@ export const UserMessage = memo(function UserMessage({
           <div className={styles.bottom}>
             <div className={clsx(styles.actions, isLast && styles.alwaysShow)}>
               {message.content ? <CopyButton text={message.content} /> : null}
-              <IconButton
-                icon={<IconEditOutline16 />}
-                tooltip={t('editMessage')}
-                tooltipPlacement="bottom"
-                disabled={busy}
-                onClick={() => {
-                  setDraft(message.content)
-                  setEditing(true)
-                }}
-              />
+              {!readOnly ? (
+                <IconButton
+                  icon={<IconEditOutline16 />}
+                  tooltip={t('editMessage')}
+                  tooltipPlacement="bottom"
+                  disabled={busy}
+                  onClick={() => {
+                    setDraft(message.content)
+                    setEditing(true)
+                  }}
+                />
+              ) : null}
             </div>
-            <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
+            {!readOnly ? (
+              <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
+            ) : null}
           </div>
         </>
       )}

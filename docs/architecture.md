@@ -20,6 +20,7 @@ packages/
 - 静态注册的 UI 组件、Skill manifest 和 MCP 返回值不进入共享协议包，直到对应能力开始实现。
 
 JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入规划](json-render.md)。
+临时只读快照的实现与隐私边界见[临时对话分享](sharing.md)。
 
 ## 当前迁移状态
 
@@ -41,6 +42,7 @@ JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入�
 - 会话同步不能长期依赖单次请求上传完整会话快照。大历史需要增量变更、消息分页或分块存储，
   避免受边缘请求体、内存和数据库单行大小限制。
 
-当前仓库只实现了 Node adapter。边缘部署仍需要 Worker 入口，以及 `AccountStore`、
-`SyncStore` 和对象存储的对应 adapter；不能只把 Node 文件存储直接打包进 Worker。
+当前仓库已实现 Node adapter 与 Workers adapter；Worker 使用 D1 保存账号、设置、分块会话和
+分块分享快照，Node 仍可使用文件存储。附件原件尚未进入云端存储，后续对象存储方案应同时服务
+附件和大会话载荷。
 附件原件尚未进入云端存储，后续对象存储方案应同时服务附件和大会话载荷。

@@ -1,6 +1,7 @@
 import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import { createApp } from './app.js'
 import { D1AccountStore } from './d1-account-store.js'
+import { D1ShareStore } from './d1-share-store.js'
 import { D1SyncStore } from './d1-sync-store.js'
 import { createSecurityService } from './security.js'
 
@@ -47,6 +48,7 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
     return createApp({
       store: new D1AccountStore(env.DB),
       syncStore: new D1SyncStore(env.DB),
+      shareStore: new D1ShareStore(env.DB),
       security,
       appOrigin: origin,
       allowedOrigins,
@@ -58,8 +60,7 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
         env.GITHUB_CALLBACK_URL ?? new URL(apiRoutes.githubCallback, apiOrigin).toString(),
       deepSeekBaseUrl: env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
       requestTimeoutMs: readPositiveInt(env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
-      sessionTtlMs:
-        readPositiveInt(env.SESSION_TTL_DAYS, 30) * 24 * 60 * 60 * 1000,
+      sessionTtlMs: readPositiveInt(env.SESSION_TTL_DAYS, 30) * 24 * 60 * 60 * 1000,
     })
   })()
   appPromises.set(env, promise)

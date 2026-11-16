@@ -30,6 +30,8 @@ import { stopReadAloud } from '../services/speech/readAloud.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
+import { SharedSessionPage } from '../components/share/SharedSessionPage.js'
+import { readShareToken } from '../services/share.js'
 import styles from './App.module.css'
 
 export const App = () => {
@@ -58,6 +60,7 @@ export const App = () => {
     state.activeId === null ? false : Object.hasOwn(state.streaming, state.activeId)
   )
   const activeId = useChatStore((state) => state.activeId)
+  const shareToken = readShareToken()
 
   usePreventPageScroll(isMobile)
 
@@ -67,8 +70,16 @@ export const App = () => {
 
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])
-  useEffect(bindChatPersistence, [])
   useEffect(() => {
+    if (shareToken) {
+      return
+    }
+    return bindChatPersistence()
+  }, [shareToken])
+  useEffect(() => {
+    if (shareToken) {
+      return
+    }
     const onSyncApplied = () => void refreshChatFromStorage()
     const onSyncConflict = () => showToast({ key: 'syncConflictToast', type: 'error' })
     window.addEventListener('sdom:sync-applied', onSyncApplied)
@@ -77,7 +88,7 @@ export const App = () => {
       window.removeEventListener('sdom:sync-applied', onSyncApplied)
       window.removeEventListener('sdom:sync-conflict', onSyncConflict)
     }
-  }, [])
+  }, [shareToken])
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
@@ -87,8 +98,10 @@ export const App = () => {
   useEffect(closeMobileSider, [activeId, isMobile])
 
   useEffect(() => {
-    void initAuth()
-  }, [])
+    if (!shareToken) {
+      void initAuth()
+    }
+  }, [shareToken])
 
   useEffect(() => {
     let cancelled = false
@@ -116,6 +129,15 @@ export const App = () => {
       cancelled = true
     }
   }, [authStatus, authUserId])
+
+  if (shareToken) {
+    return (
+      <>
+        <SharedSessionPage token={shareToken} />
+        <Toast />
+      </>
+    )
+  }
 
   if (authStatus !== 'authenticated') {
     return (

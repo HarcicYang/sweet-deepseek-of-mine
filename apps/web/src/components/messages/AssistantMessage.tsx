@@ -33,6 +33,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   isLast,
   streaming,
   busy,
+  readOnly = false,
   versions,
   onSelectVersion,
 }: {
@@ -41,6 +42,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   isLast: boolean
   streaming: boolean
   busy: boolean
+  readOnly?: boolean
   versions: MessageVersions
   onSelectVersion: SelectMessageVersion
 }) {
@@ -94,7 +96,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           <IconWarningOutline16 />
           <span>
             {notice.text}
-            {notice.action === 'apiKey' ? (
+            {!readOnly && notice.action === 'apiKey' ? (
               <>
                 {' '}
                 <button
@@ -106,7 +108,7 @@ export const AssistantMessage = memo(function AssistantMessage({
                 </button>
               </>
             ) : null}
-            {notice.action === 'topUp' ? (
+            {!readOnly && notice.action === 'topUp' ? (
               <>
                 {' '}
                 <a
@@ -138,24 +140,28 @@ export const AssistantMessage = memo(function AssistantMessage({
       ) : null}
       {streaming ? null : (
         <div className={styles.bottom}>
-          <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
+          {!readOnly ? (
+            <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
+          ) : null}
           <div className={clsx(styles.actions, isLast && styles.alwaysShow)}>
             {copyText ? <CopyButton text={copyText} /> : null}
             {responseText && !refused ? (
               <ReadAloudButton messageId={message.id} text={responseText} />
             ) : null}
-            <IconButton
-              icon={<IconRefreshOutline16 />}
-              tooltip={t('regenerate')}
-              tooltipPlacement="bottom"
-              disabled={busy || refused}
-              onClick={() => {
-                stopReadAloud()
-                regenerateReply(sessionId, message.id)
-              }}
-            />
+            {!readOnly ? (
+              <IconButton
+                icon={<IconRefreshOutline16 />}
+                tooltip={t('regenerate')}
+                tooltipPlacement="bottom"
+                disabled={busy || refused}
+                onClick={() => {
+                  stopReadAloud()
+                  regenerateReply(sessionId, message.id)
+                }}
+              />
+            ) : null}
           </div>
-          {isLast && canContinueReply(message) ? (
+          {!readOnly && isLast && canContinueReply(message) ? (
             <Button
               variant="outlined"
               size="s"

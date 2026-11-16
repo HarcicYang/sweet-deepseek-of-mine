@@ -17,6 +17,10 @@
     "./sync": {
       "types": "./src/sync.ts",
       "default": "./src/sync.ts"
+    },
+    "./share": {
+      "types": "./src/share.ts",
+      "default": "./src/share.ts"
     }
   },
   "scripts": {

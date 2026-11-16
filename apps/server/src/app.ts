@@ -27,12 +27,20 @@ import {
   SyncSessionResponseSchema,
   SyncSessionsResponseSchema,
   SyncUpsertRequestSchema,
+  type SyncSessionPayload,
 } from '@sweet-deepseek/contracts/sync'
+import {
+  SHARE_TOKEN_PATTERN,
+  ShareCreateRequestSchema,
+  ShareCreateResponseSchema,
+  SharedSessionResponseSchema,
+} from '@sweet-deepseek/contracts/share'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccountStore, GitHubProfile, UserRecord } from './account-store.js'
 import type { SecurityService } from './security.js'
+import type { ShareStore } from './share-store.js'
 import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
 
 const SESSION_COOKIE = 'sdom_session'
@@ -49,6 +57,7 @@ const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 const MAX_SYNC_BODY_BYTES = 20 * 1024 * 1024
+const MAX_SHARE_BODY_BYTES = 20 * 1024 * 1024
 const MAX_JSON_RENDER_BODY_BYTES = JSON_RENDER_LIMITS.maxDocumentBytes + 1024
 
 class RequestBodyTooLargeError extends Error {
@@ -72,6 +81,7 @@ type AppEnv = {
 export type AppOptions = {
   store: AccountStore
   syncStore: SyncStore
+  shareStore: ShareStore
   security: SecurityService
   appOrigin: string
   githubClientId: string
@@ -158,6 +168,18 @@ const toAuthUser = (user: UserRecord): AuthUser => ({
   githubLogin: user.githubLogin,
   avatarUrl: user.avatarUrl,
   hasApiKey: Boolean(user.apiKey),
+})
+
+const toSharedSessionPayload = (payload: SyncSessionPayload): SyncSessionPayload => ({
+  ...payload,
+  messages: payload.messages.map((message) =>
+    message.role === 'user'
+      ? {
+          ...message,
+          files: message.files.map((file) => ({ ...file, serverId: null })),
+        }
+      : message
+  ),
 })
 
 const hasFileBlocks = (messages: unknown[]): boolean =>
@@ -282,6 +304,7 @@ const readGitHubProfile = (value: unknown): GitHubProfile | null => {
 export const createApp = ({
   store,
   syncStore,
+  shareStore,
   security,
   appOrigin,
   githubClientId,
@@ -303,12 +326,17 @@ export const createApp = ({
 
   app.use('/api/*', async (context, next) => {
     const origin = context.req.header('Origin')
-    if (origin && !trustedOrigins.has(origin)) {
+    const publicShareGet =
+      context.req.method === 'GET' &&
+      /^\/api\/shares\/[A-Za-z0-9_-]{20,128}$/u.test(context.req.path)
+    if (origin && !publicShareGet && !trustedOrigins.has(origin)) {
       return apiError(context, 403, 'forbidden', 'Cross-origin request rejected')
     }
     if (origin) {
-      context.header('Access-Control-Allow-Origin', origin)
-      context.header('Access-Control-Allow-Credentials', 'true')
+      context.header('Access-Control-Allow-Origin', publicShareGet ? '*' : origin)
+      if (!publicShareGet) {
+        context.header('Access-Control-Allow-Credentials', 'true')
+      }
       context.header('Vary', 'Origin')
     }
     if (context.req.method === 'OPTIONS') {
@@ -539,6 +567,56 @@ export const createApp = ({
     await store.deleteSession(context.get('auth').sessionTokenHash)
     deleteCookie(context, SESSION_COOKIE, { path: '/' })
     return context.body(null, 204)
+  })
+
+  app.post(apiRoutes.shares, requireAuth, async (context) => {
+    if (contentLengthExceeds(context, MAX_SHARE_BODY_BYTES)) {
+      return apiError(context, 413, 'invalid_request', 'Shared session is too large')
+    }
+    const json = await readLimitedJson(context, MAX_SHARE_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Shared session is too large')
+    }
+    const parsed = json.ok ? ShareCreateRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid share request')
+    }
+    const expiresAt = new Date(
+      Date.now() + parsed.data.expiresInDays * 24 * 60 * 60 * 1000
+    ).toISOString()
+    const record = await shareStore.createShare(
+      context.get('auth').user.id,
+      toSharedSessionPayload(parsed.data.session),
+      expiresAt
+    )
+    const url = new URL(`/?share=${encodeURIComponent(record.token)}`, appOrigin).toString()
+    return context.json(
+      ShareCreateResponseSchema.parse({
+        share: { token: record.token, url, expiresAt: record.expiresAt },
+      })
+    )
+  })
+
+  app.get(apiRoutes.sharedSession, async (context) => {
+    const token = context.req.param('token')
+    if (!SHARE_TOKEN_PATTERN.test(token)) {
+      return apiError(context, 404, 'invalid_request', 'Shared session not found')
+    }
+    const record = await shareStore.getShare(token)
+    if (!record) {
+      context.header('Cache-Control', 'no-store')
+      return apiError(context, 404, 'invalid_request', 'Shared session not found')
+    }
+    context.header('Cache-Control', 'no-store')
+    return context.json(
+      SharedSessionResponseSchema.parse({
+        share: {
+          session: record.session,
+          createdAt: record.createdAt,
+          expiresAt: record.expiresAt,
+        },
+      })
+    )
   })
 
   app.get(apiRoutes.deepseekKey, requireAuth, (context) => {

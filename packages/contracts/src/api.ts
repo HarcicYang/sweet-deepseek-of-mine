@@ -13,6 +13,8 @@ export const apiRoutes = {
   speechAsr: '/api/speech/asr',
   speechTts: '/api/speech/tts',
   jsonRenderValidate: '/api/json-render/validate',
+  shares: '/api/shares',
+  sharedSession: '/api/shares/:token',
   syncSessions: '/api/sync/sessions',
   syncSession: '/api/sync/sessions/:sessionId',
   syncSettings: '/api/sync/settings',

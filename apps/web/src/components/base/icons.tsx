@@ -429,6 +429,15 @@ export const IconSearchOutline16 = () => (
   </svg>
 )
 
+export const IconShareOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M8.5 1.5V9.5H7.5V1.5H8.5ZM5.25 3.75L5.25 4.75H3.5C3.22 4.75 3 4.97 3 5.25V12.5C3 12.78 3.22 13 3.5 13H12.5C12.78 13 13 12.78 13 12.5V5.25C13 4.97 12.78 4.75 12.5 4.75H10.75V3.75H12.5C13.33 3.75 14 4.42 14 5.25V12.5C14 13.33 13.33 14 12.5 14H3.5C2.67 14 2 13.33 2 12.5V5.25C2 4.42 2.67 3.75 3.5 3.75H5.25ZM11.15 5.65L8 8.8L4.85 5.65L4.15 6.35L8 10.2L11.85 6.35L11.15 5.65Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 export const IconSearchWarningOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

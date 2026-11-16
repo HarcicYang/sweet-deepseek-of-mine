@@ -10,9 +10,13 @@ import { FileCard } from '../files/FileCard.js'
 import styles from './MessageFile.module.css'
 
 /** 原件从 IndexedDB 读出并生成本地地址；undefined 表示加载中，null 表示原件缺失。 */
-const useFileUrl = (id: string) => {
+const useFileUrl = (id: string, enabled = true) => {
   const [fileUrl, setFileUrl] = useState<{ id: string; url: string | null } | null>(null)
   useEffect(() => {
+    if (!enabled) {
+      setFileUrl({ id, url: null })
+      return
+    }
     let objectUrl: string | null = null
     let cancelled = false
     loadFile(id).then((blob) => {
@@ -27,7 +31,7 @@ const useFileUrl = (id: string) => {
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [id])
+  }, [enabled, id])
   return fileUrl?.id === id ? fileUrl.url : undefined
 }
 
@@ -49,14 +53,16 @@ const useUploadState = (file: FileAttachment) =>
  */
 export const MessageFile = ({
   file,
+  readOnly = false,
   onRetry,
 }: {
   file: FileAttachment
+  readOnly?: boolean
   /** 本条消息补传失败且可重试时提供 */
   onRetry: (() => void) | null
 }) => {
   const t = useTranslate()
-  const url = useFileUrl(file.id)
+  const url = useFileUrl(file.id, !readOnly)
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const upload = useUploadState(file)
   const uploading = upload?.status === 'uploading'

@@ -1,0 +1,16 @@
+.page {
+  position: absolute;
+  inset: 0;
+  background: var(--dsw-alias-bg-base);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  text-align: center;
+}

@@ -5,6 +5,7 @@ import { JSON_RENDER_LIMITS, JSON_RENDER_VERSION } from '@sweet-deepseek/json-re
 import { MemoryAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { createSecurityService } from './security.js'
+import { MemoryShareStore } from './share-store.js'
 import { MemorySyncStore } from './sync-store.js'
 
 const APP_ORIGIN = 'http://localhost:8090'
@@ -75,6 +76,7 @@ const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
   const app = createApp({
     store: new MemoryAccountStore(),
     syncStore,
+    shareStore: new MemoryShareStore(),
     security,
     appOrigin: APP_ORIGIN,
     githubClientId: 'github-client-id',
@@ -420,6 +422,92 @@ test('session sync enforces revisions and deletion tombstones', async () => {
     headers: { Cookie: `sdom_session=${sessionToken}` },
   })
   assert.deepEqual(await emptyList.json(), { sessions: [] })
+})
+
+test('creates expiring public share snapshots without file credentials', async () => {
+  const { app } = await createTestApp()
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const session = {
+    schemaVersion: 1 as const,
+    id: 'shared-session',
+    title: 'Shared chat',
+    createdAt: 1,
+    updatedAt: 2,
+    rootMessageId: 'user-1',
+    messages: [
+      {
+        id: 'user-1',
+        role: 'user' as const,
+        content: 'Share this',
+        files: [
+          {
+            id: 'file-1',
+            serverId: 'private-file-id',
+            name: 'note.txt',
+            size: 4,
+            isImage: false,
+            mimeType: 'text/plain',
+          },
+        ],
+        createdAt: 1,
+        parentId: null,
+        selectedChildId: 'assistant-1',
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        createdAt: 2,
+        model: 'deepseek-flash' as const,
+        prefix: true,
+        status: 'done' as const,
+        blocks: [{ type: 'text' as const, text: 'Shared answer' }],
+        parentId: 'user-1',
+      },
+    ],
+  }
+
+  const created = await app.request(`${APP_ORIGIN}${apiRoutes.shares}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ session, expiresInDays: 2 }),
+  })
+  assert.equal(created.status, 200)
+  const createdBody = (await created.json()) as {
+    share: { token: string; url: string; expiresAt: string }
+  }
+  assert.match(createdBody.share.token, /^[A-Za-z0-9_-]{20,128}$/u)
+  assert.match(createdBody.share.expiresAt, /^\d{4}-\d{2}-\d{2}T/u)
+  assert.equal(new URL(createdBody.share.url).searchParams.get('share'), createdBody.share.token)
+
+  const shared = await app.request(
+    `${APP_ORIGIN}${apiRoutes.sharedSession.replace(':token', createdBody.share.token)}`,
+    {
+      headers: { Origin: 'https://reader.example' },
+    }
+  )
+  assert.equal(shared.status, 200)
+  assert.equal(shared.headers.get('access-control-allow-origin'), '*')
+  const sharedBody = (await shared.json()) as {
+    share: { session: typeof session }
+  }
+  assert.equal(sharedBody.share.session.title, 'Shared chat')
+  const sharedUserMessage = sharedBody.share.session.messages[0]
+  assert.equal(sharedUserMessage?.role, 'user')
+  if (sharedUserMessage?.role === 'user') {
+    assert.equal(sharedUserMessage.files[0]?.serverId, null)
+  }
+
+  const invalid = await app.request(`${APP_ORIGIN}${apiRoutes.shares}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ session, expiresInDays: 0 }),
+  })
+  assert.equal(invalid.status, 400)
 })
 
 test('settings sync advances one revision per account', async () => {

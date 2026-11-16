@@ -37,7 +37,8 @@ pnpm dev:server
 
 ## Cloudflare Workers
 
-Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号、设置和分块会话快照。
+Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号、设置、分块会话快照和
+分块临时分享快照。
 
 1. 构建前端：`pnpm --filter @sweet-deepseek/web build`
 2. 应用远程数据库 migration：

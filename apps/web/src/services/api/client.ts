@@ -26,6 +26,12 @@ import {
   type SyncSettingsRecord,
 } from '@sweet-deepseek/contracts/sync'
 import {
+  ShareCreateResponseSchema,
+  SharedSessionResponseSchema,
+  type ShareCreateResponse,
+  type SharedSessionResponse,
+} from '@sweet-deepseek/contracts/share'
+import {
   JsonRenderValidationResponseSchema,
   type JsonRenderDocument,
 } from '@sweet-deepseek/json-render'
@@ -176,6 +182,29 @@ export const validateJsonRenderSource = (source: string): Promise<JsonRenderDocu
 export const getSession = async (signal?: AbortSignal): Promise<SessionResponse> => {
   const response = await request(apiRoutes.session, { signal })
   return parseResponse(SessionResponseSchema, await response.json())
+}
+
+export const createShare = async (
+  session: SyncSessionPayload,
+  expiresInDays: number
+): Promise<ShareCreateResponse> => {
+  const response = await request(apiRoutes.shares, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session, expiresInDays }),
+  })
+  return parseResponse(ShareCreateResponseSchema, await response.json())
+}
+
+export const getSharedSession = async (
+  token: string,
+  signal?: AbortSignal
+): Promise<SharedSessionResponse> => {
+  const response = await request(
+    apiRoutes.sharedSession.replace(':token', encodeURIComponent(token)),
+    { credentials: 'omit', signal }
+  )
+  return parseResponse(SharedSessionResponseSchema, await response.json())
 }
 
 export const logout = async (): Promise<void> => {

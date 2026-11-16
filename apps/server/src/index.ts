@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { FileAccountStore } from './account-store.js'
 import { createApp } from './app.js'
 import { createSecurityService } from './security.js'
+import { FileShareStore } from './share-store.js'
 import { FileSyncStore } from './sync-store.js'
 
 const readPositiveInt = (value: string | undefined, fallback: number): number => {
@@ -46,9 +47,13 @@ const store = new FileAccountStore(
 const syncStore = new FileSyncStore(
   path.resolve(repositoryRoot, process.env.SYNC_DB_PATH ?? '.data/sync.json')
 )
+const shareStore = new FileShareStore(
+  path.resolve(repositoryRoot, process.env.SHARE_DB_PATH ?? '.data/shares.json')
+)
 const app = createApp({
   store,
   syncStore,
+  shareStore,
   security,
   appOrigin: origin,
   githubClientId: requireEnv('GITHUB_CLIENT_ID'),
