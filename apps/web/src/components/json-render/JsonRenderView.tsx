@@ -3,24 +3,45 @@ import clsx from 'clsx'
 import type {
   JsonRenderAction,
   JsonRenderBadge,
+  JsonRenderBoxNode,
   JsonRenderCardItem,
   JsonRenderChartNode,
+  JsonRenderColNode,
   JsonRenderDetailsNode,
+  JsonRenderDividerNode,
   JsonRenderDocument,
   JsonRenderFormField,
   JsonRenderFormNode,
+  JsonRenderIconNode,
   JsonRenderImageNode,
   JsonRenderListNode,
   JsonRenderNode,
+  JsonRenderRowNode,
+  JsonRenderSelectNode,
+  JsonRenderSpacerNode,
   JsonRenderStatsNode,
   JsonRenderStepsNode,
+  JsonRenderTransitionNode,
 } from '@sweet-deepseek/json-render'
 import { useTranslate } from '../../i18n/index.js'
 import { sendPromptFromRender } from '../../services/chat/store.js'
 import { copyText } from '../../utils/clipboard.js'
 import { Button } from '../base/Button.js'
 import { Select } from '../base/Select.js'
-import { IconCheckOutline16 } from '../base/icons.js'
+import {
+  IconCheckOutline16,
+  IconCloseOutline16,
+  IconCopyOutline16,
+  IconDownloadOutline16,
+  IconEditOutline16,
+  IconExpandOutline16,
+  IconLinkOutline16,
+  IconRefreshOutline16,
+  IconSearchOutline16,
+  IconSettingsOutline16,
+  IconUploadOutline14,
+  IconWarningOutline16,
+} from '../base/icons.js'
 import { showToast } from '../base/toastState.js'
 import { CodeBlock } from '../markdown/CodeBlock.js'
 import { Markdown } from '../markdown/Markdown.js'
@@ -51,6 +72,37 @@ const badgeVariantClass = {
   solid: styles.badgeSolid,
   soft: styles.badgeSoft,
   outline: styles.badgeOutline,
+} as const
+
+const iconComponent = {
+  check: IconCheckOutline16,
+  close: IconCloseOutline16,
+  copy: IconCopyOutline16,
+  download: IconDownloadOutline16,
+  edit: IconEditOutline16,
+  expand: IconExpandOutline16,
+  link: IconLinkOutline16,
+  refresh: IconRefreshOutline16,
+  search: IconSearchOutline16,
+  settings: IconSettingsOutline16,
+  upload: IconUploadOutline14,
+  warning: IconWarningOutline16,
+} as const
+
+const iconColorClass = {
+  primary: styles.iconPrimary,
+  secondary: styles.iconSecondary,
+  tertiary: styles.iconTertiary,
+  brand: styles.iconBrand,
+  success: styles.iconSuccess,
+  warning: styles.iconWarning,
+  danger: styles.iconDanger,
+} as const
+
+const iconSizeClass = {
+  s: styles.iconS,
+  m: styles.iconM,
+  l: styles.iconL,
 } as const
 
 const seriesClass = (index: number) =>
@@ -590,6 +642,21 @@ const FormView = ({
                     setValues((current) => ({ ...current, [field.name]: value }))
                   }
                 />
+              ) : field.type === 'date' ? (
+                <input
+                  className={styles.formControl}
+                  id={fieldId}
+                  type="date"
+                  value={values[field.name] ?? ''}
+                  min={field.min}
+                  max={field.max}
+                  required={field.required}
+                  disabled={!context.interactive}
+                  aria-describedby={descriptionId}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                  }
+                />
               ) : field.type === 'textarea' ? (
                 <textarea
                   className={clsx(styles.formControl, styles.formTextarea)}
@@ -597,6 +664,7 @@ const FormView = ({
                   value={values[field.name] ?? ''}
                   placeholder={field.placeholder}
                   required={field.required}
+                  disabled={!context.interactive}
                   aria-describedby={descriptionId}
                   onChange={(event) =>
                     setValues((current) => ({ ...current, [field.name]: event.target.value }))
@@ -610,6 +678,7 @@ const FormView = ({
                   value={values[field.name] ?? ''}
                   placeholder={field.placeholder}
                   required={field.required}
+                  disabled={!context.interactive}
                   aria-describedby={descriptionId}
                   onChange={(event) =>
                     setValues((current) => ({ ...current, [field.name]: event.target.value }))
@@ -626,6 +695,144 @@ const FormView = ({
         </Button>
       </div>
     </form>
+  )
+}
+
+type LayoutNode = JsonRenderBoxNode | JsonRenderRowNode | JsonRenderColNode
+
+const layoutDirection = (node: LayoutNode) =>
+  node.type === 'Col' ? 'column' : node.type === 'Row' ? 'row' : node.direction
+
+const LayoutView = ({
+  node,
+  context,
+  path,
+}: {
+  node: LayoutNode
+  context: RenderContext
+  path: string
+}) => (
+  <div
+    className={styles.layout}
+    data-direction={layoutDirection(node)}
+    data-gap={node.gap ?? 'none'}
+    data-align={node.align ?? 'stretch'}
+    data-justify={node.justify ?? 'start'}
+    data-wrap={node.wrap === false ? 'nowrap' : 'wrap'}
+    data-grow={node.grow ?? false}
+    data-padding={node.padding ?? 'none'}
+    data-background={node.background ?? 'none'}
+    data-radius={node.radius ?? 'none'}
+  >
+    {node.children.map((child, index) => (
+      <NodeView
+        key={`${path}-layout-${index}-${child.type}`}
+        node={child}
+        context={context}
+        path={`${path}-layout-${index}`}
+      />
+    ))}
+  </div>
+)
+
+const TransitionView = ({
+  node,
+  context,
+  path,
+}: {
+  node: JsonRenderTransitionNode
+  context: RenderContext
+  path: string
+}) => (
+  <div
+    className={styles.transition}
+    data-effect={node.effect ?? 'fade'}
+    data-grow={node.grow ?? false}
+  >
+    <NodeView node={node.children[0]} context={context} path={`${path}-transition`} />
+  </div>
+)
+
+const SpacerView = ({ node }: { node: JsonRenderSpacerNode }) => (
+  <div
+    className={styles.spacer}
+    data-size={node.size ?? 'm'}
+    data-grow={node.grow ?? true}
+    aria-hidden="true"
+  />
+)
+
+const DividerView = ({ node }: { node: JsonRenderDividerNode }) => (
+  <hr
+    className={styles.divider}
+    data-orientation={node.orientation ?? 'horizontal'}
+    data-spacing={node.spacing ?? 'm'}
+  />
+)
+
+const IconView = ({ node }: { node: JsonRenderIconNode }) => {
+  const Component = iconComponent[node.name]
+  return (
+    <span
+      className={clsx(
+        styles.icon,
+        iconColorClass[node.color ?? 'secondary'],
+        iconSizeClass[node.size ?? 'm']
+      )}
+      role={node.label ? 'img' : undefined}
+      aria-label={node.label}
+      aria-hidden={node.label ? undefined : true}
+    >
+      <Component />
+    </span>
+  )
+}
+
+const renderSelectPrompt = (
+  template: string,
+  option: JsonRenderSelectNode['options'][number]
+): string =>
+  template.replace(/\{\{(value|label)\}\}/gu, (_, field: string) =>
+    field === 'label' ? option.label : option.value
+  )
+
+const StandaloneSelectView = ({
+  node,
+  context,
+}: {
+  node: JsonRenderSelectNode
+  context: RenderContext
+}) => {
+  const t = useTranslate()
+  const [value, setValue] = useState(node.defaultValue ?? '')
+  return (
+    <div className={styles.standaloneSelect}>
+      <div className={styles.formLabel}>{node.label}</div>
+      <Select
+        value={value}
+        options={node.options}
+        placeholder={node.placeholder ?? t('jsonRenderFormSelectPlaceholder')}
+        ariaLabel={node.label}
+        disabled={!context.interactive}
+        block
+        variant="field"
+        onChange={(next) => {
+          setValue(next)
+          const option = node.options.find((item) => item.value === next)
+          if (!option || !context.interactive) {
+            return
+          }
+          if (
+            !sendPromptFromRender(
+              context.sessionId,
+              renderSelectPrompt(node.promptTemplate, option)
+            )
+          ) {
+            showToast({ key: 'jsonRenderFormSubmitFailed' })
+          }
+        }}
+      />
+    </div>
   )
 }
 
@@ -681,6 +888,20 @@ const NodeView = ({
       return <ImageView node={node} />
     case 'Form':
       return <FormView node={node} context={context} path={path} />
+    case 'Divider':
+      return <DividerView node={node} />
+    case 'Icon':
+      return <IconView node={node} />
+    case 'Spacer':
+      return <SpacerView node={node} />
+    case 'Select':
+      return <StandaloneSelectView node={node} context={context} />
+    case 'Box':
+    case 'Row':
+    case 'Col':
+      return <LayoutView node={node} context={context} path={path} />
+    case 'Transition':
+      return <TransitionView node={node} context={context} path={path} />
     case 'Stack':
       return (
         <div className={styles.stack} data-gap={node.gap ?? 'm'}>

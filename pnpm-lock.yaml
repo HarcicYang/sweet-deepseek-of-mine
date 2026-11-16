@@ -136,6 +136,9 @@ importers:
 
   packages/json-render:
     dependencies:
+      partial-json:
+        specifier: 0.1.7
+        version: 0.1.7
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1701,6 +1704,9 @@ packages:
 
   package-manager-detector@1.9.0:
     resolution: {integrity: sha512-zAMfbta9nPA8AKkA4WdmNAT8R8s6Dk0/xwPsqNnRidMFcLo1YkLuPDTgs2f64XdzS8vbLNnoJ+uUIkgbz7oRHA==}
+
+  partial-json@0.1.7:
+    resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
 
   path-data-parser@0.1.0:
     resolution: {integrity: sha512-NOnmBpt5Y2RWbuv0LMzsayp3lVylAHLPUTut412ZA3l+C4uw4ZVkQbjShYCQ8TCpUMdPapr4YjUqLYD6v68j+w==}
@@ -3412,6 +3418,8 @@ snapshots:
       '@oxlint/binding-win32-x64-msvc': 1.63.0
 
   package-manager-detector@1.9.0: {}
+
+  partial-json@0.1.7: {}
 
   path-data-parser@0.1.0: {}
 

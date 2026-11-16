@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { JSON_RENDER_LIMITS, parseJsonRenderSource, validateJsonRenderDocument } from './schema.js'
+import { parsePartialJsonRenderSource } from './partial.js'
 
 const validDocument = {
   version: '1.0',
@@ -126,6 +127,47 @@ test('accepts card and carousel items without nested content', () => {
   assert.equal(result.success, true)
 })
 
+test('validates free layout, icon, divider, spacer, and standalone select nodes', () => {
+  const result = validateJsonRenderDocument({
+    version: '1.0',
+    root: {
+      type: 'Box',
+      direction: 'row',
+      gap: 'm',
+      align: 'stretch',
+      justify: 'between',
+      children: [
+        {
+          type: 'Col',
+          grow: true,
+          gap: 's',
+          children: [
+            { type: 'Icon', name: 'settings', color: 'brand', size: 'm' },
+            { type: 'Divider', spacing: 's' },
+            { type: 'Markdown', value: 'Settings' },
+          ],
+        },
+        {
+          type: 'Select',
+          label: 'Theme',
+          options: [
+            { label: 'Light', value: 'light' },
+            { label: 'Dark', value: 'dark' },
+          ],
+          promptTemplate: 'Use {{label}} ({{value}}) for the theme.',
+        },
+        { type: 'Spacer', grow: true },
+        {
+          type: 'Transition',
+          effect: 'fade',
+          children: [{ type: 'Badge', label: 'Ready', color: 'success' }],
+        },
+      ],
+    },
+  })
+  assert.equal(result.success, true)
+})
+
 test('validates image and prompt-backed form blocks', () => {
   const result = validateJsonRenderDocument({
     version: '1.0',
@@ -161,6 +203,14 @@ test('validates image and prompt-backed form blocks', () => {
               label: 'Goal',
               placeholder: 'What should the deployment optimize for?',
             },
+            {
+              type: 'date',
+              name: 'launch_date',
+              label: 'Launch date',
+              min: '2026-01-01',
+              max: '2026-12-31',
+              defaultValue: '2026-11-16',
+            },
           ],
           submitLabel: 'Continue',
           promptTemplate: 'Compare {{environment}} deployment for {{goal}}.',
@@ -169,6 +219,31 @@ test('validates image and prompt-backed form blocks', () => {
     },
   })
   assert.equal(result.success, true)
+})
+
+test('parses complete streamed nodes while ignoring incomplete siblings', () => {
+  const result = parsePartialJsonRenderSource(
+    '{"version":"1.0","root":{"type":"Stack","children":[' +
+      '{"type":"Markdown","value":"First"},' +
+      '{"type":"Card","title":"Still gener'
+  )
+  assert.equal(result.success, true)
+  if (result.success) {
+    assert.equal(result.partial, true)
+    assert.equal(result.data.root.type, 'Stack')
+    if (result.data.root.type === 'Stack') {
+      assert.equal(result.data.root.children.length, 1)
+      assert.equal(result.data.root.children[0]?.type, 'Markdown')
+    }
+  }
+})
+
+test('does not expose half-rendered string fields in partial documents', () => {
+  const result = parsePartialJsonRenderSource(
+    '{"version":"1.0","root":{"type":"Stack","children":[' +
+      '{"type":"Markdown","value":"Still gener'
+  )
+  assert.equal(result.success, false)
 })
 
 test('rejects insecure images and unknown form placeholders', () => {

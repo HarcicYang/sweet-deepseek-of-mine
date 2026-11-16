@@ -14,6 +14,8 @@ export const JSON_RENDER_LIMITS = {
   maxCarouselItems: 6,
   maxListItems: 8,
   maxFormFields: 6,
+  maxLayoutChildren: 12,
+  maxSelectOptions: 12,
   maxBlocksPerMessage: 4,
 } as const
 
@@ -44,6 +46,33 @@ export type JsonRenderBadge = {
   pill?: boolean
 }
 export type JsonRenderBadgeNode = JsonRenderBadge & { type: 'Badge' }
+export type JsonRenderGap = 'none' | 's' | 'm' | 'l' | 'xl'
+export type JsonRenderLayoutAlign = 'start' | 'center' | 'end' | 'stretch'
+export type JsonRenderLayoutJustify = 'start' | 'center' | 'end' | 'between'
+export type JsonRenderPadding = 'none' | 's' | 'm' | 'l'
+export type JsonRenderSurface = 'none' | 'layer' | 'subtle'
+export type JsonRenderRadius = 'none' | 's' | 'm' | 'l'
+export type JsonRenderIconName =
+  | 'check'
+  | 'close'
+  | 'copy'
+  | 'download'
+  | 'edit'
+  | 'expand'
+  | 'link'
+  | 'refresh'
+  | 'search'
+  | 'settings'
+  | 'upload'
+  | 'warning'
+export type JsonRenderIconColor =
+  | 'primary'
+  | 'secondary'
+  | 'tertiary'
+  | 'brand'
+  | 'success'
+  | 'warning'
+  | 'danger'
 export type JsonRenderMarkdownNode = { type: 'Markdown'; value: string }
 export type JsonRenderCodeNode = {
   type: 'Code'
@@ -83,6 +112,32 @@ export type JsonRenderDetailsNode = {
   content: JsonRenderMarkdownNode
   open?: boolean
 }
+export type JsonRenderDividerNode = {
+  type: 'Divider'
+  orientation?: 'horizontal' | 'vertical'
+  spacing?: JsonRenderGap
+}
+export type JsonRenderIconNode = {
+  type: 'Icon'
+  name: JsonRenderIconName
+  label?: string
+  color?: JsonRenderIconColor
+  size?: 's' | 'm' | 'l'
+}
+export type JsonRenderSpacerNode = {
+  type: 'Spacer'
+  size?: 's' | 'm' | 'l' | 'xl'
+  grow?: boolean
+}
+export type JsonRenderSelectOption = { label: string; value: string }
+export type JsonRenderSelectNode = {
+  type: 'Select'
+  label: string
+  placeholder?: string
+  defaultValue?: string
+  options: JsonRenderSelectOption[]
+  promptTemplate: string
+}
 export type JsonRenderListItem = {
   title: string
   description?: string
@@ -104,7 +159,7 @@ export type JsonRenderImageNode = {
   fit?: 'cover' | 'contain'
 }
 export type JsonRenderFormField = {
-  type: 'text' | 'textarea' | 'select'
+  type: 'text' | 'textarea' | 'select' | 'date'
   name: string
   label: string
   placeholder?: string
@@ -112,6 +167,8 @@ export type JsonRenderFormField = {
   required?: boolean
   defaultValue?: string
   options?: Array<{ label: string; value: string }>
+  min?: string
+  max?: string
 }
 export type JsonRenderFormNode = {
   type: 'Form'
@@ -129,6 +186,35 @@ export type JsonRenderCardItem = {
   content?: JsonRenderNode[]
   actions?: JsonRenderAction[]
 }
+type JsonRenderLayoutProps = {
+  gap?: JsonRenderGap
+  align?: JsonRenderLayoutAlign
+  justify?: JsonRenderLayoutJustify
+  wrap?: boolean
+  grow?: boolean
+  padding?: JsonRenderPadding
+  background?: JsonRenderSurface
+  radius?: JsonRenderRadius
+}
+export type JsonRenderBoxNode = JsonRenderLayoutProps & {
+  type: 'Box'
+  direction: 'row' | 'column'
+  children: JsonRenderNode[]
+}
+export type JsonRenderRowNode = JsonRenderLayoutProps & {
+  type: 'Row'
+  children: JsonRenderNode[]
+}
+export type JsonRenderColNode = JsonRenderLayoutProps & {
+  type: 'Col'
+  children: JsonRenderNode[]
+}
+export type JsonRenderTransitionNode = {
+  type: 'Transition'
+  effect?: 'fade' | 'slide-up' | 'scale'
+  grow?: boolean
+  children: [JsonRenderNode]
+}
 export type JsonRenderNode =
   | JsonRenderMarkdownNode
   | JsonRenderCodeNode
@@ -141,6 +227,14 @@ export type JsonRenderNode =
   | JsonRenderListNode
   | JsonRenderImageNode
   | JsonRenderFormNode
+  | JsonRenderDividerNode
+  | JsonRenderIconNode
+  | JsonRenderSpacerNode
+  | JsonRenderSelectNode
+  | JsonRenderBoxNode
+  | JsonRenderRowNode
+  | JsonRenderColNode
+  | JsonRenderTransitionNode
   | { type: 'Stack'; gap?: 'none' | 's' | 'm' | 'l'; children: JsonRenderNode[] }
   | ({ type: 'Card' } & JsonRenderCardItem)
   | { type: 'Carousel'; items: JsonRenderCardItem[] }
@@ -152,7 +246,7 @@ const MarkdownNodeSchema = z
   })
   .strict()
 
-const BadgeSchema = z
+export const JsonRenderBadgeSchema = z
   .object({
     label: shortText(80),
     color: z.enum(['secondary', 'success', 'danger', 'warning', 'info', 'discovery']).optional(),
@@ -252,12 +346,12 @@ const DetailsNodeSchema = z
   })
   .strict()
 
-const ListItemSchema = z
+export const JsonRenderListItemSchema = z
   .object({
     title: shortText(160),
     description: text(2000).optional(),
     meta: shortText(80).optional(),
-    badge: BadgeSchema.optional(),
+    badge: JsonRenderBadgeSchema.optional(),
     action: JsonRenderActionSchema.optional(),
   })
   .strict()
@@ -266,7 +360,7 @@ const ListNodeSchema = z
   .object({
     type: z.literal('List'),
     title: shortText(160).optional(),
-    items: z.array(ListItemSchema).min(2).max(JSON_RENDER_LIMITS.maxListItems),
+    items: z.array(JsonRenderListItemSchema).min(2).max(JSON_RENDER_LIMITS.maxListItems),
   })
   .strict()
 
@@ -308,7 +402,12 @@ const FormFieldCommonSchema = {
   defaultValue: shortText(2000).optional(),
 } as const
 
-const FormFieldSchema = z.discriminatedUnion('type', [
+const dateString = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u)
+
+export const JsonRenderFormFieldSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('text'),
@@ -349,14 +448,104 @@ const FormFieldSchema = z.discriminatedUnion('type', [
         })
       }
     }),
+  z
+    .object({
+      type: z.literal('date'),
+      ...FormFieldCommonSchema,
+      min: dateString.optional(),
+      max: dateString.optional(),
+    })
+    .strict()
+    .superRefine((field, context) => {
+      if (field.defaultValue !== undefined && !dateString.safeParse(field.defaultValue).success) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Date defaultValue must use YYYY-MM-DD',
+        })
+      }
+    }),
 ])
+
+const IconNameSchema = z.enum([
+  'check',
+  'close',
+  'copy',
+  'download',
+  'edit',
+  'expand',
+  'link',
+  'refresh',
+  'search',
+  'settings',
+  'upload',
+  'warning',
+])
+
+const DividerNodeSchema = z
+  .object({
+    type: z.literal('Divider'),
+    orientation: z.enum(['horizontal', 'vertical']).optional(),
+    spacing: z.enum(['none', 's', 'm', 'l', 'xl']).optional(),
+  })
+  .strict()
+
+const IconNodeSchema = z
+  .object({
+    type: z.literal('Icon'),
+    name: IconNameSchema,
+    label: shortText(120).optional(),
+    color: z
+      .enum(['primary', 'secondary', 'tertiary', 'brand', 'success', 'warning', 'danger'])
+      .optional(),
+    size: z.enum(['s', 'm', 'l']).optional(),
+  })
+  .strict()
+
+const SpacerNodeSchema = z
+  .object({
+    type: z.literal('Spacer'),
+    size: z.enum(['s', 'm', 'l', 'xl']).optional(),
+    grow: z.boolean().optional(),
+  })
+  .strict()
+
+const SelectNodeSchema = z
+  .object({
+    type: z.literal('Select'),
+    label: shortText(160),
+    placeholder: shortText(160).optional(),
+    defaultValue: shortText(80).optional(),
+    options: z
+      .array(z.object({ label: shortText(80), value: shortText(80) }).strict())
+      .min(2)
+      .max(JSON_RENDER_LIMITS.maxSelectOptions),
+    promptTemplate: z.string().trim().min(1).max(4000),
+  })
+  .strict()
+  .superRefine((select, context) => {
+    const values = new Set(select.options.map((option) => option.value))
+    if (select.defaultValue !== undefined && !values.has(select.defaultValue)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Select defaultValue must match an option value',
+      })
+    }
+    for (const match of select.promptTemplate.matchAll(/\{\{([^{}]+)\}\}/gu)) {
+      if (match[1] !== 'value' && match[1] !== 'label') {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Select promptTemplate only supports {{value}} and {{label}}',
+        })
+      }
+    }
+  })
 
 const FormNodeSchema = z
   .object({
     type: z.literal('Form'),
     title: shortText(160).optional(),
     description: text(2000).optional(),
-    fields: z.array(FormFieldSchema).min(1).max(JSON_RENDER_LIMITS.maxFormFields),
+    fields: z.array(JsonRenderFormFieldSchema).min(1).max(JSON_RENDER_LIMITS.maxFormFields),
     submitLabel: shortText(60),
     promptTemplate: z.string().trim().min(1).max(4000),
   })
@@ -381,6 +570,17 @@ const FormNodeSchema = z
 
 const ActionsSchema = z.array(JsonRenderActionSchema).max(JSON_RENDER_LIMITS.maxActions)
 
+const layoutProps = {
+  gap: z.enum(['none', 's', 'm', 'l', 'xl']).optional(),
+  align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+  justify: z.enum(['start', 'center', 'end', 'between']).optional(),
+  wrap: z.boolean().optional(),
+  grow: z.boolean().optional(),
+  padding: z.enum(['none', 's', 'm', 'l']).optional(),
+  background: z.enum(['none', 'layer', 'subtle']).optional(),
+  radius: z.enum(['none', 's', 'm', 'l']).optional(),
+} as const
+
 /**
  * Recursive node union. React components are not part of this package; this schema only
  * describes serializable data accepted by the static renderer whitelist.
@@ -398,18 +598,52 @@ export const JsonRenderNodeSchema: z.ZodType<JsonRenderNode> = z.lazy(() =>
     ListNodeSchema,
     ImageNodeSchema,
     FormNodeSchema,
+    DividerNodeSchema,
+    IconNodeSchema,
+    SpacerNodeSchema,
+    SelectNodeSchema,
     z
       .object({
         type: z.literal('Stack'),
         gap: z.enum(['none', 's', 'm', 'l']).optional(),
-        children: z.array(JsonRenderNodeSchema).min(1).max(12),
+        children: z.array(JsonRenderNodeSchema).min(1).max(JSON_RENDER_LIMITS.maxLayoutChildren),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('Box'),
+        direction: z.enum(['row', 'column']),
+        ...layoutProps,
+        children: z.array(JsonRenderNodeSchema).min(1).max(JSON_RENDER_LIMITS.maxLayoutChildren),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('Row'),
+        ...layoutProps,
+        children: z.array(JsonRenderNodeSchema).min(1).max(JSON_RENDER_LIMITS.maxLayoutChildren),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('Col'),
+        ...layoutProps,
+        children: z.array(JsonRenderNodeSchema).min(1).max(JSON_RENDER_LIMITS.maxLayoutChildren),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('Transition'),
+        effect: z.enum(['fade', 'slide-up', 'scale']).optional(),
+        grow: z.boolean().optional(),
+        children: z.array(JsonRenderNodeSchema).length(1),
       })
       .strict(),
     z
       .object({
         type: z.literal('Card'),
         eyebrow: shortText(40).optional(),
-        badge: BadgeSchema.optional(),
+        badge: JsonRenderBadgeSchema.optional(),
         title: shortText(160).optional(),
         description: text(2000).optional(),
         content: z.array(JsonRenderNodeSchema).min(1).max(8).optional(),
@@ -424,7 +658,7 @@ export const JsonRenderNodeSchema: z.ZodType<JsonRenderNode> = z.lazy(() =>
             z
               .object({
                 eyebrow: shortText(40).optional(),
-                badge: BadgeSchema.optional(),
+                badge: JsonRenderBadgeSchema.optional(),
                 title: shortText(160).optional(),
                 description: text(1000).optional(),
                 content: z.array(JsonRenderNodeSchema).min(1).max(6).optional(),
@@ -496,6 +730,18 @@ const validateStructuralLimits = (document: JsonRenderDocument): string | null =
         }
       }
       return null
+    }
+    if (node.type === 'Box' || node.type === 'Row' || node.type === 'Col') {
+      for (const child of node.children) {
+        const error = visit(child, depth + 1)
+        if (error) {
+          return error
+        }
+      }
+      return null
+    }
+    if (node.type === 'Transition') {
+      return visit(node.children[0], depth + 1)
     }
     if (node.type === 'Card') {
       if (node.badge) {

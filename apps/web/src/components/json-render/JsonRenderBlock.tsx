@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { parseJsonRenderSource, type JsonRenderDocument } from '@sweet-deepseek/json-render'
+import {
+  parseJsonRenderSource,
+  parsePartialJsonRenderSource,
+  type JsonRenderDocument,
+} from '@sweet-deepseek/json-render'
 import { useTranslate } from '../../i18n/index.js'
 import { validateJsonRenderSource } from '../../services/api/client.js'
 import { JsonRenderPending } from './JsonRenderPending.js'
@@ -21,6 +25,10 @@ export const JsonRenderBlock = ({
 }) => {
   const t = useTranslate()
   const local = useMemo(() => parseJsonRenderSource(source), [source])
+  const partial = useMemo(
+    () => (streaming ? parsePartialJsonRenderSource(source) : null),
+    [source, streaming]
+  )
   const [document, setDocument] = useState<JsonRenderDocument | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -31,7 +39,6 @@ export const JsonRenderBlock = ({
       return
     }
     if (!local.success) {
-      setFailed(!streaming)
       return
     }
     let active = true
@@ -49,7 +56,7 @@ export const JsonRenderBlock = ({
     return () => {
       active = false
     }
-  }, [limited, local, source, streaming])
+  }, [limited, local, source])
 
   if (limited) {
     return (
@@ -60,7 +67,7 @@ export const JsonRenderBlock = ({
     )
   }
 
-  if (failed) {
+  if (failed || (!streaming && !local.success)) {
     return (
       <details className={styles.fallback}>
         <summary>{t('jsonRenderInvalid')}</summary>
@@ -68,11 +75,12 @@ export const JsonRenderBlock = ({
       </details>
     )
   }
-  if (!local.success && streaming) {
-    return <JsonRenderPending />
+  if (document) {
+    return <JsonRenderView document={document} sessionId={sessionId} interactive={interactive} />
   }
-  if (!document) {
-    return <JsonRenderPending />
+  const preview = local.success ? local.data : partial?.success ? partial.data : null
+  if (preview) {
+    return <JsonRenderView document={preview} sessionId={sessionId} interactive={false} />
   }
-  return <JsonRenderView document={document} sessionId={sessionId} interactive={interactive} />
+  return <JsonRenderPending />
 }
