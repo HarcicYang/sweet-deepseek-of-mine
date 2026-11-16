@@ -76,6 +76,7 @@ export const zh = {
   mermaidSwitchLabel: 'Mermaid 图表与代码切换',
   jsonRenderGenerating: '正在生成界面...',
   jsonRenderPartialPreview: '界面生成中，已显示完成节点',
+  jsonRenderPreviewOnly: '服务端校验暂不可用，当前为只读预览',
   jsonRenderInvalid: '此界面无法渲染，已显示原始内容',
   jsonRenderLimitReached: '界面块数量超出限制，已折叠为原始内容',
   jsonRenderChart: '图表',

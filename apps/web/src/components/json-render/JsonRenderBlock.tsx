@@ -27,11 +27,11 @@ export const JsonRenderBlock = ({
   const local = useMemo(() => parseJsonRenderSource(source), [source])
   const partial = useMemo(() => parsePartialJsonRenderSource(source), [source])
   const [document, setDocument] = useState<JsonRenderDocument | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [validationFailed, setValidationFailed] = useState(false)
 
   useEffect(() => {
     setDocument(null)
-    setFailed(false)
+    setValidationFailed(false)
     if (limited) {
       return
     }
@@ -47,7 +47,7 @@ export const JsonRenderBlock = ({
       })
       .catch(() => {
         if (active) {
-          setFailed(true)
+          setValidationFailed(true)
         }
       })
     return () => {
@@ -64,14 +64,6 @@ export const JsonRenderBlock = ({
     )
   }
 
-  if (failed) {
-    return (
-      <details className={styles.fallback}>
-        <summary>{t('jsonRenderInvalid')}</summary>
-        <pre>{source}</pre>
-      </details>
-    )
-  }
   if (document) {
     return <JsonRenderView document={document} sessionId={sessionId} interactive={interactive} />
   }
@@ -79,9 +71,15 @@ export const JsonRenderBlock = ({
   if (preview) {
     return (
       <div className={styles.partialPreview}>
-        <div className={styles.partialNotice} role="status">
-          {t('jsonRenderPartialPreview')}
-        </div>
+        {validationFailed ? (
+          <div className={styles.partialNotice} role="status">
+            {t('jsonRenderPreviewOnly')}
+          </div>
+        ) : streaming || !local.success ? (
+          <div className={styles.partialNotice} role="status">
+            {t('jsonRenderPartialPreview')}
+          </div>
+        ) : null}
         <JsonRenderView document={preview} sessionId={sessionId} interactive={false} />
       </div>
     )
