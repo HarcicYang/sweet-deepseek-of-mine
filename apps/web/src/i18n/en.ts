@@ -142,7 +142,7 @@ export const en = {
   settingsTtsVoiceTide: 'Tide (male)',
   settingsCustomInstructions: 'Custom instructions',
   settingsCustomInstructionsDescription:
-    'Sent to the model as a supplement to the system prompt. It cannot override identity, safety, or tool-permission rules.',
+    'Prioritized for response style, structure, tone, and workflow, but cannot bypass safety, privacy, or tool-permission boundaries or present role-play as the actual underlying model.',
   settingsCustomInstructionsPlaceholder:
     'For example: Lead with the conclusion, then list the key points.',
   settingsLocation: 'Location',

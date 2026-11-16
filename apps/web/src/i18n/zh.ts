@@ -135,7 +135,7 @@ export const zh = {
   settingsTtsVoiceTide: '暗潮（男声）',
   settingsCustomInstructions: '自定义指令',
   settingsCustomInstructionsDescription:
-    '仅作为系统提示词的补充发送给模型，不会覆盖身份、安全或工具权限规则。',
+    '会优先影响回答风格、结构、称呼和工作流；但不能突破安全、隐私或工具权限边界，或把角色设定说成实际底层模型。',
   settingsCustomInstructionsPlaceholder: '例如：回答时先给出结论，再列出要点。',
   settingsLocation: '位置信息',
   settingsLocationProvince: '请选择省份/地区',
