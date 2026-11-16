@@ -378,6 +378,8 @@ export const toToolLoopMessages = (
 ): MessageParam[] => {
   const messages = toRequestMessages(history, question, undefined, false, latestReminder)
   let assistant: Extract<MessageParam, { role: 'assistant' }> | null = null
+  // All results for one assistant tool-use turn must share the immediately following user message.
+  let toolResultContent: ToolResultBlockParam[] | null = null
   const assistantContent = (): AssistantBlockParam[] => {
     if (!assistant) {
       assistant = { role: 'assistant', content: [] }
@@ -387,6 +389,9 @@ export const toToolLoopMessages = (
   }
 
   for (const block of reply.blocks) {
+    if (block.type !== 'tool_result') {
+      toolResultContent = null
+    }
     if (block.type === 'text') {
       if (block.text) {
         assistantContent().push({ type: 'text', text: block.text })
@@ -420,7 +425,12 @@ export const toToolLoopMessages = (
         content: block.content.map((item) => ({ type: 'text', text: item.text })),
         ...(block.isError ? { is_error: true } : {}),
       }
-      messages.push({ role: 'user', content: [result] })
+      if (!toolResultContent) {
+        toolResultContent = []
+        messages.push({ role: 'user', content: toolResultContent })
+      }
+      toolResultContent.push(result)
+      continue
     }
   }
   return messages

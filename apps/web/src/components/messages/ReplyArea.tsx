@@ -294,13 +294,12 @@ const ToolRow = ({
 
 const McpToolRow = ({ step, isLast }: { step: McpToolStep; isLast: boolean }) => {
   const t = useTranslate()
-  const name = step.name.split('__').at(-1) || step.name
   const text =
     step.status === 'wip'
-      ? t('mcpToolCalling', { tool: name })
+      ? t('mcpToolCalling', { tool: step.displayName })
       : step.status === 'failed'
-        ? t('mcpToolFailed', { tool: name })
-        : t('mcpToolCalled', { tool: name })
+        ? t('mcpToolFailed', { tool: step.displayName })
+        : t('mcpToolCalled', { tool: step.displayName })
   return (
     <ToolRow icon={<IconLinkOutline16 />} isLast={isLast}>
       <span className={clsx(step.status === 'failed' && styles.toolFailed)}>{text}</span>

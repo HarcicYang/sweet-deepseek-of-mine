@@ -67,7 +67,21 @@ export type McpToolStep = {
   type: 'mcp'
   key: string
   name: string
+  displayName: string
   status: ToolStatus
+}
+
+export const getMcpToolDisplayName = (name: string): string => {
+  if (!name.startsWith('mcp__')) {
+    return name
+  }
+  const separator = name.indexOf('__', 5)
+  if (separator === -1) {
+    return name
+  }
+  const namespace = name.slice(5, separator)
+  const toolName = name.slice(separator + 2)
+  return namespace && toolName ? `${namespace} - ${toolName}` : name
 }
 
 /** 工具调用前输出的说明文字 */
@@ -270,6 +284,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         type: 'mcp',
         key: block.id,
         name: block.name,
+        displayName: getMcpToolDisplayName(block.name),
         status: result ? (result.isError ? 'failed' : 'done') : streaming ? 'wip' : 'failed',
       })
       return
