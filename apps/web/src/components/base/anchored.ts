@@ -153,12 +153,14 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
     const available = Math.max(0, resolved === 'top' ? spaceAbove : spaceBelow)
     // 内容比可用空间小时按内容收口，避免浮层留出多余空白
     const height = Math.max(40, Math.min(maxHeight, available, floating.scrollHeight + 2))
+    const floatingWidth = floating.getBoundingClientRect().width
+    const width = matchAnchorWidth ? rect.width : floatingWidth
     applyPosition({
       top:
         resolved === 'top'
           ? Math.max(VIEWPORT_PADDING, rect.top - offset - height)
           : rect.bottom + offset,
-      right: Math.max(VIEWPORT_PADDING, window.innerWidth - rect.right),
+      left: alignLeft(rect, width, align, alignOffset),
       ...(matchAnchorWidth ? { width: rect.width } : {}),
       maxHeight: height,
     })
