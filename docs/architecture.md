@@ -14,13 +14,14 @@ packages/
 ## 边界
 
 - `apps/web` 负责界面、本地缓存、流式渲染和用户交互；迁移完成后不持久化 DeepSeek API Key。
-- `apps/server` 负责登录会话、服务端密钥、DeepSeek 代理和后续的 MCP 网关。
+- `apps/server` 负责登录会话、服务端密钥、DeepSeek 代理和按账号隔离的 MCP 网关。
 - `packages/contracts` 同时被客户端和服务端引用，保存可序列化协议、共享常量和不可信输入的校验函数。
 - `packages/json-render` 只保存可序列化 UI 协议和纯校验逻辑；React 组件仍在 Web 端静态注册。
-- 静态注册的 UI 组件、Skill manifest 和 MCP 返回值不进入共享协议包，直到对应能力开始实现。
+- 静态注册的 UI 组件和 MCP 执行逻辑不进入共享协议包；共享包只定义可序列化配置、摘要和校验 schema。
 
 JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入规划](json-render.md)。
 临时只读快照的实现与隐私边界见[临时对话分享](sharing.md)。
+远程 MCP 的账号隔离、工具循环和网络边界见[远程 MCP 工具](mcp.md)。
 
 ## 当前迁移状态
 
@@ -28,6 +29,7 @@ JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入�
 协议见[认证与 API Key](authentication.md)。Web 端通过同源 `/api` 接口调用服务端，
 不再直接请求 DeepSeek API，也不在浏览器持久化 API Key。会话、删除墓碑和账号常用设置
 已接入云端同步；同步协议见[云端会话同步](sync.md)。
+MCP 工具使用同一回复循环，配置和加密请求头保存在账号级服务端存储中。
 
 ## 边缘运行时边界
 
@@ -43,6 +45,5 @@ JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入�
   避免受边缘请求体、内存和数据库单行大小限制。
 
 当前仓库已实现 Node adapter 与 Workers adapter；Worker 使用 D1 保存账号、设置、分块会话和
-分块分享快照，Node 仍可使用文件存储。附件原件尚未进入云端存储，后续对象存储方案应同时服务
-附件和大会话载荷。
-附件原件尚未进入云端存储，后续对象存储方案应同时服务附件和大会话载荷。
+分块分享快照，以及账号级 MCP 配置；Node 仍可使用文件存储。附件原件继续保持设备本地，
+不进入当前云端存储范围。

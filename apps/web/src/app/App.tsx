@@ -22,6 +22,7 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { closeSettings, ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
+import { McpApprovalDialog } from '../components/mcp/McpApprovalDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
@@ -208,6 +209,7 @@ export const App = () => {
         <SearchPanel />
       </div>
       <SettingsDialog />
+      <McpApprovalDialog />
       <Toast />
     </>
   )

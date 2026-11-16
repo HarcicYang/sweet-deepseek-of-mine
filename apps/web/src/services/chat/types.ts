@@ -63,8 +63,30 @@ export type TextPart = {
   isTemplate?: boolean
 }
 
+/** 模型请求的客户端工具调用；MCP 执行结果随后写入同一条回复。 */
+export type ToolUsePart = {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: unknown
+  /** 流式接收中的 JSON 参数；content_block_stop 后解析进 input 并移除。 */
+  inputText?: string
+  inputError?: string
+  startedAt?: number
+  endedAt?: number
+}
+
+/** 客户端工具结果，只保存文本以避免把 MCP 二进制内容写入会话数据库。 */
+export type ToolResultPart = {
+  type: 'tool_result'
+  tool_use_id: string
+  content: { type: 'text'; text: string }[]
+  isError: boolean
+  durationMs?: number
+}
+
 /** 服务端工具调用与结果块按协议原样保存；历史请求只回传 read_link 调用与结果 */
-export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock
+export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock | ToolUsePart | ToolResultPart
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；

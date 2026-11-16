@@ -20,6 +20,7 @@ import {
   isDeepSearchKind,
   isImageSearchKind,
   type FindStep,
+  type McpToolStep,
   type OpenStep,
   type PageItem,
   type ReadLinkStep,
@@ -118,7 +119,7 @@ const getThinkingPreview = (steps: Step[], streaming: boolean): string | null =>
 }
 
 const stepKey = (step: Step, index: number) =>
-  step.type === 'thinking' || step.type === 'text' || step.type === 'search'
+  step.type === 'thinking' || step.type === 'text' || step.type === 'search' || step.type === 'mcp'
     ? step.key
     : `${step.type}-${index}`
 
@@ -171,6 +172,8 @@ const StepItem = ({
       return <FindRow step={step} isLast={isLast} />
     case 'read_link':
       return <ReadLinkRow step={step} isLast={isLast} />
+    case 'mcp':
+      return <McpToolRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -288,6 +291,22 @@ const ToolRow = ({
     <div className={styles.toolBody}>{children}</div>
   </div>
 )
+
+const McpToolRow = ({ step, isLast }: { step: McpToolStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const name = step.name.split('__').at(-1) || step.name
+  const text =
+    step.status === 'wip'
+      ? t('mcpToolCalling', { tool: name })
+      : step.status === 'failed'
+        ? t('mcpToolFailed', { tool: name })
+        : t('mcpToolCalled', { tool: name })
+  return (
+    <ToolRow icon={<IconLinkOutline16 />} isLast={isLast}>
+      <span className={clsx(step.status === 'failed' && styles.toolFailed)}>{text}</span>
+    </ToolRow>
+  )
+}
 
 const PageLink = ({ page, failedTip }: { page: PageItem; failedTip?: string }) => (
   <span

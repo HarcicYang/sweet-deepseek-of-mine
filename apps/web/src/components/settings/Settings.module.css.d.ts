@@ -36,5 +36,24 @@ declare const styles: {
   readonly importConfirmText: string
   readonly deleteConfirm: string
   readonly deleteActions: string
+  readonly mcpSettings: string
+  readonly sectionHeading: string
+  readonly sectionDescription: string
+  readonly mcpList: string
+  readonly mcpEmpty: string
+  readonly mcpServer: string
+  readonly mcpServerMain: string
+  readonly mcpServerTitleRow: string
+  readonly mcpSlug: string
+  readonly mcpEnabled: string
+  readonly mcpDisabled: string
+  readonly mcpServerUrl: string
+  readonly mcpHeaderNames: string
+  readonly mcpServerStatus: string
+  readonly mcpServerActions: string
+  readonly mcpForm: string
+  readonly mcpField: string
+  readonly mcpCheckbox: string
+  readonly mcpFormActions: string
 }
 export = styles

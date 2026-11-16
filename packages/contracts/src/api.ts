@@ -14,6 +14,11 @@ export const apiRoutes = {
   speechAsr: '/api/speech/asr',
   speechTts: '/api/speech/tts',
   jsonRenderValidate: '/api/json-render/validate',
+  mcpServers: '/api/mcp/servers',
+  mcpServer: '/api/mcp/servers/:serverId',
+  mcpServerProbe: '/api/mcp/servers/:serverId/probe',
+  mcpTools: '/api/mcp/tools',
+  mcpToolCall: '/api/mcp/call',
   shares: '/api/shares',
   sharedSession: '/api/shares/:token',
   syncSessions: '/api/sync/sessions',
@@ -107,12 +112,26 @@ const ChatMessageSchema = z
   })
   .strict()
 
-const ChatToolSchema = z
+const ChatNativeToolSchema = z
   .object({
     type: z.enum(['deepseek_web_search', 'deepseek_read_url']),
     name: z.enum(['deepseek_web_search', 'deepseek_read_url']),
   })
   .strict()
+
+const ChatCustomFunctionToolSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9_-]+$/u),
+    description: z.string().max(100_000),
+    input_schema: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+
+const ChatToolSchema = z.union([ChatNativeToolSchema, ChatCustomFunctionToolSchema])
 
 export const ChatProxyRequestSchema = z
   .object({
@@ -121,7 +140,22 @@ export const ChatProxyRequestSchema = z
     messages: z.array(ChatMessageSchema).min(1).max(500),
     thinking: z.object({ type: z.enum(['enabled', 'disabled']) }).strict(),
     output_config: z.object({ effort: ThinkingEffortSchema }).strict().optional(),
-    tools: z.array(ChatToolSchema).max(8),
+    tools: z
+      .array(ChatToolSchema)
+      .max(64)
+      .superRefine((tools, context) => {
+        const names = new Set<string>()
+        tools.forEach((tool, index) => {
+          if (names.has(tool.name)) {
+            context.addIssue({
+              code: 'custom',
+              path: [index, 'name'],
+              message: `Duplicate tool name: ${tool.name}`,
+            })
+          }
+          names.add(tool.name)
+        })
+      }),
     safety_check: z.object({ level: z.literal('high') }).strict(),
     title: z.object({ enabled: z.boolean() }).strict().optional(),
   })

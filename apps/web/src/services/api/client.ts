@@ -32,6 +32,19 @@ import {
   type SharedSessionResponse,
 } from '@sweet-deepseek/contracts/share'
 import {
+  McpProbeResponseSchema,
+  McpServerResponseSchema,
+  McpServersResponseSchema,
+  McpToolCallResponseSchema,
+  McpToolsResponseSchema,
+  type McpProbeResponse,
+  type McpServerInput,
+  type McpServerSummary,
+  type McpServerUpdate,
+  type McpToolCallResponse,
+  type McpToolSummary,
+} from '@sweet-deepseek/contracts/mcp'
+import {
   JsonRenderValidationResponseSchema,
   type JsonRenderDocument,
 } from '@sweet-deepseek/json-render'
@@ -205,6 +218,70 @@ export const getSharedSession = async (
     { credentials: 'omit', signal }
   )
   return parseResponse(SharedSessionResponseSchema, await response.json())
+}
+
+export const listMcpServers = async (): Promise<McpServerSummary[]> => {
+  const response = await request(apiRoutes.mcpServers)
+  return parseResponse(McpServersResponseSchema, await response.json()).servers
+}
+
+export const createMcpServer = async (input: McpServerInput): Promise<McpServerSummary> => {
+  const response = await request(apiRoutes.mcpServers, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseResponse(McpServerResponseSchema, await response.json()).server
+}
+
+export const updateMcpServer = async (
+  serverId: string,
+  update: McpServerUpdate
+): Promise<McpServerSummary> => {
+  const response = await request(
+    apiRoutes.mcpServer.replace(':serverId', encodeURIComponent(serverId)),
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update),
+    }
+  )
+  return parseResponse(McpServerResponseSchema, await response.json()).server
+}
+
+export const deleteMcpServer = async (serverId: string): Promise<void> => {
+  await request(apiRoutes.mcpServer.replace(':serverId', encodeURIComponent(serverId)), {
+    method: 'DELETE',
+  })
+}
+
+export const probeMcpServer = async (serverId: string): Promise<McpProbeResponse> => {
+  const response = await request(
+    apiRoutes.mcpServerProbe.replace(':serverId', encodeURIComponent(serverId)),
+    { method: 'POST' }
+  )
+  return parseResponse(McpProbeResponseSchema, await response.json())
+}
+
+export const listMcpTools = async (signal?: AbortSignal): Promise<McpToolSummary[]> => {
+  const response = await request(apiRoutes.mcpTools, { signal })
+  return parseResponse(McpToolsResponseSchema, await response.json()).tools
+}
+
+export const callMcpTool = async (
+  serverId: string,
+  rawName: string,
+  args: Record<string, unknown>,
+  approved: boolean,
+  signal?: AbortSignal
+): Promise<McpToolCallResponse> => {
+  const response = await request(apiRoutes.mcpToolCall, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId, rawName, arguments: args, approved }),
+    signal,
+  })
+  return parseResponse(McpToolCallResponseSchema, await response.json())
 }
 
 export const logout = async (): Promise<void> => {

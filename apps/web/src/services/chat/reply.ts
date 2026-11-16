@@ -5,6 +5,7 @@ import type {
   MessageStreamEvent,
   OutputBlockStart,
   TextBlockParam,
+  ToolResultBlockParam,
 } from '@sweet-deepseek/contracts'
 import type {
   AssistantMessage,
@@ -12,6 +13,7 @@ import type {
   Message,
   ReplyBlock,
   ReplyStatus,
+  ToolUsePart,
   UserMessage,
 } from './types.js'
 
@@ -46,6 +48,20 @@ const toReplyBlock = (block: OutputBlockStart, now: number): ReplyBlock | null =
     case 'web_search_tool_result':
     case 'web_fetch_tool_result':
       return block
+    case 'tool_use':
+      return {
+        type: 'tool_use',
+        id: block.id,
+        name: block.name,
+        input: block.input,
+        inputText:
+          typeof block.input === 'object' &&
+          block.input !== null &&
+          Object.keys(block.input).length > 0
+            ? undefined
+            : '',
+        startedAt: now,
+      }
     default:
       return null
   }
@@ -84,8 +100,7 @@ export const applyEvent = (
       blockIndexes.delete(event.index)
       const block = toReplyBlock(event.content_block, now)
       if (!block) {
-        // 客户端工具内容不保存；未完成的工具往返也不能作为续写前缀。
-        return event.content_block.type === 'tool_use' ? { ...next, prefix: false } : next
+        return next
       }
       blockIndexes.set(event.index, next.blocks.length)
       return { ...next, blocks: [...next.blocks, block] }
@@ -109,6 +124,9 @@ export const applyEvent = (
         if (block.type === 'text' && delta.type === 'citations_delta') {
           return { ...block, citations: [...(block.citations ?? []), delta.citation] }
         }
+        if (block.type === 'tool_use' && delta.type === 'input_json_delta') {
+          return { ...block, inputText: (block.inputText ?? '') + delta.partial_json }
+        }
         return block
       })
     }
@@ -118,11 +136,36 @@ export const applyEvent = (
         return next
       }
       blockIndexes.delete(event.index)
-      return updateBlock(next, index, (block) =>
-        block.type === 'thinking' && block.startedAt !== undefined && block.endedAt === undefined
-          ? { ...block, endedAt: now }
-          : block
-      )
+      return updateBlock(next, index, (block) => {
+        if (
+          block.type === 'thinking' &&
+          block.startedAt !== undefined &&
+          block.endedAt === undefined
+        ) {
+          return { ...block, endedAt: now }
+        }
+        if (block.type === 'tool_use' && block.endedAt === undefined) {
+          if (block.inputText === undefined) {
+            return { ...block, endedAt: now }
+          }
+          try {
+            return {
+              ...block,
+              input: block.inputText.trim() ? (JSON.parse(block.inputText) as unknown) : {},
+              inputText: undefined,
+              endedAt: now,
+            }
+          } catch {
+            return {
+              ...block,
+              inputText: undefined,
+              inputError: 'Invalid JSON tool arguments',
+              endedAt: now,
+            }
+          }
+        }
+        return block
+      })
     }
     case 'message_delta':
       return {
@@ -153,9 +196,34 @@ export const settleReply = (
     if (reply.stopReason === 'refusal' && (block.type === 'thinking' || block.type === 'text')) {
       return []
     }
-    return block.type === 'thinking' && block.startedAt !== undefined && block.endedAt === undefined
-      ? [{ ...block, endedAt: now }]
-      : [block]
+    if (block.type === 'thinking' && block.startedAt !== undefined && block.endedAt === undefined) {
+      return [{ ...block, endedAt: now }]
+    }
+    if (block.type === 'tool_use' && block.endedAt === undefined) {
+      if (block.inputText === undefined) {
+        return [{ ...block, endedAt: now }]
+      }
+      try {
+        return [
+          {
+            ...block,
+            input: block.inputText.trim() ? (JSON.parse(block.inputText) as unknown) : {},
+            inputText: undefined,
+            endedAt: now,
+          },
+        ]
+      } catch {
+        return [
+          {
+            ...block,
+            inputText: undefined,
+            inputError: 'Invalid JSON tool arguments',
+            endedAt: now,
+          },
+        ]
+      }
+    }
+    return [block]
   }),
 })
 
@@ -179,6 +247,8 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
         block.type === 'server_tool_use' ||
         block.type === 'web_search_tool_result' ||
         block.type === 'web_fetch_tool_result' ||
+        block.type === 'tool_use' ||
+        block.type === 'tool_result' ||
         (block.type === 'text' && block.isTemplate)
     )
   ) {
@@ -280,6 +350,80 @@ const toAssistantParam = (
     role: 'assistant',
     content: content.filter((block) => block.type !== 'text' || block.text !== ''),
   }
+}
+
+/** 当前回复中尚未产生结果的模型工具调用。 */
+export const getPendingToolUses = (reply: AssistantMessage): ToolUsePart[] => {
+  const completed = new Set(
+    reply.blocks.flatMap((block) => (block.type === 'tool_result' ? [block.tool_use_id] : []))
+  )
+  return reply.blocks.filter(
+    (block): block is ToolUsePart => block.type === 'tool_use' && !completed.has(block.id)
+  )
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * 为一次工具循环追加当前 assistant 的文本、思考、tool_use 与 user tool_result。
+ * MCP 工具块只在当前回复内进入请求；最终回答完成后，历史轮次只保留普通正文。
+ */
+export const toToolLoopMessages = (
+  history: Message[],
+  question: UserMessage,
+  reply: AssistantMessage,
+  latestReminder: string | undefined,
+  thinking: boolean
+): MessageParam[] => {
+  const messages = toRequestMessages(history, question, undefined, false, latestReminder)
+  let assistant: Extract<MessageParam, { role: 'assistant' }> | null = null
+  const assistantContent = (): AssistantBlockParam[] => {
+    if (!assistant) {
+      assistant = { role: 'assistant', content: [] }
+      messages.push(assistant)
+    }
+    return assistant.content
+  }
+
+  for (const block of reply.blocks) {
+    if (block.type === 'text') {
+      if (block.text) {
+        assistantContent().push({ type: 'text', text: block.text })
+      }
+      continue
+    }
+    if (block.type === 'thinking') {
+      if (thinking && (block.thinking || block.signature)) {
+        assistantContent().push({
+          type: 'thinking',
+          thinking: block.thinking,
+          signature: block.signature ?? '',
+        })
+      }
+      continue
+    }
+    if (block.type === 'tool_use') {
+      assistantContent().push({
+        type: 'tool_use',
+        id: block.id,
+        name: block.name,
+        input: isRecord(block.input) ? block.input : {},
+      })
+      continue
+    }
+    if (block.type === 'tool_result') {
+      assistant = null
+      const result: ToolResultBlockParam = {
+        type: 'tool_result',
+        tool_use_id: block.tool_use_id,
+        content: block.content.map((item) => ({ type: 'text', text: item.text })),
+        ...(block.isError ? { is_error: true } : {}),
+      }
+      messages.push({ role: 'user', content: [result] })
+    }
+  }
+  return messages
 }
 
 /** 历史中会进入请求上下文的轮次：提问后紧跟可用回答的才保留 */

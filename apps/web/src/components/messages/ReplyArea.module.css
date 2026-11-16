@@ -236,6 +236,10 @@
   font-variant: tabular-nums;
 }
 
+.toolFailed {
+  color: var(--dsw-alias-label-caption);
+}
+
 .page {
   display: inline-flex;
   align-items: center;

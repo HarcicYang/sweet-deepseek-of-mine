@@ -70,7 +70,43 @@ const ServerToolBlockSchema = z
   })
   .passthrough()
 
-const ReplyBlockSchema = z.union([ThinkingPartSchema, TextPartSchema, ServerToolBlockSchema])
+const ToolUsePartSchema = z
+  .object({
+    type: z.literal('tool_use'),
+    id: z.string().min(1),
+    name: z.string().min(1).max(64),
+    input: z.unknown(),
+    inputText: z.string().optional(),
+    inputError: z.string().optional(),
+    startedAt: z.number().int().nonnegative().optional(),
+    endedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict()
+
+const ToolResultPartSchema = z
+  .object({
+    type: z.literal('tool_result'),
+    tool_use_id: z.string().min(1),
+    content: z.array(
+      z
+        .object({
+          type: z.literal('text'),
+          text: z.string(),
+        })
+        .strict()
+    ),
+    isError: z.boolean(),
+    durationMs: z.number().nonnegative().optional(),
+  })
+  .strict()
+
+const ReplyBlockSchema = z.union([
+  ThinkingPartSchema,
+  TextPartSchema,
+  ServerToolBlockSchema,
+  ToolUsePartSchema,
+  ToolResultPartSchema,
+])
 
 const MessageUsageSchema = z
   .object({

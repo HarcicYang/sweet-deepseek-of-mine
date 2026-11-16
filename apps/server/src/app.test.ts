@@ -4,6 +4,8 @@ import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import { JSON_RENDER_LIMITS, JSON_RENDER_VERSION } from '@sweet-deepseek/json-render'
 import { MemoryAccountStore } from './account-store.js'
 import { createApp } from './app.js'
+import { McpApprovalRequiredError, type McpClient } from './mcp-client.js'
+import { MemoryMcpStore } from './mcp-store.js'
 import { createSecurityService } from './security.js'
 import { MemoryShareStore } from './share-store.js'
 import { MemorySyncStore } from './sync-store.js'
@@ -22,7 +24,39 @@ const cookieValue = (setCookie: string | null, name: string): string | null => {
 
 const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
   const security = await createSecurityService(MASTER_KEY)
+  const store = new MemoryAccountStore()
   const syncStore = new MemorySyncStore()
+  const mcpStore = new MemoryMcpStore()
+  const mcpClient: McpClient = {
+    probe: async () => ({
+      ok: true,
+      server: { name: 'test-mcp', version: '1.0.0' },
+      tools: [
+        {
+          name: 'lookup',
+          description: 'Look up a value',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          readOnly: true,
+        },
+        {
+          name: 'write',
+          description: 'Write a value',
+          inputSchema: { type: 'object', properties: { value: { type: 'string' } } },
+          readOnly: false,
+        },
+      ],
+      durationMs: 1,
+    }),
+    callTool: async (_config, rawName, _args, approved) => {
+      if (rawName === 'write' && !approved) {
+        throw new McpApprovalRequiredError()
+      }
+      return {
+        content: [{ type: 'text', text: 'result' }],
+        isError: false,
+      }
+    },
+  }
   const calls: Array<{ url: string; init?: RequestInit; body?: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (input, init) => {
     const url =
@@ -74,9 +108,11 @@ const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
     return new Response('unexpected request', { status: 500 })
   }
   const app = createApp({
-    store: new MemoryAccountStore(),
+    store,
     syncStore,
     shareStore: new MemoryShareStore(),
+    mcpStore,
+    mcpClient,
     security,
     appOrigin: APP_ORIGIN,
     githubClientId: 'github-client-id',
@@ -89,7 +125,7 @@ const createTestApp = async (options: { allowedOrigins?: string[] } = {}) => {
     allowedOrigins: options.allowedOrigins,
     fetchImpl,
   })
-  return { app, calls, syncStore }
+  return { app, calls, syncStore, mcpStore, mcpClient, security, store }
 }
 
 const authenticate = async (app: Awaited<ReturnType<typeof createTestApp>>['app']) => {
@@ -103,6 +139,23 @@ const authenticate = async (app: Awaited<ReturnType<typeof createTestApp>>['app'
   const token = cookieValue(callback.headers.get('set-cookie'), 'sdom_session')
   assert.ok(token)
   return token
+}
+
+const authenticateTestUser = async (
+  store: MemoryAccountStore,
+  security: Awaited<ReturnType<typeof createSecurityService>>,
+  profile: { githubId: string; githubLogin: string }
+) => {
+  const user = await store.upsertGithubUser({ ...profile, avatarUrl: null })
+  const token = security.createToken()
+  const now = Date.now()
+  await store.createSession({
+    tokenHash: await security.hashToken(token),
+    userId: user.id,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + 60_000).toISOString(),
+  })
+  return { token, user }
 }
 
 test('GitHub OAuth creates an authenticated server session', async () => {
@@ -191,6 +244,110 @@ test('JSON-Render validation requires auth and rejects unknown nodes', async () 
   assert.equal(tooLarge.status, 413)
 })
 
+test('MCP servers are private per user and keep request headers encrypted', async () => {
+  const { app, mcpStore, security, store } = await createTestApp()
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+
+  const created = await app.request(`${APP_ORIGIN}${apiRoutes.mcpServers}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: 'Demo MCP',
+      slug: 'demo',
+      url: 'https://mcp.example.com/mcp',
+      headers: { Authorization: 'Bearer test-secret' },
+      enabled: true,
+    }),
+  })
+  assert.equal(created.status, 201)
+  const createdBody = (await created.json()) as {
+    server: { id: string; headerNames: string[] }
+  }
+  assert.deepEqual(createdBody.server.headerNames, ['Authorization'])
+  assert.doesNotMatch(JSON.stringify(createdBody), /test-secret/u)
+
+  const serverId = createdBody.server.id
+  const owner = await store.upsertGithubUser({
+    githubId: '12345',
+    githubLogin: 'octocat',
+    avatarUrl: null,
+  })
+  const stored = await mcpStore.findServer(owner.id, serverId)
+  assert.ok(stored?.encryptedHeaders)
+  assert.doesNotMatch(JSON.stringify(stored.encryptedHeaders), /test-secret/u)
+
+  const probed = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpServerProbe.replace(':serverId', serverId)}`,
+    { method: 'POST', headers }
+  )
+  assert.equal(probed.status, 200)
+  const probeBody = (await probed.json()) as {
+    ok: true
+    tools: Array<{ name: string; rawName: string; readOnly: boolean }>
+  }
+  assert.equal(probeBody.ok, true)
+  assert.deepEqual(
+    probeBody.tools.map((tool) => [tool.name, tool.rawName, tool.readOnly]),
+    [
+      ['mcp__demo__lookup', 'lookup', true],
+      ['mcp__demo__write', 'write', false],
+    ]
+  )
+
+  const readOnlyCall = await app.request(`${APP_ORIGIN}${apiRoutes.mcpToolCall}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      serverId,
+      rawName: 'lookup',
+      arguments: { query: 'hello' },
+      approved: false,
+    }),
+  })
+  assert.equal(readOnlyCall.status, 200)
+  assert.deepEqual(await readOnlyCall.json(), {
+    content: [{ type: 'text', text: 'result' }],
+    isError: false,
+  })
+
+  const unapprovedWrite = await app.request(`${APP_ORIGIN}${apiRoutes.mcpToolCall}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      serverId,
+      rawName: 'write',
+      arguments: { value: 'hello' },
+      approved: false,
+    }),
+  })
+  assert.equal(unapprovedWrite.status, 403)
+
+  const second = await authenticateTestUser(store, security, {
+    githubId: '67890',
+    githubLogin: 'second-user',
+  })
+  const secondHeaders = {
+    Cookie: `sdom_session=${second.token}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const secondList = await app.request(`${APP_ORIGIN}${apiRoutes.mcpServers}`, {
+    headers: secondHeaders,
+  })
+  assert.equal(secondList.status, 200)
+  assert.deepEqual(await secondList.json(), { servers: [] })
+  const secondProbe = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpServerProbe.replace(':serverId', serverId)}`,
+    { method: 'POST', headers: secondHeaders }
+  )
+  assert.equal(secondProbe.status, 404)
+})
+
 test('API key storage and DeepSeek proxies keep credentials on the server', async () => {
   const { app, calls } = await createTestApp()
   const start = await app.request(`${APP_ORIGIN}${apiRoutes.githubStart}`)
@@ -249,6 +406,49 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   assert.deepEqual(upstreamBody.output_config, { effort: 'high' })
   assert.equal(upstreamBody.reasoning_effort, undefined)
 
+  const customToolChat = await app.request(`${APP_ORIGIN}${apiRoutes.chat}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      system: 'test',
+      messages: [{ role: 'user', content: 'use the tool' }],
+      thinking: { type: 'enabled' },
+      output_config: { effort: 'high' },
+      tools: [
+        {
+          name: 'mcp__demo__lookup',
+          description: 'Look up a value',
+          input_schema: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
+      ],
+      safety_check: { level: 'high' },
+    }),
+  })
+  assert.equal(customToolChat.status, 200)
+  const customToolRequest = calls
+    .filter((call) => call.url === 'https://api.deepseek.test/anthropic/v1/messages')
+    .at(-1)
+  assert.ok(customToolRequest)
+  const customToolBody = JSON.parse(String(customToolRequest.init?.body)) as {
+    tools: Array<{ name: string; input_schema: { type: string } }>
+  }
+  assert.deepEqual(customToolBody.tools, [
+    {
+      name: 'mcp__demo__lookup',
+      description: 'Look up a value',
+      input_schema: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  ])
+
   const invalidThinking = await app.request(`${APP_ORIGIN}${apiRoutes.chat}`, {
     method: 'POST',
     headers,
@@ -292,7 +492,7 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   assert.equal(disabledWithEffort.status, 400)
   assert.equal(
     calls.filter((call) => call.url === 'https://api.deepseek.test/anthropic/v1/messages').length,
-    1
+    2
   )
 
   const uploadForm = new FormData()
@@ -521,7 +721,23 @@ test('creates expiring public share snapshots without file credentials', async (
         model: 'deepseek-flash' as const,
         prefix: true,
         status: 'done' as const,
-        blocks: [{ type: 'text' as const, text: 'Shared answer' }],
+        blocks: [
+          { type: 'text' as const, text: 'Shared answer' },
+          {
+            type: 'tool_use' as const,
+            id: 'tool-1',
+            name: 'mcp__demo__lookup',
+            input: { secret: 'private-mcp-argument' },
+            startedAt: 2,
+            endedAt: 3,
+          },
+          {
+            type: 'tool_result' as const,
+            tool_use_id: 'tool-1',
+            content: [{ type: 'text' as const, text: 'private-mcp-output' }],
+            isError: false,
+          },
+        ],
         parentId: 'user-1',
       },
     ],
@@ -557,6 +773,8 @@ test('creates expiring public share snapshots without file credentials', async (
   if (sharedUserMessage?.role === 'user') {
     assert.equal(sharedUserMessage.files[0]?.serverId, null)
   }
+  assert.equal(JSON.stringify(sharedBody).includes('private-mcp-argument'), false)
+  assert.equal(JSON.stringify(sharedBody).includes('private-mcp-output'), false)
 
   const invalid = await app.request(`${APP_ORIGIN}${apiRoutes.shares}`, {
     method: 'POST',

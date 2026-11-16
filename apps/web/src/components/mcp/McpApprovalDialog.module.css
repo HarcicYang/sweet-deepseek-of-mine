@@ -1,0 +1,27 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.description {
+  margin: 0;
+}
+
+.label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.arguments {
+  max-height: min(42vh, 360px);
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-primary);
+  font: 12px/1.6 var(--ds-font-family-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

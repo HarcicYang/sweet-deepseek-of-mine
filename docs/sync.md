@@ -38,6 +38,8 @@
 - `themePreference`、`locale` 和 `siderCollapsed` 属于设备本地偏好，不进入云端同步。
 - `GET /api/sync/settings` 返回当前账号设置或 `null`。
 - `PUT /api/sync/settings` 携带 `baseRevision` 和完整设置载荷，成功时 revision 加一。
+- MCP 服务配置不进入设置同步载荷；它们直接保存在账号级服务端存储中，因此同一账号的不同设备
+  都会读取同一份配置。协议见 [远程 MCP 工具](mcp.md)。
 
 设置载荷当前版本为 `3`：
 

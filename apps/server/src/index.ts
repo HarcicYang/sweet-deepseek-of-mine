@@ -4,6 +4,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FileAccountStore } from './account-store.js'
 import { createApp } from './app.js'
+import { FileMcpStore } from './mcp-store.js'
+import { createMcpClient } from './mcp-client.js'
 import { createSecurityService } from './security.js'
 import { FileShareStore } from './share-store.js'
 import { FileSyncStore } from './sync-store.js'
@@ -15,6 +17,8 @@ const readPositiveInt = (value: string | undefined, fallback: number): number =>
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback
 }
+
+const isTrue = (value: string | undefined): boolean => value?.toLowerCase() === 'true'
 
 const requireEnv = (name: string): string => {
   const value = process.env[name]?.trim()
@@ -50,10 +54,15 @@ const syncStore = new FileSyncStore(
 const shareStore = new FileShareStore(
   path.resolve(repositoryRoot, process.env.SHARE_DB_PATH ?? '.data/shares.json')
 )
+const mcpStore = new FileMcpStore(
+  path.resolve(repositoryRoot, process.env.MCP_DB_PATH ?? '.data/mcp.json')
+)
 const app = createApp({
   store,
   syncStore,
   shareStore,
+  mcpStore,
+  mcpClient: createMcpClient(),
   security,
   appOrigin: origin,
   githubClientId: requireEnv('GITHUB_CLIENT_ID'),
@@ -68,6 +77,7 @@ const app = createApp({
     : origin.startsWith('https://'),
   cookieSameSite,
   allowedOrigins,
+  mcpAllowPrivateNetwork: isTrue(process.env.MCP_ALLOW_PRIVATE_NETWORK),
 })
 
 serve({ fetch: app.fetch, port })

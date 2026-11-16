@@ -35,10 +35,28 @@ import {
   ShareCreateResponseSchema,
   SharedSessionResponseSchema,
 } from '@sweet-deepseek/contracts/share'
+import {
+  McpProbeResponseSchema,
+  McpHeadersSchema,
+  McpServerInputSchema,
+  McpServerResponseSchema,
+  McpServersResponseSchema,
+  McpServerUpdateSchema,
+  McpToolCallRequestSchema,
+  McpToolCallResponseSchema,
+  McpToolsResponseSchema,
+  type McpHeaders,
+  type McpServerSummary,
+  type McpToolSummary,
+} from '@sweet-deepseek/contracts/mcp'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccountStore, GitHubProfile, UserRecord } from './account-store.js'
+import { McpApprovalRequiredError, McpToolNotFoundError, type McpClient } from './mcp-client.js'
+import { assertAllowedMcpUrl, mcpHeadersAdditionalData } from './mcp-policy.js'
+import type { McpServerRecord, McpStore } from './mcp-store.js'
+import { toMcpToolSummaries } from './mcp-tools.js'
 import type { SecurityService } from './security.js'
 import type { ShareStore } from './share-store.js'
 import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
@@ -59,6 +77,8 @@ const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 const MAX_SYNC_BODY_BYTES = 20 * 1024 * 1024
 const MAX_SHARE_BODY_BYTES = 20 * 1024 * 1024
 const MAX_JSON_RENDER_BODY_BYTES = JSON_RENDER_LIMITS.maxDocumentBytes + 1024
+const MAX_MCP_CONFIG_BODY_BYTES = 256 * 1024
+const MAX_MCP_CALL_BODY_BYTES = 2 * 1024 * 1024
 
 class RequestBodyTooLargeError extends Error {
   constructor() {
@@ -82,6 +102,8 @@ export type AppOptions = {
   store: AccountStore
   syncStore: SyncStore
   shareStore: ShareStore
+  mcpStore: McpStore
+  mcpClient: McpClient
   security: SecurityService
   appOrigin: string
   githubClientId: string
@@ -93,6 +115,7 @@ export type AppOptions = {
   cookieSecure: boolean
   cookieSameSite?: 'Lax' | 'Strict' | 'None'
   allowedOrigins?: string[]
+  mcpAllowPrivateNetwork?: boolean
   fetchImpl?: typeof fetch
   logger?: Pick<Console, 'warn'>
 }
@@ -170,16 +193,88 @@ const toAuthUser = (user: UserRecord): AuthUser => ({
   hasApiKey: Boolean(user.apiKey),
 })
 
+const readMcpHeaders = async (
+  security: SecurityService,
+  server: McpServerRecord
+): Promise<McpHeaders> => {
+  if (!server.encryptedHeaders) {
+    return {}
+  }
+  const raw = await security.decryptValue(
+    mcpHeadersAdditionalData(server.userId, server.id),
+    server.encryptedHeaders
+  )
+  const parsed = McpHeadersSchema.safeParse(JSON.parse(raw) as unknown)
+  if (!parsed.success) {
+    throw new Error('Stored MCP headers are invalid')
+  }
+  return parsed.data
+}
+
+const encryptMcpHeaders = async (
+  security: SecurityService,
+  userId: string,
+  serverId: string,
+  headers: McpHeaders | undefined
+) => {
+  if (headers === undefined) {
+    return undefined
+  }
+  if (Object.keys(headers).length === 0) {
+    return null
+  }
+  return await security.encryptValue(
+    mcpHeadersAdditionalData(userId, serverId),
+    JSON.stringify(headers)
+  )
+}
+
+const toMcpServerSummary = async (
+  security: SecurityService,
+  server: McpServerRecord
+): Promise<McpServerSummary> => {
+  const headers = await readMcpHeaders(security, server).catch(() => ({}))
+  return {
+    id: server.id,
+    name: server.name,
+    slug: server.slug,
+    url: server.url,
+    enabled: server.enabled,
+    headerNames: Object.keys(headers).sort(),
+    createdAt: server.createdAt,
+    updatedAt: server.updatedAt,
+  }
+}
+
+const toSharedMessage = (
+  message: SyncSessionPayload['messages'][number]
+): SyncSessionPayload['messages'][number] => {
+  if (message.role === 'user') {
+    return {
+      ...message,
+      files: message.files.map((file) => ({ ...file, serverId: null })),
+    }
+  }
+  return {
+    ...message,
+    blocks: message.blocks.map((block) => {
+      if (block.type === 'tool_use') {
+        return { ...block, input: {}, inputText: undefined }
+      }
+      if (block.type === 'tool_result') {
+        return {
+          ...block,
+          content: [{ type: 'text' as const, text: '[MCP output hidden in public share]' }],
+        }
+      }
+      return block
+    }),
+  }
+}
+
 const toSharedSessionPayload = (payload: SyncSessionPayload): SyncSessionPayload => ({
   ...payload,
-  messages: payload.messages.map((message) =>
-    message.role === 'user'
-      ? {
-          ...message,
-          files: message.files.map((file) => ({ ...file, serverId: null })),
-        }
-      : message
-  ),
+  messages: payload.messages.map(toSharedMessage),
 })
 
 const hasFileBlocks = (messages: unknown[]): boolean =>
@@ -305,6 +400,8 @@ export const createApp = ({
   store,
   syncStore,
   shareStore,
+  mcpStore,
+  mcpClient,
   security,
   appOrigin,
   githubClientId,
@@ -316,6 +413,7 @@ export const createApp = ({
   cookieSecure,
   cookieSameSite = 'Lax',
   allowedOrigins = [],
+  mcpAllowPrivateNetwork = false,
   fetchImpl = fetch,
   logger = globalThis.console,
 }: AppOptions) => {
@@ -561,6 +659,279 @@ export const createApp = ({
       return apiError(context, 400, 'invalid_request', result.error)
     }
     return context.json(JsonRenderValidationResponseSchema.parse({ document: result.data }))
+  })
+
+  app.get(apiRoutes.mcpServers, requireAuth, async (context) => {
+    const servers = await mcpStore.listServers(context.get('auth').user.id)
+    return context.json(
+      McpServersResponseSchema.parse({
+        servers: await Promise.all(servers.map((server) => toMcpServerSummary(security, server))),
+      })
+    )
+  })
+
+  app.post(apiRoutes.mcpServers, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, MAX_MCP_CONFIG_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'MCP server configuration is too large')
+    }
+    const parsed = json.ok ? McpServerInputSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid MCP server configuration')
+    }
+    try {
+      assertAllowedMcpUrl(parsed.data.url, mcpAllowPrivateNetwork)
+    } catch (error) {
+      return apiError(
+        context,
+        400,
+        'invalid_request',
+        error instanceof Error ? error.message : 'Invalid MCP server URL'
+      )
+    }
+    const user = context.get('auth').user
+    const serverId = crypto.randomUUID()
+    try {
+      const server = await mcpStore.createServer({
+        id: serverId,
+        userId: user.id,
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+        url: parsed.data.url,
+        enabled: parsed.data.enabled,
+        encryptedHeaders:
+          (await encryptMcpHeaders(security, user.id, serverId, parsed.data.headers)) ?? null,
+      })
+      return context.json(
+        McpServerResponseSchema.parse({
+          server: await toMcpServerSummary(security, server),
+        }),
+        201
+      )
+    } catch (error) {
+      if (/slug|unique/iu.test(error instanceof Error ? error.message : '')) {
+        return apiError(context, 409, 'conflict', 'MCP server slug already exists')
+      }
+      logger.warn('Could not create MCP server', {
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return apiError(context, 500, 'server_error', 'Could not create MCP server')
+    }
+  })
+
+  app.put(apiRoutes.mcpServer, requireAuth, async (context) => {
+    const user = context.get('auth').user
+    const serverId = context.req.param('serverId')
+    const current = await mcpStore.findServer(user.id, serverId)
+    if (!current) {
+      return apiError(context, 404, 'invalid_request', 'MCP server not found')
+    }
+    const json = await readLimitedJson(context, MAX_MCP_CONFIG_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'MCP server configuration is too large')
+    }
+    const parsed = json.ok ? McpServerUpdateSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid MCP server configuration')
+    }
+    if (parsed.data.url) {
+      try {
+        assertAllowedMcpUrl(parsed.data.url, mcpAllowPrivateNetwork)
+      } catch (error) {
+        return apiError(
+          context,
+          400,
+          'invalid_request',
+          error instanceof Error ? error.message : 'Invalid MCP server URL'
+        )
+      }
+    }
+    try {
+      const server = await mcpStore.updateServer(user.id, serverId, {
+        ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
+        ...(parsed.data.slug === undefined ? {} : { slug: parsed.data.slug }),
+        ...(parsed.data.url === undefined ? {} : { url: parsed.data.url }),
+        ...(parsed.data.enabled === undefined ? {} : { enabled: parsed.data.enabled }),
+        ...(parsed.data.headers === undefined
+          ? {}
+          : {
+              encryptedHeaders: await encryptMcpHeaders(
+                security,
+                user.id,
+                serverId,
+                parsed.data.headers
+              ),
+            }),
+      })
+      if (!server) {
+        return apiError(context, 404, 'invalid_request', 'MCP server not found')
+      }
+      return context.json(
+        McpServerResponseSchema.parse({
+          server: await toMcpServerSummary(security, server),
+        })
+      )
+    } catch (error) {
+      if (/slug|unique/iu.test(error instanceof Error ? error.message : '')) {
+        return apiError(context, 409, 'conflict', 'MCP server slug already exists')
+      }
+      logger.warn('Could not update MCP server', {
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return apiError(context, 500, 'server_error', 'Could not update MCP server')
+    }
+  })
+
+  app.delete(apiRoutes.mcpServer, requireAuth, async (context) => {
+    const removed = await mcpStore.deleteServer(
+      context.get('auth').user.id,
+      context.req.param('serverId')
+    )
+    return removed
+      ? context.body(null, 204)
+      : apiError(context, 404, 'invalid_request', 'MCP server not found')
+  })
+
+  app.post(apiRoutes.mcpServerProbe, requireAuth, async (context) => {
+    const server = await mcpStore.findServer(
+      context.get('auth').user.id,
+      context.req.param('serverId')
+    )
+    if (!server) {
+      return apiError(context, 404, 'invalid_request', 'MCP server not found')
+    }
+    let headers: McpHeaders
+    try {
+      assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
+      headers = await readMcpHeaders(security, server)
+    } catch (error) {
+      return apiError(
+        context,
+        500,
+        'credential_error',
+        error instanceof Error ? error.message : 'Could not read MCP server credentials'
+      )
+    }
+    const result = await mcpClient.probe({ url: server.url, headers }, context.req.raw.signal)
+    if (!result.ok) {
+      return context.json(
+        McpProbeResponseSchema.parse({
+          ok: false,
+          stage: result.stage,
+          message: result.message,
+          durationMs: result.durationMs,
+        })
+      )
+    }
+    try {
+      return context.json(
+        McpProbeResponseSchema.parse({
+          ok: true,
+          server: result.server,
+          tools: await toMcpToolSummaries(server, result.tools),
+          durationMs: result.durationMs,
+        })
+      )
+    } catch (error) {
+      return context.json(
+        McpProbeResponseSchema.parse({
+          ok: false,
+          stage: 'list',
+          message: error instanceof Error ? error.message : 'Invalid MCP tool list',
+          durationMs: result.durationMs,
+        })
+      )
+    }
+  })
+
+  app.get(apiRoutes.mcpTools, requireAuth, async (context) => {
+    const user = context.get('auth').user
+    const servers = (await mcpStore.listServers(user.id)).filter((server) => server.enabled)
+    const collected = (
+      await Promise.all(
+        servers.map(async (server): Promise<McpToolSummary[]> => {
+          try {
+            assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
+            const headers = await readMcpHeaders(security, server)
+            const result = await mcpClient.probe(
+              { url: server.url, headers },
+              context.req.raw.signal
+            )
+            if (!result.ok) {
+              logger.warn('MCP server tool discovery failed', {
+                serverId: server.id,
+                stage: result.stage,
+              })
+              return []
+            }
+            return await toMcpToolSummaries(server, result.tools)
+          } catch (error) {
+            logger.warn('MCP server tool discovery failed', {
+              serverId: server.id,
+              name: error instanceof Error ? error.name : 'unknown',
+            })
+            return []
+          }
+        })
+      )
+    ).flat()
+    return context.json(McpToolsResponseSchema.parse({ tools: collected }))
+  })
+
+  app.post(apiRoutes.mcpToolCall, requireAuth, async (context) => {
+    if (contentLengthExceeds(context, MAX_MCP_CALL_BODY_BYTES)) {
+      return apiError(context, 413, 'invalid_request', 'MCP tool call is too large')
+    }
+    const json = await readLimitedJson(context, MAX_MCP_CALL_BODY_BYTES)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'MCP tool call is too large')
+    }
+    const parsed = json.ok ? McpToolCallRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid MCP tool call')
+    }
+    const user = context.get('auth').user
+    const server = await mcpStore.findServer(user.id, parsed.data.serverId)
+    if (!server || !server.enabled) {
+      return apiError(context, 404, 'invalid_request', 'MCP server not found')
+    }
+    let headers: McpHeaders
+    try {
+      assertAllowedMcpUrl(server.url, mcpAllowPrivateNetwork)
+      headers = await readMcpHeaders(security, server)
+    } catch (error) {
+      return apiError(
+        context,
+        502,
+        'upstream_error',
+        error instanceof Error ? error.message : 'Could not read MCP server configuration'
+      )
+    }
+    try {
+      const result = await mcpClient.callTool(
+        { url: server.url, headers },
+        parsed.data.rawName,
+        parsed.data.arguments,
+        parsed.data.approved,
+        context.req.raw.signal
+      )
+      return context.json(McpToolCallResponseSchema.parse(result))
+    } catch (error) {
+      if (error instanceof McpToolNotFoundError) {
+        return apiError(context, 404, 'invalid_request', 'MCP tool not found')
+      }
+      if (error instanceof McpApprovalRequiredError) {
+        return apiError(context, 403, 'forbidden', 'MCP tool requires explicit approval')
+      }
+      if (context.req.raw.signal.aborted) {
+        return new Response(null, { status: 499 })
+      }
+      logger.warn('MCP tool call failed', {
+        serverId: server.id,
+        name: error instanceof Error ? error.name : 'unknown',
+      })
+      return apiError(context, 502, 'upstream_error', 'MCP tool call failed')
+    }
   })
 
   app.post(apiRoutes.logout, requireAuth, async (context) => {

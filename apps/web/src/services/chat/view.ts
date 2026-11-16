@@ -6,7 +6,7 @@ import type {
   WebSearchToolResultBlock,
 } from '@sweet-deepseek/contracts'
 import { translate } from '../../i18n/index.js'
-import type { AssistantMessage, ThinkingPart } from './types.js'
+import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
 
 /**
  * 由回复的内容块推导界面需要的结构：思考与工具步骤的时间线、带引用角标的正文、可引用的来源列表。
@@ -63,10 +63,24 @@ export type ReadLinkStep = { type: 'read_link'; links: PageItem[] }
 
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
 
+export type McpToolStep = {
+  type: 'mcp'
+  key: string
+  name: string
+  status: ToolStatus
+}
+
 /** 工具调用前输出的说明文字 */
 export type PreambleStep = { type: 'text'; key: string; markdown: string }
 
-export type Step = SearchStep | OpenStep | FindStep | ReadLinkStep | ThinkingStep | PreambleStep
+export type Step =
+  | SearchStep
+  | OpenStep
+  | FindStep
+  | ReadLinkStep
+  | ThinkingStep
+  | McpToolStep
+  | PreambleStep
 
 export type ReplyView = {
   steps: Step[]
@@ -175,9 +189,12 @@ const joinTextBlocks = (
 
 export const buildReplyView = (reply: AssistantMessage, streaming: boolean): ReplyView => {
   const results = new Map<string, WebSearchToolResultBlock | WebFetchToolResultBlock>()
+  const toolResults = new Map<string, ToolResultPart>()
   for (const block of reply.blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
+    } else if (block.type === 'tool_result') {
+      toolResults.set(block.tool_use_id, block)
     }
   }
 
@@ -244,6 +261,20 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         mergedThinking = { type: 'thinking', key: `thinking-${index}`, blocks: [block] }
         steps.push(mergedThinking)
       }
+      return
+    }
+    if (block.type === 'tool_use') {
+      flushPreamble()
+      const result = toolResults.get(block.id)
+      steps.push({
+        type: 'mcp',
+        key: block.id,
+        name: block.name,
+        status: result ? (result.isError ? 'failed' : 'done') : streaming ? 'wip' : 'failed',
+      })
+      return
+    }
+    if (block.type === 'tool_result') {
       return
     }
     if (block.type !== 'server_tool_use') {
@@ -395,6 +426,9 @@ export const getAreaTitle = (
   }
   if (last?.type === 'read_link' && last.links.some((link) => link.status === 'wip')) {
     return translate('readingLink')
+  }
+  if (last?.type === 'mcp' && last.status === 'wip') {
+    return translate('mcpToolCalling', { tool: last.name.split('__').at(-1) || last.name })
   }
   return translate('messageThinking')
 }

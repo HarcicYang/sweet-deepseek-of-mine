@@ -1,13 +1,16 @@
 import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import { createApp } from './app.js'
 import { D1AccountStore } from './d1-account-store.js'
+import { D1McpStore } from './d1-mcp-store.js'
 import { D1ShareStore } from './d1-share-store.js'
 import { D1SyncStore } from './d1-sync-store.js'
+import { createMcpClient } from './mcp-client.js'
 import { createSecurityService } from './security.js'
 
 type WorkerEnv = Env & {
   API_ORIGIN?: string
   GITHUB_CALLBACK_URL?: string
+  MCP_ALLOW_PRIVATE_NETWORK?: string
 }
 
 const readPositiveInt = (value: string | undefined, fallback: number): number => {
@@ -17,6 +20,8 @@ const readPositiveInt = (value: string | undefined, fallback: number): number =>
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback
 }
+
+const isTrue = (value: string | undefined): boolean => value?.toLowerCase() === 'true'
 
 const cookieSameSite = (value: string | undefined): 'Lax' | 'Strict' | 'None' => {
   switch (value?.toLowerCase()) {
@@ -49,6 +54,8 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
       store: new D1AccountStore(env.DB),
       syncStore: new D1SyncStore(env.DB),
       shareStore: new D1ShareStore(env.DB),
+      mcpStore: new D1McpStore(env.DB),
+      mcpClient: createMcpClient(),
       security,
       appOrigin: origin,
       allowedOrigins,
@@ -61,6 +68,7 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
       deepSeekBaseUrl: env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
       requestTimeoutMs: readPositiveInt(env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
       sessionTtlMs: readPositiveInt(env.SESSION_TTL_DAYS, 30) * 24 * 60 * 60 * 1000,
+      mcpAllowPrivateNetwork: isTrue(env.MCP_ALLOW_PRIVATE_NETWORK),
     })
   })()
   appPromises.set(env, promise)

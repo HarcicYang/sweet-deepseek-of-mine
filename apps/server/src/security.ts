@@ -9,11 +9,15 @@ export type EncryptedApiKey = {
   ciphertext: string
 }
 
+export type EncryptedValue = EncryptedApiKey
+
 export type SecurityService = {
   createToken: () => string
   hashToken: (token: string) => Promise<string>
   encryptApiKey: (userId: string, apiKey: string) => Promise<EncryptedApiKey>
   decryptApiKey: (userId: string, encrypted: EncryptedApiKey) => Promise<string>
+  encryptValue: (additionalData: string, value: string) => Promise<EncryptedValue>
+  decryptValue: (additionalData: string, encrypted: EncryptedValue) => Promise<string>
 }
 
 const toBase64Url = (bytes: Uint8Array): string => {
@@ -45,40 +49,44 @@ const importMasterKey = async (secret: string): Promise<CryptoKey> => {
 
 export const createSecurityService = async (masterKeySecret: string): Promise<SecurityService> => {
   const masterKey = await importMasterKey(masterKeySecret)
+  const encryptValue = async (additionalData: string, value: string): Promise<EncryptedValue> => {
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    const ciphertext = await crypto.subtle.encrypt(
+      {
+        name: 'AES-GCM',
+        iv,
+        additionalData: textEncoder.encode(additionalData),
+      },
+      masterKey,
+      textEncoder.encode(value)
+    )
+    return {
+      version: 1,
+      algorithm: 'AES-GCM',
+      iv: toBase64Url(iv),
+      ciphertext: toBase64Url(new Uint8Array(ciphertext)),
+    }
+  }
+  const decryptValue = async (additionalData: string, encrypted: EncryptedValue) => {
+    const plaintext = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: fromBase64Url(encrypted.iv),
+        additionalData: textEncoder.encode(additionalData),
+      },
+      masterKey,
+      fromBase64Url(encrypted.ciphertext)
+    )
+    return new TextDecoder().decode(plaintext)
+  }
 
   return {
     createToken: () => toBase64Url(crypto.getRandomValues(new Uint8Array(SESSION_TOKEN_BYTES))),
     hashToken: async (token) =>
       toBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', textEncoder.encode(token)))),
-    encryptApiKey: async (userId, apiKey) => {
-      const iv = crypto.getRandomValues(new Uint8Array(12))
-      const ciphertext = await crypto.subtle.encrypt(
-        {
-          name: 'AES-GCM',
-          iv,
-          additionalData: textEncoder.encode(`${API_KEY_AAD_PREFIX}${userId}`),
-        },
-        masterKey,
-        textEncoder.encode(apiKey)
-      )
-      return {
-        version: 1,
-        algorithm: 'AES-GCM',
-        iv: toBase64Url(iv),
-        ciphertext: toBase64Url(new Uint8Array(ciphertext)),
-      }
-    },
-    decryptApiKey: async (userId, encrypted) => {
-      const plaintext = await crypto.subtle.decrypt(
-        {
-          name: 'AES-GCM',
-          iv: fromBase64Url(encrypted.iv),
-          additionalData: textEncoder.encode(`${API_KEY_AAD_PREFIX}${userId}`),
-        },
-        masterKey,
-        fromBase64Url(encrypted.ciphertext)
-      )
-      return new TextDecoder().decode(plaintext)
-    },
+    encryptApiKey: (userId, apiKey) => encryptValue(`${API_KEY_AAD_PREFIX}${userId}`, apiKey),
+    decryptApiKey: (userId, encrypted) => decryptValue(`${API_KEY_AAD_PREFIX}${userId}`, encrypted),
+    encryptValue,
+    decryptValue,
   }
 }

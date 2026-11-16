@@ -21,6 +21,10 @@
     "./share": {
       "types": "./src/share.ts",
       "default": "./src/share.ts"
+    },
+    "./mcp": {
+      "types": "./src/mcp.ts",
+      "default": "./src/mcp.ts"
     }
   },
   "scripts": {

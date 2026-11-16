@@ -136,9 +136,24 @@ export type ServerToolBlock =
 /** 用于识别客户端工具调用的内容块类型 */
 export type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: unknown }
 
+/** 客户端可执行的自定义工具定义，与 DeepSeek 服务端搜索工具并列声明。 */
+export type CustomFunctionTool = {
+  name: string
+  description: string
+  input_schema: Record<string, unknown>
+}
+
 // ---------- 请求 ----------
 
 export type TextBlockParam = { type: 'text'; text: string }
+
+/** 客户端工具结果通过 user 消息回传给模型。 */
+export type ToolResultBlockParam = {
+  type: 'tool_result'
+  tool_use_id: string
+  content: TextBlockParam[]
+  is_error?: boolean
+}
 
 /**
  * 文件块：引用经 Files API 上传的文件，图片用 image、其余用 document；
@@ -164,6 +179,7 @@ export type WebFetchToolResultBlockParam = WebFetchToolResultBlock
 export type AssistantBlockParam =
   | TextBlockParam
   | ThinkingBlock
+  | ToolUseBlock
   | ServerToolUseBlockParam
   | WebSearchToolResultBlockParam
   | WebFetchToolResultBlockParam
@@ -172,7 +188,7 @@ export type AssistantBlockParam =
 export type MessageParam =
   /** Chat Engine 扩展角色，位于对应 user 前；需服务端支持 latest_reminder。 */
   | { role: 'latest_reminder'; content: string }
-  | { role: 'user'; content: string | (FileBlockParam | TextBlockParam)[] }
+  | { role: 'user'; content: string | (FileBlockParam | TextBlockParam | ToolResultBlockParam)[] }
   | { role: 'assistant'; content: AssistantBlockParam[] }
 
 /** 开启联网搜索与边想边搜 */
@@ -193,7 +209,7 @@ export type CreateMessageRequest = {
   messages: MessageParam[]
   thinking: ThinkingConfig
   output_config?: OutputConfig
-  tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
+  tools: (DeepseekWebSearchTool | DeepseekReadUrlTool | CustomFunctionTool)[]
   safety_check: { level: 'high' }
   title?: { enabled: boolean }
 }

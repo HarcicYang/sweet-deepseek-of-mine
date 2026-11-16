@@ -11,6 +11,7 @@ An independent community chat tool (unofficial product) developed based on DeepS
 - **Cloud Sync & Caching**: Sessions and settings support cloud synchronization, account-isolated IndexedDB caching, offline outbox, and conflict replica handling.
 - **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown tables with copy/download/fullscreen tools, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
 - **Generative UI**: Server-validated JSON-Render cards, carousels, metrics, steps, charts, details, and code blocks with Markdown fallback and safe copy/continue actions.
+- **Remote MCP tools**: Add per-account Streamable HTTP MCP servers in Settings. MCP tools participate in the same reply loop and tool timeline as web search and link reading; non-read-only tools require explicit confirmation.
 - **Temporary sharing**: Create read-only conversation snapshots that expire in 1–30 days without exposing message sending or attachment originals.
 - **Custom instructions**: Add account-level system-prompt guidance in Settings and sync it across devices.
 - **Multimedia Interaction**: Supports drag-and-drop attachment uploads, voice input, and text-to-speech reading.
@@ -85,6 +86,7 @@ docs/               Architecture and protocol documentation
 ## Data & Privacy
 
 - **API Key Protection**: API keys are encrypted and stored exclusively on the server using AES-256-GCM and are never saved locally in the browser.
+- **MCP credentials**: MCP server URLs and configuration are account-scoped; request headers are encrypted on the server and never returned to the browser.
 - **Data Synchronization**: Session text, thinking processes, search results, and related settings are synchronized to the cloud and cached in `chat-demo:<userId>` IndexedDB.
 - **Import & Export**: Supports importing and exporting history in ZIP format (exported content includes sessions and raw images, excluding API keys and sensitive credentials).
 
