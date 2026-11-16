@@ -5,3 +5,8 @@ packages:
 allowBuilds:
   esbuild: true
   workerd: true
+
+overrides:
+  katex: 0.18.2
+  lodash-es: 4.18.1
+  tinypool: 2.1.2
