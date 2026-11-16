@@ -4,6 +4,7 @@ export const MCP_SERVER_SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/u
 export const MCP_PUBLIC_TOOL_NAME_MAX_LENGTH = 64
 
 export const McpAuthModeSchema = z.enum(['static', 'oauth'])
+export const McpTrustModeSchema = z.enum(['prompt', 'trust-hints'])
 
 const HeaderNameSchema = z
   .string()
@@ -42,6 +43,7 @@ export const McpServerInputSchema = z
     url: z.string().trim().url().max(2048),
     headers: McpHeadersSchema.optional(),
     authMode: McpAuthModeSchema.default('static'),
+    trustMode: McpTrustModeSchema.default('prompt'),
     enabled: z.boolean(),
   })
   .strict()
@@ -58,6 +60,7 @@ export const McpServerSummarySchema = z
     slug: z.string().regex(MCP_SERVER_SLUG_PATTERN),
     url: z.string().url(),
     authMode: McpAuthModeSchema,
+    trustMode: McpTrustModeSchema,
     oauthConnected: z.boolean(),
     enabled: z.boolean(),
     headerNames: z.array(HeaderNameSchema),
@@ -88,6 +91,7 @@ export const McpToolSummarySchema = z
     description: z.string(),
     inputSchema: z.record(z.string(), z.unknown()),
     readOnly: z.boolean(),
+    requiresApproval: z.boolean(),
   })
   .strict()
 
@@ -181,6 +185,7 @@ export const McpRegistryServersResponseSchema = z
 
 export type McpHeaders = z.infer<typeof McpHeadersSchema>
 export type McpAuthMode = z.infer<typeof McpAuthModeSchema>
+export type McpTrustMode = z.infer<typeof McpTrustModeSchema>
 export type McpServerInput = z.infer<typeof McpServerInputSchema>
 export type McpServerUpdate = z.infer<typeof McpServerUpdateSchema>
 export type McpServerSummary = z.infer<typeof McpServerSummarySchema>

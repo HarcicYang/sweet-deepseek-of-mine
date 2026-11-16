@@ -46,6 +46,7 @@ export const toMcpToolSummaries = async (
       description: tool.description,
       inputSchema: tool.inputSchema,
       readOnly: tool.readOnly,
+      requiresApproval: server.trustMode !== 'trust-hints' || !tool.readOnly,
     })
   }
   return summaries

@@ -372,6 +372,20 @@
   color: var(--dsw-static-amber-500);
 }
 
+.mcpTrusted,
+.mcpTrustPrompt {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.mcpTrusted {
+  color: var(--dsw-static-amber-500);
+}
+
+.mcpTrustPrompt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .mcpServerUrl,
 .mcpHeaderNames,
 .mcpServerStatus {

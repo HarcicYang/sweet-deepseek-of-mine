@@ -1,4 +1,4 @@
-import type { McpAuthMode, McpServerSummary } from '@sweet-deepseek/contracts/mcp'
+import type { McpAuthMode, McpServerSummary, McpTrustMode } from '@sweet-deepseek/contracts/mcp'
 import { useEffect, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
@@ -22,6 +22,7 @@ type Draft = {
   slug: string
   url: string
   authMode: McpAuthMode
+  trustMode: McpTrustMode
   headers: string
   enabled: boolean
 }
@@ -32,6 +33,7 @@ const emptyDraft = (): Draft => ({
   slug: '',
   url: '',
   authMode: 'static',
+  trustMode: 'prompt',
   headers: '',
   enabled: true,
 })
@@ -177,6 +179,7 @@ export const McpServersSettings = () => {
           slug: draft.slug.trim(),
           url: draft.url.trim(),
           authMode: draft.authMode,
+          trustMode: draft.trustMode,
           enabled: draft.enabled,
           ...(draft.headers.trim() ? { headers } : {}),
         })
@@ -186,6 +189,7 @@ export const McpServersSettings = () => {
           slug: draft.slug.trim(),
           url: draft.url.trim(),
           authMode: draft.authMode,
+          trustMode: draft.trustMode,
           headers,
           enabled: draft.enabled,
         })
@@ -321,6 +325,7 @@ export const McpServersSettings = () => {
       slug: uniqueSlug(item.suggestedSlug),
       url: item.url,
       authMode: 'static',
+      trustMode: 'prompt',
     })
     setSection('installed')
     showToast({ key: 'mcpRegistryImported' })
@@ -389,6 +394,19 @@ export const McpServersSettings = () => {
                         )}
                       </span>
                     ) : null}
+                    <span
+                      className={
+                        server.trustMode === 'trust-hints'
+                          ? styles.mcpTrusted
+                          : styles.mcpTrustPrompt
+                      }
+                    >
+                      {t(
+                        server.trustMode === 'trust-hints'
+                          ? 'mcpTrustModeTrustedBadge'
+                          : 'mcpTrustModePromptBadge'
+                      )}
+                    </span>
                   </div>
                   <div className={styles.mcpServerUrl}>{server.url}</div>
                   {server.headerNames.length > 0 ? (
@@ -446,6 +464,7 @@ export const McpServersSettings = () => {
                         slug: server.slug,
                         url: server.url,
                         authMode: server.authMode,
+                        trustMode: server.trustMode,
                         headers: '',
                         enabled: server.enabled,
                       })
@@ -536,6 +555,27 @@ export const McpServersSettings = () => {
                 ariaLabel={t('mcpAuthMode')}
               />
             </div>
+            <div className={styles.mcpField}>
+              <span>{t('mcpTrustMode')}</span>
+              <Select
+                value={draft.trustMode}
+                options={[
+                  { value: 'prompt', label: t('mcpTrustModePrompt') },
+                  { value: 'trust-hints', label: t('mcpTrustModeTrustHints') },
+                ]}
+                onChange={(trustMode) => setDraft((current) => ({ ...current, trustMode }))}
+                variant="field"
+                block
+                ariaLabel={t('mcpTrustMode')}
+              />
+              <small>
+                {t(
+                  draft.trustMode === 'trust-hints'
+                    ? 'mcpTrustModeTrustHintsDescription'
+                    : 'mcpTrustModePromptDescription'
+                )}
+              </small>
+            </div>
             {draft.authMode === 'oauth' ? (
               <p className={styles.sectionDescription}>{t('mcpOAuthDeploymentManaged')}</p>
             ) : null}
@@ -550,6 +590,7 @@ export const McpServersSettings = () => {
                 placeholder="https://example.com/mcp"
                 required
               />
+              <small>{t('mcpServerNetworkWarning')}</small>
             </label>
             <label className={styles.mcpField}>
               <span>{t('mcpServerHeaders')}</span>

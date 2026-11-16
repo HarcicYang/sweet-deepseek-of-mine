@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { McpAuthMode } from '@sweet-deepseek/contracts/mcp'
+import type { McpAuthMode, McpTrustMode } from '@sweet-deepseek/contracts/mcp'
 import type { EncryptedValue } from './security.js'
 
 export type McpServerRecord = {
@@ -10,6 +10,7 @@ export type McpServerRecord = {
   slug: string
   url: string
   authMode: McpAuthMode
+  trustMode: McpTrustMode
   enabled: boolean
   encryptedHeaders: EncryptedValue | null
   createdAt: string
@@ -23,6 +24,7 @@ export type McpServerCreate = {
   slug: string
   url: string
   authMode: McpAuthMode
+  trustMode: McpTrustMode
   enabled: boolean
   encryptedHeaders: EncryptedValue | null
 }
@@ -32,6 +34,7 @@ export type McpServerUpdate = {
   slug?: string
   url?: string
   authMode?: McpAuthMode
+  trustMode?: McpTrustMode
   enabled?: boolean
   encryptedHeaders?: EncryptedValue | null
 }
@@ -96,6 +99,7 @@ export class MemoryMcpStore implements McpStore {
       slug: input.slug,
       url: input.url,
       authMode: input.authMode,
+      trustMode: input.trustMode,
       enabled: input.enabled,
       encryptedHeaders: input.encryptedHeaders,
       createdAt: now,
@@ -170,6 +174,7 @@ export class FileMcpStore implements McpStore {
       this.database.servers = this.database.servers.map((server) => ({
         ...server,
         authMode: server.authMode === 'oauth' ? 'oauth' : 'static',
+        trustMode: server.trustMode === 'trust-hints' ? 'trust-hints' : 'prompt',
       }))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -219,6 +224,7 @@ export class FileMcpStore implements McpStore {
         slug: input.slug,
         url: input.url,
         authMode: input.authMode,
+        trustMode: input.trustMode,
         enabled: input.enabled,
         encryptedHeaders: input.encryptedHeaders,
         createdAt: now,

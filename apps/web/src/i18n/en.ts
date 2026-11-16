@@ -247,9 +247,20 @@ export const en = {
   mcpServerSlugDescription:
     'Use lowercase letters, numbers, underscores, and hyphens, up to 32 characters.',
   mcpServerUrl: 'Server URL',
+  mcpServerNetworkWarning:
+    'The backend connects to MCP servers directly. Add only trusted endpoints; private-network reachability varies by deployment.',
   mcpAuthMode: 'Authentication',
   mcpAuthModeStatic: 'Static headers',
   mcpAuthModeOAuth: 'OAuth authorization',
+  mcpTrustMode: 'Tool approval',
+  mcpTrustModePrompt: 'Default: ask every time',
+  mcpTrustModeTrustHints: 'Fully trust',
+  mcpTrustModePromptDescription:
+    'Ignore remote read-only hints and ask for confirmation before every MCP tool call.',
+  mcpTrustModeTrustHintsDescription:
+    'Trust the remote MCP read-only hints: tools marked read-only run automatically, while other tools still require confirmation. Enable only for a fully trusted server.',
+  mcpTrustModePromptBadge: 'Always ask',
+  mcpTrustModeTrustedBadge: 'Fully trusted',
   mcpOAuthConnectedBadge: 'OAuth connected',
   mcpOAuthNotConnected: 'OAuth not connected',
   mcpOAuthAuthorize: 'Authorize',

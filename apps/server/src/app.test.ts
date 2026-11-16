@@ -3,7 +3,7 @@ import test from 'node:test'
 import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import { JSON_RENDER_LIMITS, JSON_RENDER_VERSION } from '@sweet-deepseek/json-render'
 import { MemoryAccountStore } from './account-store.js'
-import { createApp } from './app.js'
+import { createApp, type RequestBodyLimits } from './app.js'
 import { McpApprovalRequiredError, type McpClient } from './mcp-client.js'
 import { MemoryMcpStore } from './mcp-store.js'
 import type { McpOAuthClientConfig } from './mcp-oauth-clients.js'
@@ -31,6 +31,7 @@ const createTestApp = async (
     mcpClient?: McpClient
     mcpOAuthClients?: McpOAuthClientConfig[]
     mcpRegistryFetchImpl?: typeof fetch
+    requestBodyLimits?: Partial<RequestBodyLimits>
   } = {}
 ) => {
   const security = await createSecurityService(MASTER_KEY)
@@ -59,8 +60,9 @@ const createTestApp = async (
       ],
       durationMs: 1,
     }),
-    callTool: async (_config, rawName, _args, approved) => {
-      if (rawName === 'write' && !approved) {
+    callTool: async (config, rawName, _args, approved) => {
+      const readOnly = rawName === 'lookup'
+      if (!(config.trustMode === 'trust-hints' && readOnly) && !approved) {
         throw new McpApprovalRequiredError()
       }
       return {
@@ -147,6 +149,7 @@ const createTestApp = async (
     ],
     deepSeekBaseUrl: 'https://api.deepseek.test',
     requestTimeoutMs: 60_000,
+    requestBodyLimits: options.requestBodyLimits,
     sessionTtlMs: 24 * 60 * 60 * 1000,
     cookieSecure: false,
     allowedOrigins: options.allowedOrigins,
@@ -421,9 +424,10 @@ test('MCP servers are private per user and keep request headers encrypted', asyn
   })
   assert.equal(created.status, 201)
   const createdBody = (await created.json()) as {
-    server: { id: string; headerNames: string[] }
+    server: { id: string; headerNames: string[]; trustMode: string }
   }
   assert.deepEqual(createdBody.server.headerNames, ['Authorization'])
+  assert.equal(createdBody.server.trustMode, 'prompt')
   assert.doesNotMatch(JSON.stringify(createdBody), /test-secret/u)
 
   const serverId = createdBody.server.id
@@ -434,6 +438,7 @@ test('MCP servers are private per user and keep request headers encrypted', asyn
   })
   const stored = await mcpStore.findServer(owner.id, serverId)
   assert.ok(stored?.encryptedHeaders)
+  assert.equal(stored?.trustMode, 'prompt')
   assert.doesNotMatch(JSON.stringify(stored.encryptedHeaders), /test-secret/u)
 
   const probed = await app.request(
@@ -443,14 +448,19 @@ test('MCP servers are private per user and keep request headers encrypted', asyn
   assert.equal(probed.status, 200)
   const probeBody = (await probed.json()) as {
     ok: true
-    tools: Array<{ name: string; rawName: string; readOnly: boolean }>
+    tools: Array<{
+      name: string
+      rawName: string
+      readOnly: boolean
+      requiresApproval: boolean
+    }>
   }
   assert.equal(probeBody.ok, true)
   assert.deepEqual(
-    probeBody.tools.map((tool) => [tool.name, tool.rawName, tool.readOnly]),
+    probeBody.tools.map((tool) => [tool.name, tool.rawName, tool.readOnly, tool.requiresApproval]),
     [
-      ['mcp__demo__lookup', 'lookup', true],
-      ['mcp__demo__write', 'write', false],
+      ['mcp__demo__lookup', 'lookup', true, true],
+      ['mcp__demo__write', 'write', false, true],
     ]
   )
 
@@ -464,8 +474,47 @@ test('MCP servers are private per user and keep request headers encrypted', asyn
       approved: false,
     }),
   })
-  assert.equal(readOnlyCall.status, 200)
-  assert.deepEqual(await readOnlyCall.json(), {
+  assert.equal(readOnlyCall.status, 403)
+
+  const trusted = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpServer.replace(':serverId', serverId)}`,
+    {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ trustMode: 'trust-hints' }),
+    }
+  )
+  assert.equal(trusted.status, 200)
+
+  const trustedProbe = await app.request(
+    `${APP_ORIGIN}${apiRoutes.mcpServerProbe.replace(':serverId', serverId)}`,
+    { method: 'POST', headers }
+  )
+  assert.equal(trustedProbe.status, 200)
+  const trustedProbeBody = (await trustedProbe.json()) as {
+    ok: true
+    tools: Array<{ rawName: string; requiresApproval: boolean }>
+  }
+  assert.deepEqual(
+    trustedProbeBody.tools.map((tool) => [tool.rawName, tool.requiresApproval]),
+    [
+      ['lookup', false],
+      ['write', true],
+    ]
+  )
+
+  const trustedReadOnlyCall = await app.request(`${APP_ORIGIN}${apiRoutes.mcpToolCall}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      serverId,
+      rawName: 'lookup',
+      arguments: { query: 'hello' },
+      approved: false,
+    }),
+  })
+  assert.equal(trustedReadOnlyCall.status, 200)
+  assert.deepEqual(await trustedReadOnlyCall.json(), {
     content: [{ type: 'text', text: 'result' }],
     isError: false,
   })
@@ -938,6 +987,22 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   assert.equal(tts.status, 200)
   assert.deepEqual(new Uint8Array(await tts.arrayBuffer()), new Uint8Array([1, 2, 3, 4]))
   assert.ok(calls.every((call) => call.init?.redirect === 'manual'))
+})
+
+test('configured JSON body limits reject oversized streams without Content-Length', async () => {
+  const { app } = await createTestApp({ requestBodyLimits: { apiKey: 16 } })
+  const sessionToken = await authenticate(app)
+  const body = new TextEncoder().encode(JSON.stringify({ apiKey: 'sk-too-large' }))
+  const response = await app.request(`${APP_ORIGIN}${apiRoutes.deepseekKey}`, {
+    method: 'PUT',
+    headers: {
+      Cookie: `sdom_session=${sessionToken}`,
+      Origin: APP_ORIGIN,
+      'Content-Type': 'application/json',
+    },
+    body,
+  })
+  assert.equal(response.status, 413)
 })
 
 test('cross-origin writes are rejected before authentication', async () => {

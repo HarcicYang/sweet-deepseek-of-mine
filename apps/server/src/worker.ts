@@ -1,5 +1,5 @@
 import { apiRoutes } from '@sweet-deepseek/contracts/api'
-import { createApp } from './app.js'
+import { createApp, DEFAULT_REQUEST_BODY_LIMITS } from './app.js'
 import { D1AccountStore } from './d1-account-store.js'
 import { D1McpStore } from './d1-mcp-store.js'
 import { D1McpOAuthStore } from './d1-mcp-oauth-store.js'
@@ -86,6 +86,22 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
       }),
       deepSeekBaseUrl: env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
       requestTimeoutMs: readPositiveInt(env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
+      requestBodyLimits: {
+        chat: readPositiveInt(env.REQUEST_BODY_LIMIT_CHAT_BYTES, DEFAULT_REQUEST_BODY_LIMITS.chat),
+        sync: readPositiveInt(env.REQUEST_BODY_LIMIT_SYNC_BYTES, DEFAULT_REQUEST_BODY_LIMITS.sync),
+        settings: readPositiveInt(
+          env.REQUEST_BODY_LIMIT_SETTINGS_BYTES,
+          DEFAULT_REQUEST_BODY_LIMITS.settings
+        ),
+        apiKey: readPositiveInt(
+          env.REQUEST_BODY_LIMIT_API_KEY_BYTES,
+          DEFAULT_REQUEST_BODY_LIMITS.apiKey
+        ),
+        speech: readPositiveInt(
+          env.REQUEST_BODY_LIMIT_SPEECH_BYTES,
+          DEFAULT_REQUEST_BODY_LIMITS.speech
+        ),
+      },
       sessionTtlMs: readPositiveInt(env.SESSION_TTL_DAYS, 30) * 24 * 60 * 60 * 1000,
       mcpAllowPrivateNetwork: isTrue(env.MCP_ALLOW_PRIVATE_NETWORK),
     })

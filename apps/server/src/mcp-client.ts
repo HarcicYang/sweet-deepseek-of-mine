@@ -14,6 +14,7 @@ const MAX_RESULT_TEXT_LENGTH = 1_000_000
 export type McpConnectionConfig = {
   url: string
   headers: Record<string, string>
+  trustMode: 'prompt' | 'trust-hints'
   authProvider?: OAuthClientProvider
 }
 
@@ -252,7 +253,7 @@ export const createMcpClient = ({ fetchImpl = fetch }: McpClientOptions = {}): M
       if (!tool) {
         throw new McpToolNotFoundError()
       }
-      if (!tool.readOnly && !approved) {
+      if (!(config.trustMode === 'trust-hints' && tool.readOnly) && !approved) {
         throw new McpApprovalRequiredError()
       }
       const result = await connection.client.callTool(

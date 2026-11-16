@@ -106,12 +106,27 @@ const UPSTREAM_REDIRECT_MODE = 'manual' as const
 const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
-const MAX_SYNC_BODY_BYTES = 20 * 1024 * 1024
 const MAX_SHARE_BODY_BYTES = 20 * 1024 * 1024
 const MAX_JSON_RENDER_BODY_BYTES = JSON_RENDER_LIMITS.maxDocumentBytes + 1024
 const MAX_MCP_CONFIG_BODY_BYTES = 256 * 1024
 const MAX_MCP_CALL_BODY_BYTES = 2 * 1024 * 1024
 const MAX_SKILL_BODY_BYTES = SKILL_BUNDLE_MAX_BYTES * 2 + 32 * 1024
+
+export type RequestBodyLimits = {
+  chat: number
+  sync: number
+  settings: number
+  apiKey: number
+  speech: number
+}
+
+export const DEFAULT_REQUEST_BODY_LIMITS: RequestBodyLimits = {
+  chat: 20 * 1024 * 1024,
+  sync: 20 * 1024 * 1024,
+  settings: 256 * 1024,
+  apiKey: 16 * 1024,
+  speech: 1024 * 1024,
+}
 
 class RequestBodyTooLargeError extends Error {
   constructor() {
@@ -148,6 +163,7 @@ export type AppOptions = {
   mcpOAuthClients?: McpOAuthClientConfig[]
   deepSeekBaseUrl: string
   requestTimeoutMs: number
+  requestBodyLimits?: Partial<RequestBodyLimits>
   sessionTtlMs: number
   cookieSecure: boolean
   cookieSameSite?: 'Lax' | 'Strict' | 'None'
@@ -162,14 +178,6 @@ type JsonResult = { ok: true; value: unknown } | { ok: false }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
-
-const readJson = async (context: Context<AppEnv>): Promise<JsonResult> => {
-  try {
-    return { ok: true, value: await context.req.json<unknown>() }
-  } catch {
-    return { ok: false }
-  }
-}
 
 const readLimitedJson = async (
   context: Context<AppEnv>,
@@ -280,6 +288,7 @@ const toMcpServerSummary = async (
     slug: server.slug,
     url: server.url,
     authMode: server.authMode,
+    trustMode: server.trustMode,
     oauthConnected: oauth?.connected ?? false,
     enabled: server.enabled,
     headerNames: Object.keys(headers).sort(),
@@ -493,6 +502,7 @@ export const createApp = ({
   mcpOAuthClients = [],
   deepSeekBaseUrl,
   requestTimeoutMs,
+  requestBodyLimits,
   sessionTtlMs,
   cookieSecure,
   cookieSameSite = 'Lax',
@@ -503,6 +513,7 @@ export const createApp = ({
   logger = globalThis.console,
 }: AppOptions) => {
   const app = new Hono<AppEnv>()
+  const bodyLimits = { ...DEFAULT_REQUEST_BODY_LIMITS, ...requestBodyLimits }
   const trustedOrigins = new Set(
     [appOrigin, ...allowedOrigins].map((origin) => new URL(origin).origin)
   )
@@ -705,7 +716,7 @@ export const createApp = ({
   const mcpConnectionConfig = async (server: McpServerRecord): Promise<McpConnectionConfig> => {
     const headers = await readMcpHeaders(security, server)
     if (server.authMode !== 'oauth') {
-      return { url: server.url, headers }
+      return { url: server.url, headers, trustMode: server.trustMode }
     }
     const record = await mcpOAuthStore.find(server.userId, server.id)
     if (!record?.connected) {
@@ -715,6 +726,7 @@ export const createApp = ({
     return {
       url: server.url,
       headers,
+      trustMode: server.trustMode,
       authProvider: createMcpOAuthProvider(server, record, payload),
     }
   }
@@ -790,6 +802,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
         {
           url: server.url,
           headers,
+          trustMode: server.trustMode,
           authProvider: provider,
         },
         provider,
@@ -1169,6 +1182,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
         slug: parsed.data.slug,
         url: parsed.data.url,
         authMode: parsed.data.authMode,
+        trustMode: parsed.data.trustMode,
         enabled: parsed.data.enabled,
         encryptedHeaders:
           (await encryptMcpHeaders(security, user.id, serverId, parsed.data.headers)) ?? null,
@@ -1223,6 +1237,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
         ...(parsed.data.slug === undefined ? {} : { slug: parsed.data.slug }),
         ...(parsed.data.url === undefined ? {} : { url: parsed.data.url }),
         ...(parsed.data.authMode === undefined ? {} : { authMode: parsed.data.authMode }),
+        ...(parsed.data.trustMode === undefined ? {} : { trustMode: parsed.data.trustMode }),
         ...(parsed.data.enabled === undefined ? {} : { enabled: parsed.data.enabled }),
         ...(parsed.data.headers === undefined
           ? {}
@@ -1378,6 +1393,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
         {
           url: server.url,
           headers,
+          trustMode: server.trustMode,
           authProvider: provider,
         },
         provider,
@@ -1582,7 +1598,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.put(apiRoutes.deepseekKey, requireAuth, async (context) => {
-    const json = await readJson(context)
+    const json = await readLimitedJson(context, bodyLimits.apiKey)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'API key payload is too large')
+    }
     const parsed = json.ok ? ApiKeyRequestSchema.safeParse(json.value) : null
     if (!parsed?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid API key payload')
@@ -1646,10 +1665,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!/^[\w-]{1,200}$/u.test(sessionId)) {
       return apiError(context, 400, 'invalid_request', 'Invalid session ID')
     }
-    if (contentLengthExceeds(context, MAX_SYNC_BODY_BYTES)) {
+    const json = await readLimitedJson(context, bodyLimits.sync)
+    if (json === 'too-large') {
       return apiError(context, 413, 'invalid_request', 'Session payload is too large')
     }
-    const json = await readJson(context)
     const parsed = json.ok ? SyncUpsertRequestSchema.safeParse(json.value) : null
     if (!parsed?.success || parsed.data.payload.id !== sessionId) {
       return apiError(context, 400, 'invalid_request', 'Invalid session sync payload')
@@ -1675,7 +1694,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!/^[\w-]{1,200}$/u.test(sessionId)) {
       return apiError(context, 400, 'invalid_request', 'Invalid session ID')
     }
-    const json = await readJson(context)
+    const json = await readLimitedJson(context, bodyLimits.settings)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Session delete payload is too large')
+    }
     const parsed = json.ok ? SyncDeleteRequestSchema.safeParse(json.value) : null
     if (!parsed?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid session delete payload')
@@ -1702,7 +1724,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.put(apiRoutes.syncSettings, requireAuth, async (context) => {
-    const json = await readJson(context)
+    const json = await readLimitedJson(context, bodyLimits.settings)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Settings payload is too large')
+    }
     const parsed = json.ok ? SyncSettingsUpdateRequestSchema.safeParse(json.value) : null
     if (!parsed?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid settings sync payload')
@@ -1851,7 +1876,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!credential.ok) {
       return credential.response
     }
-    const json = await readJson(context)
+    const json = await readLimitedJson(context, bodyLimits.speech)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Speech synthesis request is too large')
+    }
     const parsed = json.ok ? SpeechSynthesisRequestSchema.safeParse(json.value) : null
     if (!parsed?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid speech synthesis request')
@@ -1892,7 +1920,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!credential.ok) {
       return credential.response
     }
-    const json = await readJson(context)
+    const json = await readLimitedJson(context, bodyLimits.chat)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Chat request is too large')
+    }
     const parsed = json.ok ? ChatProxyRequestSchema.safeParse(json.value) : null
     if (!parsed?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid chat request')

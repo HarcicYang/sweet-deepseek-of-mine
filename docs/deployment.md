@@ -33,6 +33,14 @@ Node adapter 使用 `.data/` 下的文件存储，适合单实例自托管。复
 - `SKILL_DB_PATH`：Node 自托管时账号级 Skill 的存储文件路径，默认 `.data/skills.json`。
 - `MCP_OAUTH_CLIENTS`：可选 JSON 数组，用于给不支持动态客户端注册的 MCP 提供方配置部署级
   Client ID / Secret。普通用户无需接触该配置。
+- `REQUEST_BODY_LIMIT_CHAT_BYTES`：聊天 JSON 请求上限，默认 20 MiB。
+- `REQUEST_BODY_LIMIT_SYNC_BYTES`：单次会话同步 JSON 上限，默认 20 MiB。
+- `REQUEST_BODY_LIMIT_SETTINGS_BYTES`：设置和同步删除请求上限，默认 256 KiB。
+- `REQUEST_BODY_LIMIT_API_KEY_BYTES`：API Key 设置请求上限，默认 16 KiB。
+- `REQUEST_BODY_LIMIT_SPEECH_BYTES`：TTS 请求上限，默认 1 MiB。
+
+这些上限按实际读取字节执行，不依赖 `Content-Length`。Node 可通过 `.env` 调整，Worker 可通过
+`wrangler.jsonc` 的 `vars` 调整。
 
 推荐生产环境在 Node 服务前方使用反向代理，把前端静态资源和 `/api` 合并为同源部署。
 

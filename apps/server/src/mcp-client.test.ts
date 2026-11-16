@@ -45,6 +45,7 @@ test('MCP client discovers and calls tools through Streamable HTTP', async () =>
     const probe = await client.probe({
       url: 'https://mcp.example.test/mcp',
       headers: { Authorization: 'Bearer test-secret' },
+      trustMode: 'trust-hints',
     })
     assert.equal(probe.ok, true)
     if (!probe.ok) {
@@ -61,8 +62,18 @@ test('MCP client discovers and calls tools through Streamable HTTP', async () =>
     assert.equal(authorization, 'Bearer test-secret')
     assert.equal(redirectMode, 'manual')
 
+    await assert.rejects(
+      client.callTool(
+        { url: 'https://mcp.example.test/mcp', headers: {}, trustMode: 'prompt' },
+        'lookup',
+        { query: 'hello' },
+        false
+      ),
+      McpApprovalRequiredError
+    )
+
     const result = await client.callTool(
-      { url: 'https://mcp.example.test/mcp', headers: {} },
+      { url: 'https://mcp.example.test/mcp', headers: {}, trustMode: 'trust-hints' },
       'lookup',
       { query: 'hello' },
       false
@@ -72,7 +83,7 @@ test('MCP client discovers and calls tools through Streamable HTTP', async () =>
 
     await assert.rejects(
       client.callTool(
-        { url: 'https://mcp.example.test/mcp', headers: {} },
+        { url: 'https://mcp.example.test/mcp', headers: {}, trustMode: 'trust-hints' },
         'write',
         { value: 'hello' },
         false
@@ -80,7 +91,7 @@ test('MCP client discovers and calls tools through Streamable HTTP', async () =>
       McpApprovalRequiredError
     )
     const approved = await client.callTool(
-      { url: 'https://mcp.example.test/mcp', headers: {} },
+      { url: 'https://mcp.example.test/mcp', headers: {}, trustMode: 'trust-hints' },
       'write',
       { value: 'hello' },
       true
@@ -145,7 +156,12 @@ test('MCP OAuth helper runs discovery, authorization, and token exchange', async
   const client = createMcpClient({ fetchImpl })
 
   const result = await client.beginOAuth(
-    { url: 'https://mcp.example.test/mcp', headers: {}, authProvider: provider },
+    {
+      url: 'https://mcp.example.test/mcp',
+      headers: {},
+      trustMode: 'prompt',
+      authProvider: provider,
+    },
     provider
   )
   assert.equal(result, 'REDIRECT')
@@ -154,7 +170,12 @@ test('MCP OAuth helper runs discovery, authorization, and token exchange', async
   assert.equal(new URL(authorizationUrl).searchParams.get('state'), 'state-1')
 
   await client.completeOAuth(
-    { url: 'https://mcp.example.test/mcp', headers: {}, authProvider: provider },
+    {
+      url: 'https://mcp.example.test/mcp',
+      headers: {},
+      trustMode: 'prompt',
+      authProvider: provider,
+    },
     provider,
     new URL(`${authorizationUrl}&code=code-1`).searchParams
   )
@@ -216,7 +237,12 @@ test('MCP OAuth helper supports a pre-registered client without DCR', async () =
   const client = createMcpClient({ fetchImpl })
 
   const result = await client.beginOAuth(
-    { url: 'https://mcp.example.test/mcp', headers: {}, authProvider: provider },
+    {
+      url: 'https://mcp.example.test/mcp',
+      headers: {},
+      trustMode: 'prompt',
+      authProvider: provider,
+    },
     provider
   )
   assert.equal(result, 'REDIRECT')
@@ -229,7 +255,12 @@ test('MCP OAuth helper supports a pre-registered client without DCR', async () =
   )
 
   await client.completeOAuth(
-    { url: 'https://mcp.example.test/mcp', headers: {}, authProvider: provider },
+    {
+      url: 'https://mcp.example.test/mcp',
+      headers: {},
+      trustMode: 'prompt',
+      authProvider: provider,
+    },
     provider,
     new URL(`${authorizationUrl}&code=code-preregistered`).searchParams
   )

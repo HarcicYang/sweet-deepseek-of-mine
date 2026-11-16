@@ -3,7 +3,7 @@ import { apiRoutes } from '@sweet-deepseek/contracts/api'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FileAccountStore } from './account-store.js'
-import { createApp } from './app.js'
+import { createApp, DEFAULT_REQUEST_BODY_LIMITS } from './app.js'
 import { FileMcpOAuthStore } from './mcp-oauth-store.js'
 import { FileMcpStore } from './mcp-store.js'
 import { createMcpClient } from './mcp-client.js'
@@ -95,6 +95,28 @@ const app = createApp({
   }),
   deepSeekBaseUrl: process.env.DEEPSEEK_API_BASE_URL ?? 'https://api.deepseek.com',
   requestTimeoutMs: readPositiveInt(process.env.DEEPSEEK_REQUEST_TIMEOUT_MS, 15 * 60 * 1000),
+  requestBodyLimits: {
+    chat: readPositiveInt(
+      process.env.REQUEST_BODY_LIMIT_CHAT_BYTES,
+      DEFAULT_REQUEST_BODY_LIMITS.chat
+    ),
+    sync: readPositiveInt(
+      process.env.REQUEST_BODY_LIMIT_SYNC_BYTES,
+      DEFAULT_REQUEST_BODY_LIMITS.sync
+    ),
+    settings: readPositiveInt(
+      process.env.REQUEST_BODY_LIMIT_SETTINGS_BYTES,
+      DEFAULT_REQUEST_BODY_LIMITS.settings
+    ),
+    apiKey: readPositiveInt(
+      process.env.REQUEST_BODY_LIMIT_API_KEY_BYTES,
+      DEFAULT_REQUEST_BODY_LIMITS.apiKey
+    ),
+    speech: readPositiveInt(
+      process.env.REQUEST_BODY_LIMIT_SPEECH_BYTES,
+      DEFAULT_REQUEST_BODY_LIMITS.speech
+    ),
+  },
   sessionTtlMs: sessionTtlDays * 24 * 60 * 60 * 1000,
   cookieSecure: process.env.COOKIE_SECURE
     ? process.env.COOKIE_SECURE === 'true'

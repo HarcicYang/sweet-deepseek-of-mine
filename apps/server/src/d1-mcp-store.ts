@@ -8,6 +8,7 @@ type McpServerRow = {
   slug: string
   url: string
   auth_mode: string
+  trust_mode: string
   enabled: number
   headers_json: string | null
   created_at: string
@@ -52,6 +53,7 @@ const toRecord = (row: McpServerRow): McpServerRecord => ({
   slug: row.slug,
   url: row.url,
   authMode: row.auth_mode === 'oauth' ? 'oauth' : 'static',
+  trustMode: row.trust_mode === 'trust-hints' ? 'trust-hints' : 'prompt',
   enabled: row.enabled === 1,
   encryptedHeaders: parseEncryptedHeaders(row.headers_json),
   createdAt: row.created_at,
@@ -63,6 +65,7 @@ const UPDATE_COLUMNS: Record<keyof McpServerUpdate, string> = {
   slug: 'slug',
   url: 'url',
   authMode: 'auth_mode',
+  trustMode: 'trust_mode',
   enabled: 'enabled',
   encryptedHeaders: 'headers_json',
 }
@@ -91,9 +94,9 @@ export class D1McpStore implements McpStore {
     const row = await this.database
       .prepare(
         `INSERT INTO mcp_servers (
-          id, user_id, name, slug, url, auth_mode,
+          id, user_id, name, slug, url, auth_mode, trust_mode,
           enabled, headers_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *`
       )
       .bind(
@@ -103,6 +106,7 @@ export class D1McpStore implements McpStore {
         input.slug,
         input.url,
         input.authMode,
+        input.trustMode,
         input.enabled ? 1 : 0,
         input.encryptedHeaders === null ? null : JSON.stringify(input.encryptedHeaders),
         now,

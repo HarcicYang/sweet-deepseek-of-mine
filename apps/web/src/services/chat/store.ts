@@ -1365,7 +1365,7 @@ const executePendingTools = async (
           ? (call.input as Record<string, unknown>)
           : {}
       const approved =
-        mcpTool.readOnly ||
+        mcpTool.requiresApproval &&
         (await requestMcpApproval(
           {
             serverName: mcpTool.serverName,
@@ -1374,7 +1374,7 @@ const executePendingTools = async (
           },
           signal
         ))
-      if (!approved) {
+      if (mcpTool.requiresApproval && !approved) {
         result = {
           type: 'tool_result',
           tool_use_id: call.id,
@@ -1384,7 +1384,13 @@ const executePendingTools = async (
         }
       } else {
         try {
-          const response = await callMcpTool(mcpTool.serverId, mcpTool.rawName, args, true, signal)
+          const response = await callMcpTool(
+            mcpTool.serverId,
+            mcpTool.rawName,
+            args,
+            approved,
+            signal
+          )
           result = {
             type: 'tool_result',
             tool_use_id: call.id,
