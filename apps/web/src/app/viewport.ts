@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react'
 
 /** 窄于 768px 按移动端布局 */
 const query = window.matchMedia('not all and (min-width: 768px)')
@@ -44,10 +44,10 @@ export const usePreventPageScroll = (enabled: boolean) => {
 
 /** 移动端页面跟随视觉视口，键盘弹出后顶栏和输入框仍留在可见区域。 */
 export const useMobileViewport = (enabled: boolean) => {
-  const frameRef = useRef<HTMLDivElement>(null)
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null)
+  const frameRef = useCallback((node: HTMLDivElement | null) => setFrame(node), [])
 
   useLayoutEffect(() => {
-    const frame = frameRef.current
     if (!enabled || !frame) {
       return
     }
@@ -105,7 +105,7 @@ export const useMobileViewport = (enabled: boolean) => {
       document.removeEventListener('focusout', scheduleFrame)
       reset()
     }
-  }, [enabled])
+  }, [enabled, frame])
 
   return frameRef
 }
