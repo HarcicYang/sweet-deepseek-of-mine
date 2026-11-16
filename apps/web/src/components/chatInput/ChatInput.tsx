@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import type { ThinkingMode } from '@sweet-deepseek/contracts'
 import {
   IconGlobeLanguageOutline14,
   IconPaperclipOutline16,
@@ -7,7 +8,7 @@ import {
   IconStopFill16,
   IconThinkOutline14,
 } from '../base/icons.js'
-import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { setSearch, setThinkingMode, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -22,6 +23,7 @@ import {
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
+import { Select, type SelectOption } from '../base/Select.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
@@ -34,7 +36,7 @@ import { Spectrum } from './Spectrum.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
 
-/** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
+/** 输入框：自适应高度的文本框 + 文件 + 思考模式与智能搜索 + 语音输入 + 发送 / 停止 */
 export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
   return <Input key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
@@ -49,7 +51,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
-  const thinking = useSettings((state) => state.thinking)
+  const thinkingMode = useSettings((state) => state.thinkingMode)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
@@ -200,19 +202,27 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         </div>
       </div>
       <div className={styles.functionRow}>
-        {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
+        {/* 思考模式 / 智能搜索，tooltip 在控件上方 */}
         <div ref={togglesRef} className={styles.toggles}>
-          <Tooltip content={t('deactivatedThinkTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, thinking && styles.selected)}
-              aria-label={t('thinkingSwitch')}
-              aria-pressed={thinking}
-              onClick={() => setThinking(!thinking)}
-            >
-              <IconThinkOutline14 />
-              <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
-            </button>
+          <Tooltip content={t('thinkingModeTooltip')}>
+            <Select<ThinkingMode>
+              value={thinkingMode}
+              options={
+                [
+                  { value: 'disabled', label: t('thinkingModeDisabled') },
+                  { value: 'low', label: t('thinkingModeLow') },
+                  { value: 'high', label: t('thinkingModeHigh') },
+                  { value: 'max', label: t('thinkingModeMax') },
+                ] satisfies SelectOption<ThinkingMode>[]
+              }
+              ariaLabel={t('thinkingMode')}
+              className={clsx(
+                styles.thinkingSelect,
+                thinkingMode !== 'disabled' && styles.selected
+              )}
+              startIcon={<IconThinkOutline14 />}
+              onChange={setThinkingMode}
+            />
           </Tooltip>
           <Tooltip content={t('deactivatedSearchTooltip')}>
             <button

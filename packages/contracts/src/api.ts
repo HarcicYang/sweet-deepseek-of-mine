@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ThinkingEffortSchema } from './deepseek.js'
 
 export const apiRoutes = {
   health: '/api/health',
@@ -119,10 +120,20 @@ export const ChatProxyRequestSchema = z
     system: z.string().max(200_000),
     messages: z.array(ChatMessageSchema).min(1).max(500),
     thinking: z.object({ type: z.enum(['enabled', 'disabled']) }).strict(),
+    output_config: z.object({ effort: ThinkingEffortSchema }).strict().optional(),
     tools: z.array(ChatToolSchema).max(8),
     safety_check: z.object({ level: z.literal('high') }).strict(),
     title: z.object({ enabled: z.boolean() }).strict().optional(),
   })
   .strict()
+  .superRefine((request, context) => {
+    if (request.thinking.type === 'disabled' && request.output_config) {
+      context.addIssue({
+        code: 'custom',
+        path: ['output_config'],
+        message: 'Thinking effort must be omitted when thinking is disabled',
+      })
+    }
+  })
 
 export type ChatProxyRequest = z.infer<typeof ChatProxyRequestSchema>

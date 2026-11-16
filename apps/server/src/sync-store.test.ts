@@ -14,8 +14,8 @@ test('file-backed sync settings migrate version 1 storage and persist revisions'
     assert.equal(await firstStore.getSettings('user-1'), null)
 
     const payload = {
-      schemaVersion: 1 as const,
-      thinking: true,
+      schemaVersion: 2 as const,
+      thinkingMode: 'high' as const,
       search: false,
       ttsVoice: 'tide' as const,
       location: { region: 'CN', province: '440000', city: '440300' },
@@ -37,6 +37,47 @@ test('file-backed sync settings migrate version 1 storage and persist revisions'
     const loaded = await secondStore.getSettings('user-1')
     assert.equal(loaded?.revision, 1)
     assert.deepEqual(loaded?.payload, payload)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('file-backed sync settings migrate legacy boolean thinking on read', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'sweet-deepseek-sync-'))
+  try {
+    const filePath = path.join(directory, 'sync.json')
+    await writeFile(
+      filePath,
+      `${JSON.stringify({
+        version: 2,
+        sessions: [],
+        settings: [
+          {
+            userId: 'user-1',
+            revision: 1,
+            clientUpdatedAt: 100,
+            serverUpdatedAt: '2026-11-16T00:00:00.000Z',
+            payload: {
+              schemaVersion: 1,
+              thinking: true,
+              search: false,
+              ttsVoice: 'tide',
+              location: null,
+              updatedAt: 100,
+            },
+          },
+        ],
+      })}\n`
+    )
+    const store = new FileSyncStore(filePath)
+    assert.deepEqual((await store.getSettings('user-1'))?.payload, {
+      schemaVersion: 2,
+      thinkingMode: 'high',
+      search: false,
+      ttsVoice: 'tide',
+      location: null,
+      updatedAt: 100,
+    })
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

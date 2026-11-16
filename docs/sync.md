@@ -28,25 +28,28 @@
 
 ## 设置同步
 
-- 同步 `thinking`、`search`、`ttsVoice` 和 `location`，服务端为每个账号保存一份设置记录。
+- 同步 `thinkingMode`、`search`、`ttsVoice` 和 `location`，服务端为每个账号保存一份设置记录。
 - 设置修改先写入 localStorage，再进入账号隔离的 IndexedDB 同步状态。
 - 设置 revision 冲突时比较客户端 `updatedAt`；较新的设置直接推送，不生成冲突副本。
 - `themePreference`、`locale` 和 `siderCollapsed` 属于设备本地偏好，不进入云端同步。
 - `GET /api/sync/settings` 返回当前账号设置或 `null`。
 - `PUT /api/sync/settings` 携带 `baseRevision` 和完整设置载荷，成功时 revision 加一。
 
-设置载荷当前版本为 `1`：
+设置载荷当前版本为 `2`：
 
 ```json
 {
-  "schemaVersion": 1,
-  "thinking": true,
+  "schemaVersion": 2,
+  "thinkingMode": "high",
   "search": false,
   "ttsVoice": "stella",
   "location": { "region": "CN", "province": "440000", "city": "440300" },
   "updatedAt": 1794729137749
 }
 ```
+
+v1 使用布尔 `thinking`，读取时迁移为 v2：`true` 对应 `high`，`false` 对应
+`disabled`。思考档位的 API 证据与约束见 [thinking.md](./thinking.md)。
 
 ## 当前范围
 

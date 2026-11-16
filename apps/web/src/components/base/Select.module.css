@@ -35,7 +35,8 @@
     cursor: default;
   }
 
-  > span:first-child {
+  > .value {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -69,6 +70,19 @@
 
 .placeholder {
   color: var(--dsw-alias-label-tertiary);
+}
+
+.startIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .arrow {
@@ -121,7 +135,8 @@
   user-select: none;
   transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
 
-  &:hover {
+  &:hover,
+  &.optionActive {
     background: var(--dsw-alias-interactive-bg-hover);
   }
 }

@@ -3,8 +3,23 @@
  * 文档：https://api-docs.deepseek.com/zh-cn/api/create-message
  * 声明 deepseek_web_search / deepseek_read_url 或设置 safety_check.level 为 high 时进入扩展模式。
  */
+import { z } from 'zod'
 
 export type ChatModel = 'deepseek-flash' | 'deepseek-v4-pro'
+
+/**
+ * Messages API 通过 thinking.type 开关思考，并通过 output_config.effort 控制强度。
+ * effort 只暴露文档中的规范档位；别名由服务端解释，不在客户端重复建模。
+ */
+export const THINKING_EFFORTS = ['low', 'high', 'max'] as const
+export const ThinkingEffortSchema = z.enum(THINKING_EFFORTS)
+export type ThinkingEffort = z.infer<typeof ThinkingEffortSchema>
+
+export const THINKING_MODES = ['disabled', ...THINKING_EFFORTS] as const
+export const ThinkingModeSchema = z.enum(THINKING_MODES)
+export type ThinkingMode = z.infer<typeof ThinkingModeSchema>
+export type ThinkingConfig = { type: 'enabled' | 'disabled' }
+export type OutputConfig = { effort: ThinkingEffort }
 
 // ---------- 响应：内容块 ----------
 
@@ -176,7 +191,8 @@ export type CreateMessageRequest = {
   model: ChatModel
   system: string
   messages: MessageParam[]
-  thinking: { type: 'enabled' | 'disabled' }
+  thinking: ThinkingConfig
+  output_config?: OutputConfig
   tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
   safety_check: { level: 'high' }
   title?: { enabled: boolean }

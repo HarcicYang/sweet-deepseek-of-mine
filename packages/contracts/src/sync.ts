@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { ThinkingEffortSchema, ThinkingModeSchema } from './deepseek.js'
 
 export const SYNC_SCHEMA_VERSION = 1
-export const SYNC_SETTINGS_SCHEMA_VERSION = 1
+export const SYNC_SETTINGS_SCHEMA_VERSION = 2
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 
@@ -104,6 +105,7 @@ const AssistantMessageSchema = z
     createdAt: z.number().int().nonnegative(),
     model: z.enum(['deepseek-flash', 'deepseek-v4-pro']).nullable(),
     thinking: z.boolean().optional(),
+    thinkingEffort: ThinkingEffortSchema.optional(),
     search: z.boolean().optional(),
     latestReminder: z.string().optional(),
     prefix: z.boolean(),
@@ -194,30 +196,63 @@ export type SyncSessionResponse = z.infer<typeof SyncSessionResponseSchema>
 export const SyncedUserLocationSchema = z
   .object({
     region: z.string().regex(/^[A-Z]{2}$/u),
-    province: z.string().regex(/^\d{6}$/u).optional(),
-    city: z.string().regex(/^\d{6}$/u).optional(),
+    province: z
+      .string()
+      .regex(/^\d{6}$/u)
+      .optional(),
+    city: z
+      .string()
+      .regex(/^\d{6}$/u)
+      .optional(),
+  })
+  .strict()
+
+const SyncedSettingsFields = {
+  search: z.boolean(),
+  ttsVoice: z.enum(['stella', 'tide']),
+  location: SyncedUserLocationSchema.nullable(),
+  updatedAt: z.number().int().nonnegative(),
+}
+
+/** v1 使用布尔 thinking；保留读取兼容并按 v2 模式返回。 */
+const SyncedSettingsPayloadV1Schema = z
+  .object({
+    schemaVersion: z.literal(1),
+    thinking: z.boolean(),
+    ...SyncedSettingsFields,
   })
   .strict()
 
 export const SyncedSettingsPayloadSchema = z
   .object({
     schemaVersion: z.literal(SYNC_SETTINGS_SCHEMA_VERSION),
-    thinking: z.boolean(),
-    search: z.boolean(),
-    ttsVoice: z.enum(['stella', 'tide']),
-    location: SyncedUserLocationSchema.nullable(),
-    updatedAt: z.number().int().nonnegative(),
+    thinkingMode: ThinkingModeSchema,
+    ...SyncedSettingsFields,
   })
   .strict()
 
 export type SyncedSettingsPayload = z.infer<typeof SyncedSettingsPayloadSchema>
+
+export const SyncedSettingsPayloadReadSchema = z.union([
+  SyncedSettingsPayloadSchema,
+  SyncedSettingsPayloadV1Schema.transform(
+    (payload): SyncedSettingsPayload => ({
+      schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
+      thinkingMode: payload.thinking ? ('high' as const) : ('disabled' as const),
+      search: payload.search,
+      ttsVoice: payload.ttsVoice,
+      location: payload.location,
+      updatedAt: payload.updatedAt,
+    })
+  ),
+])
 
 export const SyncSettingsRecordSchema = z
   .object({
     revision: z.number().int().positive(),
     clientUpdatedAt: z.number().int().nonnegative(),
     serverUpdatedAt: z.string(),
-    payload: SyncedSettingsPayloadSchema,
+    payload: SyncedSettingsPayloadReadSchema,
   })
   .strict()
 

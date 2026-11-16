@@ -2,6 +2,7 @@ import {
   SYNC_SETTINGS_SCHEMA_VERSION,
   type SyncedSettingsPayload,
 } from '@sweet-deepseek/contracts/sync'
+import type { ThinkingMode } from '@sweet-deepseek/contracts'
 import { create } from 'zustand'
 import type { TtsVoice } from './api/speech.js'
 import { normalizeLocation, type UserLocation } from './location.js'
@@ -11,13 +12,13 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
+/** 本机设置，存 localStorage：语言、主题、位置、朗读音色、思考模式与智能搜索开关、侧边栏收起状态 */
 type Settings = {
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
   ttsVoice: TtsVoice
-  thinking: boolean
+  thinkingMode: ThinkingMode
   search: boolean
   siderCollapsed: boolean
 }
@@ -27,7 +28,8 @@ const KEYS = {
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
   ttsVoice: 'chat-demo:tts-voice',
-  thinking: 'chat-demo:thinking',
+  thinkingMode: 'chat-demo:thinking-mode',
+  legacyThinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   siderCollapsed: 'chat-demo:sider-collapsed',
   settingsUpdatedAt: 'chat-demo:settings-updated-at',
@@ -100,6 +102,19 @@ const initialThemePreference = (): ThemePreference => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+/** 旧版本只保存布尔值；首次读取时迁移为受约束的思考模式。 */
+const initialThinkingMode = (): ThinkingMode => {
+  const saved = read(KEYS.thinkingMode)
+  if (saved === 'disabled' || saved === 'low' || saved === 'high' || saved === 'max') {
+    return saved
+  }
+  // 旧开关开启时 API 使用默认 high 强度。
+  const mode: ThinkingMode = read(KEYS.legacyThinking) === 'true' ? 'high' : 'disabled'
+  write(KEYS.thinkingMode, mode)
+  write(KEYS.legacyThinking, null)
+  return mode
+}
+
 const readSettingsUpdatedAt = (): number => {
   const value = Number(read(KEYS.settingsUpdatedAt))
   return Number.isSafeInteger(value) && value > 0 ? value : 0
@@ -121,7 +136,7 @@ export const useSettings = create<Settings>(() => ({
   location: initialLocation(),
   themePreference: initialThemePreference(),
   ttsVoice: initialTtsVoice(),
-  thinking: read(KEYS.thinking) === 'true',
+  thinkingMode: initialThinkingMode(),
   search: read(KEYS.search) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
 }))
@@ -155,12 +170,12 @@ export const setTtsVoice = (ttsVoice: TtsVoice) => {
   markSyncedSettingsChanged()
 }
 
-export const setThinking = (thinking: boolean) => {
-  if (thinking === useSettings.getState().thinking) {
+export const setThinkingMode = (thinkingMode: ThinkingMode) => {
+  if (thinkingMode === useSettings.getState().thinkingMode) {
     return
   }
-  write(KEYS.thinking, String(thinking))
-  useSettings.setState({ thinking })
+  write(KEYS.thinkingMode, thinkingMode)
+  useSettings.setState({ thinkingMode })
   markSyncedSettingsChanged()
 }
 
@@ -179,10 +194,10 @@ export const setSiderCollapsed = (siderCollapsed: boolean) => {
 }
 
 export const getSyncedSettings = (): SyncedSettingsPayload => {
-  const { thinking, search, ttsVoice, location } = useSettings.getState()
+  const { thinkingMode, search, ttsVoice, location } = useSettings.getState()
   return {
     schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
-    thinking,
+    thinkingMode,
     search,
     ttsVoice,
     location,
@@ -193,13 +208,14 @@ export const getSyncedSettings = (): SyncedSettingsPayload => {
 /** 应用远端设置时不触发本机同步事件，避免把刚拉取的值再次推送。 */
 export const applySyncedSettings = (payload: SyncedSettingsPayload): void => {
   const location = normalizeLocation(payload.location)
-  write(KEYS.thinking, String(payload.thinking))
+  write(KEYS.thinkingMode, payload.thinkingMode)
+  write(KEYS.legacyThinking, null)
   write(KEYS.search, String(payload.search))
   write(KEYS.ttsVoice, payload.ttsVoice)
   write(KEYS.location, location ? JSON.stringify(location) : null)
   write(KEYS.settingsUpdatedAt, String(payload.updatedAt))
   useSettings.setState({
-    thinking: payload.thinking,
+    thinkingMode: payload.thinkingMode,
     search: payload.search,
     ttsVoice: payload.ttsVoice,
     location,
@@ -215,7 +231,7 @@ export const prepareSyncedSettingsForUser = (userId: string): void => {
   if (previousOwner !== null) {
     applySyncedSettings({
       schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
-      thinking: false,
+      thinkingMode: 'disabled',
       search: false,
       ttsVoice: 'stella',
       location: null,

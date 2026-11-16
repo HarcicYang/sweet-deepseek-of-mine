@@ -13,6 +13,7 @@ declare const styles: {
   readonly mirror: string
   readonly functionRow: string
   readonly toggles: string
+  readonly thinkingSelect: string
   readonly collapsedToggles: string
   readonly toggleLabel: string
   readonly toggle: string

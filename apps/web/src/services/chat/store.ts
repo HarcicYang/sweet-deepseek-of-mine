@@ -1,4 +1,4 @@
-import type { ChatModel, CreateMessageRequest } from '@sweet-deepseek/contracts'
+import type { ChatModel, CreateMessageRequest, ThinkingMode } from '@sweet-deepseek/contracts'
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage } from '../api/client.js'
@@ -317,15 +317,16 @@ export const bindChatPersistence = () => {
   }
 }
 
-/** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
+/** 按当前设置创建回复：思考模式与智能搜索分别固化到本轮回答。 */
 const createReply = (): AssistantMessage => {
-  const { thinking, search } = useSettings.getState()
+  const { thinkingMode, search } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
     model: MODEL,
-    thinking,
+    thinking: thinkingMode !== 'disabled',
+    thinkingEffort: thinkingMode === 'disabled' ? undefined : thinkingMode,
     search,
     prefix: true,
     status: 'pending',
@@ -833,12 +834,19 @@ export const continueReply = (sessionId: string, messageId: string) => {
   ) {
     return
   }
-  const { thinking, search } = useSettings.getState()
+  const { thinkingMode: currentThinkingMode, search } = useSettings.getState()
+  const thinkingMode: ThinkingMode =
+    previous.thinking === undefined
+      ? currentThinkingMode
+      : previous.thinking
+        ? (previous.thinkingEffort ?? 'high')
+        : 'disabled'
   const reply: AssistantMessage = {
     ...previous,
     // 未记录请求配置的回复，续写时使用默认模型和当前开关。
     model: previous.model ?? MODEL,
-    thinking: previous.thinking ?? thinking,
+    thinking: thinkingMode !== 'disabled',
+    thinkingEffort: thinkingMode === 'disabled' ? undefined : thinkingMode,
     search: previous.search ?? search,
     status: 'pending',
     stopReason: undefined,
@@ -1124,12 +1132,19 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           latestReminder
         )
         const requestTitle = titleRequests.has(controller)
+        const thinkingMode: ThinkingMode =
+          initial.thinking === undefined
+            ? useSettings.getState().thinkingMode
+            : initial.thinking
+              ? (initial.thinkingEffort ?? 'high')
+              : 'disabled'
         const events = streamMessage(
           {
             model: initial.model ?? MODEL,
             system: `${SYSTEM_PROMPT}\n\n${JSON_RENDER_PROMPT}`,
             messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+            thinking: { type: thinkingMode === 'disabled' ? 'disabled' : 'enabled' },
+            ...(thinkingMode === 'disabled' ? {} : { output_config: { effort: thinkingMode } }),
             safety_check: SAFETY_CHECK,
             tools: serverTools(initial.search ?? false),
             ...(requestTitle ? { title: { enabled: true } } : {}),

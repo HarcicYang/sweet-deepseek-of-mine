@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPosition, useDismiss } from './anchored.js'
 import { IconCheckOutline16, IconChevronDownOutline14 } from './icons.js'
@@ -9,7 +9,8 @@ export type SelectOption<T extends string> = { value: T; label: string; lang?: s
 
 /**
  * 胶囊形选择器：触发器高 36px、圆角 18px、浅灰底，下拉菜单选中项右侧打勾；
- * 点外部或 Esc 关闭。value 不匹配任何选项时触发器显示 placeholder。
+ * 支持方向键、Home/End、Enter/Space 与 Esc；点外部或 Esc 关闭。
+ * value 不匹配任何选项时触发器显示 placeholder。
  */
 export const Select = <T extends string>({
   value,
@@ -24,6 +25,7 @@ export const Select = <T extends string>({
   required = false,
   block = false,
   variant = 'pill',
+  startIcon,
 }: {
   value: T
   options: SelectOption<T>[]
@@ -37,9 +39,13 @@ export const Select = <T extends string>({
   required?: boolean
   block?: boolean
   variant?: 'pill' | 'field'
+  startIcon?: ReactNode
 }) => {
   const [open, setOpen] = useState(false)
   const current = options.find((option) => option.value === value)
+  const selectedIndex = options.findIndex((option) => option.value === value)
+  const [activeIndex, setActiveIndex] = useState(Math.max(0, selectedIndex))
+  const listboxId = useId()
   const field = variant === 'field'
   // 菜单贴右侧展开，最多 320px 高，超出在菜单内滚动
   const { anchorRef, floatingRef, position } = useAnchoredPosition<
@@ -48,6 +54,59 @@ export const Select = <T extends string>({
   >(open, { align: 'end', maxHeight: 320, minSpace: 160, matchAnchorWidth: field })
   // Esc 只关菜单，不让外层弹窗一起关闭
   useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), { captureEscape: true })
+
+  const openMenu = () => {
+    setActiveIndex(Math.max(0, selectedIndex))
+    setOpen(true)
+  }
+  const selectOption = (index: number) => {
+    const option = options[index]
+    if (!option) {
+      return
+    }
+    setOpen(false)
+    onChange(option.value)
+  }
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Tab' && open) {
+      setOpen(false)
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (options.length === 0) {
+        return
+      }
+      if (!open) {
+        openMenu()
+        return
+      }
+      const delta = event.key === 'ArrowDown' ? 1 : -1
+      setActiveIndex((index) => (index + delta + options.length) % options.length)
+      return
+    }
+    if (!open) {
+      return
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      setActiveIndex(event.key === 'Home' ? 0 : Math.max(0, options.length - 1))
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      selectOption(activeIndex)
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    document
+      .getElementById(`${listboxId}-option-${activeIndex}`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex, listboxId, open])
 
   return (
     <>
@@ -67,13 +126,21 @@ export const Select = <T extends string>({
         aria-required={required || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={
+          open && options.length > 0 ? `${listboxId}-option-${activeIndex}` : undefined
+        }
         disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        onKeyDown={onKeyDown}
       >
+        {startIcon ? <span className={styles.startIcon}>{startIcon}</span> : null}
         {current ? (
-          <span lang={current.lang}>{current.label}</span>
+          <span className={styles.value} lang={current.lang}>
+            {current.label}
+          </span>
         ) : (
-          <span className={styles.placeholder}>{placeholder}</span>
+          <span className={clsx(styles.value, styles.placeholder)}>{placeholder}</span>
         )}
         <span className={styles.arrow}>
           <IconChevronDownOutline14 />
@@ -85,19 +152,22 @@ export const Select = <T extends string>({
               ref={floatingRef}
               className={clsx(styles.menu, field && styles.menuField)}
               style={position ?? undefined}
+              id={listboxId}
               role="listbox"
               aria-label={ariaLabel}
             >
-              {options.map((option) => (
+              {options.map((option, index) => (
                 <div
                   key={option.value}
+                  id={`${listboxId}-option-${index}`}
                   role="option"
                   lang={option.lang}
                   aria-selected={option.value === value}
-                  className={styles.option}
+                  className={clsx(styles.option, index === activeIndex && styles.optionActive)}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
-                    setOpen(false)
-                    onChange(option.value)
+                    selectOption(index)
                   }}
                 >
                   <span>{option.label}</span>

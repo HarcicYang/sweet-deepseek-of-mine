@@ -1,11 +1,12 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type {
-  SyncedSettingsPayload,
-  SyncSessionPayload,
-  SyncSessionRecord,
-  SyncSessionSummary,
-  SyncSettingsRecord,
+import {
+  SyncedSettingsPayloadReadSchema,
+  type SyncedSettingsPayload,
+  type SyncSessionPayload,
+  type SyncSessionRecord,
+  type SyncSessionSummary,
+  type SyncSettingsRecord,
 } from '@sweet-deepseek/contracts/sync'
 
 export class SyncConflictError extends Error {
@@ -77,7 +78,8 @@ const toPublicSettings = (record: StoredSettingsRecord): SyncSettingsRecord => (
   revision: record.revision,
   clientUpdatedAt: record.clientUpdatedAt,
   serverUpdatedAt: record.serverUpdatedAt,
-  payload: clone(record.payload),
+  // 旧文件库可能仍保存 v1 布尔 thinking，读取时统一迁移为 v2 模式。
+  payload: SyncedSettingsPayloadReadSchema.parse(clone(record.payload)),
 })
 
 const sortRecords = (records: StoredSyncRecord[]) =>
@@ -260,11 +262,7 @@ export class FileSyncStore implements SyncStore {
           sessions: parsed.sessions as StoredSyncRecord[],
           settings: [],
         }
-      } else if (
-        parsed.version === 2 &&
-        'settings' in parsed &&
-        Array.isArray(parsed.settings)
-      ) {
+      } else if (parsed.version === 2 && 'settings' in parsed && Array.isArray(parsed.settings)) {
         this.database = parsed as SyncDatabase
       } else {
         throw new Error('Unsupported sync database format')

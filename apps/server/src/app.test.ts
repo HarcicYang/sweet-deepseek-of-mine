@@ -223,7 +223,8 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
       model: 'deepseek-flash',
       system: 'test',
       messages: [{ role: 'user', content: 'hello' }],
-      thinking: { type: 'disabled' },
+      thinking: { type: 'enabled' },
+      output_config: { effort: 'high' },
       tools: [],
       safety_check: { level: 'high' },
     }),
@@ -237,7 +238,62 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
   assert.ok(upstream)
   const upstreamHeaders = new Headers(upstream.init?.headers)
   assert.equal(upstreamHeaders.get('x-api-key'), 'sk-test-key')
-  assert.equal(JSON.parse(String(upstream.init?.body)).stream, true)
+  const upstreamBody = JSON.parse(String(upstream.init?.body)) as {
+    stream: boolean
+    thinking: { type: string }
+    output_config?: { effort: string }
+    reasoning_effort?: string
+  }
+  assert.equal(upstreamBody.stream, true)
+  assert.deepEqual(upstreamBody.thinking, { type: 'enabled' })
+  assert.deepEqual(upstreamBody.output_config, { effort: 'high' })
+  assert.equal(upstreamBody.reasoning_effort, undefined)
+
+  const invalidThinking = await app.request(`${APP_ORIGIN}${apiRoutes.chat}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      system: 'test',
+      messages: [{ role: 'user', content: 'hello' }],
+      thinking: { type: 'high' },
+      tools: [],
+      safety_check: { level: 'high' },
+    }),
+  })
+  assert.equal(invalidThinking.status, 400)
+  const invalidEffort = await app.request(`${APP_ORIGIN}${apiRoutes.chat}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      system: 'test',
+      messages: [{ role: 'user', content: 'hello' }],
+      thinking: { type: 'enabled' },
+      output_config: { effort: 'ultra' },
+      tools: [],
+      safety_check: { level: 'high' },
+    }),
+  })
+  assert.equal(invalidEffort.status, 400)
+  const disabledWithEffort = await app.request(`${APP_ORIGIN}${apiRoutes.chat}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      system: 'test',
+      messages: [{ role: 'user', content: 'hello' }],
+      thinking: { type: 'disabled' },
+      output_config: { effort: 'high' },
+      tools: [],
+      safety_check: { level: 'high' },
+    }),
+  })
+  assert.equal(disabledWithEffort.status, 400)
+  assert.equal(
+    calls.filter((call) => call.url === 'https://api.deepseek.test/anthropic/v1/messages').length,
+    1
+  )
 
   const uploadForm = new FormData()
   uploadForm.append('purpose', 'user_data')
@@ -525,8 +581,8 @@ test('settings sync advances one revision per account', async () => {
   assert.deepEqual(await initial.json(), { settings: null })
 
   const payload = {
-    schemaVersion: 1,
-    thinking: true,
+    schemaVersion: 2,
+    thinkingMode: 'high',
     search: false,
     ttsVoice: 'tide',
     location: { region: 'CN', province: '440000', city: '440300' },

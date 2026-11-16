@@ -1,16 +1,12 @@
 import {
-  SyncedSettingsPayloadSchema,
+  SyncedSettingsPayloadReadSchema,
   type SyncedSettingsPayload,
   type SyncSessionPayload,
   type SyncSessionRecord,
   type SyncSessionSummary,
   type SyncSettingsRecord,
 } from '@sweet-deepseek/contracts/sync'
-import {
-  SyncConflictError,
-  SyncSettingsConflictError,
-  type SyncStore,
-} from './sync-store.js'
+import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
 
 const CHUNK_BYTES = 512 * 1024
 
@@ -61,7 +57,7 @@ const toSummary = (row: SessionHeadRow): SyncSessionSummary => ({
 })
 
 const toSettings = (row: SettingsRow): SyncSettingsRecord => {
-  const parsed = SyncedSettingsPayloadSchema.safeParse(JSON.parse(row.payload_json))
+  const parsed = SyncedSettingsPayloadReadSchema.safeParse(JSON.parse(row.payload_json))
   if (!parsed.success) {
     throw new Error('Invalid settings payload in D1')
   }
@@ -273,15 +269,7 @@ export class D1SyncStore implements SyncStore {
               server_updated_at = ?, payload_token = NULL, payload_size = 0
              WHERE user_id = ? AND session_id = ? AND revision = ?`
           )
-          .bind(
-            revision,
-            deletedAt,
-            deletedAt,
-            serverUpdatedAt,
-            userId,
-            sessionId,
-            baseRevision
-          )
+          .bind(revision, deletedAt, deletedAt, serverUpdatedAt, userId, sessionId, baseRevision)
           .run()
       : await this.database
           .prepare(
