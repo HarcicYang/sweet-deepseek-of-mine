@@ -50,7 +50,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - GitHub OAuth 登录、Key 设置以及聊天、附件、语音代理均已接入 Web 客户端。
 - Worker adapter 使用免费 D1 保存账号、设置和分块会话快照；Node adapter 继续使用本地文件存储。
 - 临时分享保存创建时的当前分支快照，token 公开只读，默认 3 天、可设置 1–30 天；不得暴露附件原件或 API Key。
-- 账号级 Skill 使用 Harness 兼容的 `SKILL.md`，通过渐进式 `skill` 工具加载，并支持 `/name` 显式调用。
+- 账号级 Skill 使用 Harness 兼容的文本 Bundle：根目录 `SKILL.md` 加相对资源文件；通过渐进式 `skill` 和 `read_skill_resource` 工具加载，并支持 `/name` 显式调用。
 - MCP 设置包含官方 Registry 发现页，只导入 active、latest 且支持 Streamable HTTP 的远程服务；
   1–2 字符搜索筛选当前已加载结果，3 字符以上查询完整 Registry。
 - Registry 导入只预填配置并去重。用户选择 OAuth 时，“保存并授权”会在保存成功后立即打开授权窗口；

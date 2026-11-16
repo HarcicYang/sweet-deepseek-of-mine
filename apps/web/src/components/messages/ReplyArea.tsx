@@ -27,6 +27,7 @@ import {
   type ReadLinkStep,
   type ReplyView,
   type SearchStep,
+  type SkillResourceStep,
   type SkillToolStep,
   type Source,
   type Step,
@@ -125,7 +126,8 @@ const stepKey = (step: Step, index: number) =>
   step.type === 'text' ||
   step.type === 'search' ||
   step.type === 'mcp' ||
-  step.type === 'skill'
+  step.type === 'skill' ||
+  step.type === 'skill_resource'
     ? step.key
     : `${step.type}-${index}`
 
@@ -182,6 +184,8 @@ const StepItem = ({
       return <McpToolRow step={step} isLast={isLast} />
     case 'skill':
       return <SkillToolRow step={step} isLast={isLast} />
+    case 'skill_resource':
+      return <SkillResourceRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -323,6 +327,21 @@ const SkillToolRow = ({ step, isLast }: { step: SkillToolStep; isLast: boolean }
       : step.status === 'failed'
         ? t('skillToolFailed', { name: step.name })
         : t('skillToolCalled', { name: step.name })
+  return (
+    <ToolRow icon={<IconSkillOutline16 />} isLast={isLast}>
+      <span className={clsx(step.status === 'failed' && styles.toolFailed)}>{text}</span>
+    </ToolRow>
+  )
+}
+
+const SkillResourceRow = ({ step, isLast }: { step: SkillResourceStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const text =
+    step.status === 'wip'
+      ? t('skillResourceCalling', { path: step.path })
+      : step.status === 'failed'
+        ? t('skillResourceFailed', { path: step.path })
+        : t('skillResourceCalled', { path: step.path })
   return (
     <ToolRow icon={<IconSkillOutline16 />} isLast={isLast}>
       <span className={clsx(step.status === 'failed' && styles.toolFailed)}>{text}</span>

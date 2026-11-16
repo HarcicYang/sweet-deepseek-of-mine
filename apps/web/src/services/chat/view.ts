@@ -5,7 +5,7 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from '@sweet-deepseek/contracts'
-import { SKILL_TOOL_NAME } from '@sweet-deepseek/skills'
+import { READ_SKILL_RESOURCE_TOOL_NAME, SKILL_TOOL_NAME } from '@sweet-deepseek/skills'
 import { translate } from '../../i18n/index.js'
 import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
 
@@ -79,6 +79,14 @@ export type SkillToolStep = {
   status: ToolStatus
 }
 
+export type SkillResourceStep = {
+  type: 'skill_resource'
+  key: string
+  skill: string
+  path: string
+  status: ToolStatus
+}
+
 export const getMcpToolDisplayName = (name: string): string => {
   if (!name.startsWith('mcp__')) {
     return name
@@ -103,6 +111,7 @@ export type Step =
   | ThinkingStep
   | McpToolStep
   | SkillToolStep
+  | SkillResourceStep
   | PreambleStep
 
 export type ReplyView = {
@@ -302,6 +311,20 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         })
         return
       }
+      if (block.name === READ_SKILL_RESOURCE_TOOL_NAME) {
+        const input =
+          block.input !== null && typeof block.input === 'object' && !Array.isArray(block.input)
+            ? (block.input as Record<string, unknown>)
+            : {}
+        steps.push({
+          type: 'skill_resource',
+          key: block.id,
+          skill: typeof input.skill === 'string' ? input.skill : '',
+          path: typeof input.path === 'string' ? input.path : '',
+          status: result ? (result.isError ? 'failed' : 'done') : streaming ? 'wip' : 'failed',
+        })
+        return
+      }
       steps.push({
         type: 'mcp',
         key: block.id,
@@ -469,6 +492,9 @@ export const getAreaTitle = (
   }
   if (last?.type === 'skill' && last.status === 'wip') {
     return translate('skillToolCalling', { name: last.name })
+  }
+  if (last?.type === 'skill_resource' && last.status === 'wip') {
+    return translate('skillResourceCalling', { path: last.path })
   }
   return translate('messageThinking')
 }

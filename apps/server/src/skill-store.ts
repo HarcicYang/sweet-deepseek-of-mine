@@ -1,5 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { SKILL_ENTRYPOINT } from '@sweet-deepseek/contracts/skills'
+import type { NormalizedSkillFile } from '@sweet-deepseek/skills'
 
 export type SkillRecord = {
   id: string
@@ -11,8 +13,7 @@ export type SkillRecord = {
   userInvocable: boolean
   modelInvocable: boolean
   metadata: Record<string, unknown>
-  source: string
-  instructions: string
+  files: NormalizedSkillFile[]
   createdAt: string
   updatedAt: string
 }
@@ -26,8 +27,7 @@ export type SkillWrite = Pick<
   | 'userInvocable'
   | 'modelInvocable'
   | 'metadata'
-  | 'source'
-  | 'instructions'
+  | 'files'
 >
 
 export type SkillCreate = SkillWrite & {
@@ -45,11 +45,16 @@ export type SkillStore = {
 }
 
 type SkillDatabase = {
-  version: 1
+  version: 2
   skills: SkillRecord[]
 }
 
-const emptyDatabase = (): SkillDatabase => ({ version: 1, skills: [] })
+type LegacySkillDatabase = {
+  version: 1
+  skills: Array<Omit<SkillRecord, 'files'> & { source: string; instructions: string }>
+}
+
+const emptyDatabase = (): SkillDatabase => ({ version: 2, skills: [] })
 const clone = <Value>(value: Value): Value => structuredClone(value)
 
 const assertUniqueName = (
@@ -62,6 +67,38 @@ const assertUniqueName = (
     skills.some((skill) => skill.userId === userId && skill.name === name && skill.id !== exceptId)
   ) {
     throw new Error('Skill name already exists')
+  }
+}
+
+export const rootSkillFile = (files: NormalizedSkillFile[]): NormalizedSkillFile => {
+  const root = files.find((file) => file.path === SKILL_ENTRYPOINT)
+  if (!root) {
+    throw new Error('Skill bundle is missing SKILL.md')
+  }
+  return root
+}
+
+const legacyRecord = (skill: LegacySkillDatabase['skills'][number]): SkillRecord => {
+  return {
+    id: skill.id,
+    userId: skill.userId,
+    name: skill.name,
+    description: skill.description,
+    whenToUse: skill.whenToUse,
+    enabled: skill.enabled,
+    userInvocable: skill.userInvocable,
+    modelInvocable: skill.modelInvocable,
+    metadata: skill.metadata,
+    createdAt: skill.createdAt,
+    updatedAt: skill.updatedAt,
+    files: [
+      {
+        path: SKILL_ENTRYPOINT,
+        mediaType: 'text/markdown',
+        sizeBytes: new TextEncoder().encode(skill.source).byteLength,
+        content: skill.source,
+      },
+    ],
   }
 }
 
@@ -91,7 +128,7 @@ export class MemorySkillStore implements SkillStore {
     assertUniqueName([...this.skills.values()], input.userId, input.name)
     const now = new Date().toISOString()
     const skill: SkillRecord = {
-      ...input,
+      ...clone(input),
       createdAt: now,
       updatedAt: now,
     }
@@ -111,7 +148,7 @@ export class MemorySkillStore implements SkillStore {
     assertUniqueName([...this.skills.values()], userId, update.name, skillId)
     const next: SkillRecord = {
       ...current,
-      ...update,
+      ...clone(update),
       updatedAt: new Date().toISOString(),
     }
     this.skills.set(skillId, clone(next))
@@ -148,14 +185,18 @@ export class FileSkillStore implements SkillStore {
     }
     try {
       const parsed: unknown = JSON.parse(await readFile(this.filePath, 'utf8'))
-      if (
-        typeof parsed !== 'object' ||
-        parsed === null ||
-        !('version' in parsed) ||
-        parsed.version !== 1 ||
-        !('skills' in parsed) ||
-        !Array.isArray(parsed.skills)
-      ) {
+      if (typeof parsed !== 'object' || parsed === null || !('skills' in parsed)) {
+        throw new Error('Unsupported Skill database format')
+      }
+      const candidate = parsed as { version?: unknown; skills: unknown }
+      if (candidate.version === 1 && Array.isArray(candidate.skills)) {
+        this.database = {
+          version: 2,
+          skills: (candidate as LegacySkillDatabase).skills.map(legacyRecord),
+        }
+        return this.database
+      }
+      if (candidate.version !== 2 || !Array.isArray(candidate.skills)) {
         throw new Error('Unsupported Skill database format')
       }
       this.database = parsed as SkillDatabase
@@ -211,7 +252,7 @@ export class FileSkillStore implements SkillStore {
       assertUniqueName(database.skills, input.userId, input.name)
       const now = new Date().toISOString()
       const skill: SkillRecord = {
-        ...input,
+        ...clone(input),
         createdAt: now,
         updatedAt: now,
       }
@@ -235,7 +276,7 @@ export class FileSkillStore implements SkillStore {
         return null
       }
       assertUniqueName(database.skills, userId, update.name, skillId)
-      Object.assign(skill, update, { updatedAt: new Date().toISOString() })
+      Object.assign(skill, clone(update), { updatedAt: new Date().toISOString() })
       await this.persist(database)
       return clone(skill)
     })

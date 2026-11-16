@@ -1,8 +1,14 @@
 import {
-  SKILL_SOURCE_MAX_LENGTH,
+  SKILL_BUNDLE_MAX_BYTES,
+  SKILL_ENTRYPOINT,
+  SKILL_FILE_MAX_LENGTH,
+  SKILL_MAX_FILES,
+  isSafeSkillFilePath,
   type SkillDetail,
+  type SkillFileInput,
   type SkillSummary,
 } from '@sweet-deepseek/contracts/skills'
+import { strToU8, unzipSync, zipSync } from 'fflate'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
@@ -30,21 +36,77 @@ Write the reusable workflow and output requirements here.
 
 type Draft = {
   id: string | null
-  source: string
+  files: SkillFileInput[]
   enabled: boolean
 }
 
 const newDraft = (): Draft => ({
   id: null,
-  source: STARTER_SKILL,
+  files: [{ path: SKILL_ENTRYPOINT, content: STARTER_SKILL }],
   enabled: true,
 })
 
-const downloadSource = (skill: SkillDetail) => {
-  const url = URL.createObjectURL(new Blob([skill.source], { type: 'text/markdown' }))
+const sortFiles = (files: SkillFileInput[]): SkillFileInput[] =>
+  [...files].sort((left, right) => {
+    if (left.path === SKILL_ENTRYPOINT) {
+      return -1
+    }
+    if (right.path === SKILL_ENTRYPOINT) {
+      return 1
+    }
+    return left.path.localeCompare(right.path)
+  })
+
+const draftFiles = (detail: SkillDetail): SkillFileInput[] =>
+  sortFiles(detail.files.map(({ path, content }) => ({ path, content })))
+
+const readTextFile = (path: string, bytes: Uint8Array): string => {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error(`${path}: binary or non-UTF-8 files are not supported`)
+  }
+}
+
+const importZip = (bytes: Uint8Array): SkillFileInput[] => {
+  const archive = unzipSync(bytes)
+  const entries = Object.entries(archive).filter(
+    ([path]) =>
+      !path.endsWith('/') && !path.startsWith('__MACOSX/') && !path.split('/').includes('.DS_Store')
+  )
+  const roots = entries
+    .map(([path]) => path)
+    .filter((path) => path === SKILL_ENTRYPOINT || path.endsWith(`/${SKILL_ENTRYPOINT}`))
+  if (roots.length !== 1 || !roots[0]) {
+    throw new Error(`ZIP must contain exactly one ${SKILL_ENTRYPOINT}`)
+  }
+  const root = roots[0]
+  const prefix = root === SKILL_ENTRYPOINT ? '' : root.slice(0, -SKILL_ENTRYPOINT.length)
+  const bundleEntries = entries.filter(([path]) => !prefix || path.startsWith(prefix))
+  if (bundleEntries.length > SKILL_MAX_FILES) {
+    throw new Error(`A skill bundle can contain at most ${SKILL_MAX_FILES} files`)
+  }
+  if (
+    bundleEntries.reduce((total, [, content]) => total + content.byteLength, 0) >
+    SKILL_BUNDLE_MAX_BYTES
+  ) {
+    throw new Error('Skill bundle is too large')
+  }
+  const files = bundleEntries.map(([path, content]) => ({
+    path: prefix ? path.slice(prefix.length) : path,
+    content: readTextFile(path, content),
+  }))
+  return sortFiles(files)
+}
+
+const exportBundle = (skill: SkillDetail) => {
+  const archive = zipSync(
+    Object.fromEntries(skill.files.map((file) => [file.path, strToU8(file.content)]))
+  )
+  const url = URL.createObjectURL(new Blob([archive.slice().buffer], { type: 'application/zip' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = `${skill.name}.md`
+  link.download = `${skill.name}.zip`
   link.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
@@ -53,6 +115,8 @@ export const SkillsSettings = () => {
   const t = useTranslate()
   const [skills, setSkills] = useState<SkillSummary[]>([])
   const [draft, setDraft] = useState<Draft>(newDraft)
+  const [selectedPath, setSelectedPath] = useState(SKILL_ENTRYPOINT)
+  const [newPath, setNewPath] = useState('references/')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +138,13 @@ export const SkillsSettings = () => {
     void load()
   }, [])
 
+  const resetDraft = () => {
+    setDraft(newDraft())
+    setSelectedPath(SKILL_ENTRYPOINT)
+    setNewPath('references/')
+    setError(null)
+  }
+
   const save = async () => {
     if (saving) {
       return
@@ -82,9 +153,12 @@ export const SkillsSettings = () => {
     setError(null)
     try {
       const saved = draft.id
-        ? await updateSkill(draft.id, { source: draft.source, enabled: draft.enabled })
-        : await createSkill({ source: draft.source, enabled: draft.enabled })
-      setDraft({ id: saved.id, source: saved.source, enabled: saved.enabled })
+        ? await updateSkill(draft.id, { files: draft.files, enabled: draft.enabled })
+        : await createSkill({ files: draft.files, enabled: draft.enabled })
+      setDraft({ id: saved.id, files: draftFiles(saved), enabled: saved.enabled })
+      setSelectedPath(
+        saved.files.some((file) => file.path === selectedPath) ? selectedPath : SKILL_ENTRYPOINT
+      )
       await load()
       showToast({ key: 'skillSaved' })
     } catch (cause) {
@@ -97,10 +171,11 @@ export const SkillsSettings = () => {
   const edit = async (skill: SkillSummary) => {
     try {
       const detail = await getSkill(skill.id)
-      setDraft({ id: detail.id, source: detail.source, enabled: detail.enabled })
+      setDraft({ id: detail.id, files: draftFiles(detail), enabled: detail.enabled })
+      setSelectedPath(SKILL_ENTRYPOINT)
       setError(null)
       requestAnimationFrame(() => {
-        document.getElementById('skill-source')?.scrollIntoView({
+        document.getElementById('skill-editor')?.scrollIntoView({
           behavior: 'smooth',
           block: 'start',
         })
@@ -121,7 +196,7 @@ export const SkillsSettings = () => {
 
   const exportSkill = async (skill: SkillSummary) => {
     try {
-      downloadSource(await getSkill(skill.id))
+      exportBundle(await getSkill(skill.id))
     } catch {
       showToast({ key: 'skillExportFailed', type: 'error' })
     }
@@ -132,7 +207,7 @@ export const SkillsSettings = () => {
       await deleteSkill(skill.id)
       setConfirmingDeleteId(null)
       if (draft.id === skill.id) {
-        setDraft(newDraft())
+        resetDraft()
       }
       await load()
       showToast({ key: 'skillDeleted' })
@@ -141,6 +216,57 @@ export const SkillsSettings = () => {
     }
   }
 
+  const importFile = async (file: File) => {
+    try {
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        if (file.size > SKILL_BUNDLE_MAX_BYTES * 4) {
+          throw new Error('Skill ZIP is too large')
+        }
+        setDraft({
+          id: null,
+          files: importZip(new Uint8Array(await file.arrayBuffer())),
+          enabled: true,
+        })
+      } else {
+        setDraft({
+          id: null,
+          files: [
+            {
+              path: SKILL_ENTRYPOINT,
+              content: await file.text(),
+            },
+          ],
+          enabled: true,
+        })
+      }
+      setSelectedPath(SKILL_ENTRYPOINT)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  const addFile = () => {
+    const path = newPath.trim()
+    if (!isSafeSkillFilePath(path)) {
+      setError(t('skillFilePathInvalid'))
+      return
+    }
+    if (draft.files.some((file) => file.path === path)) {
+      setError(t('skillFileDuplicate'))
+      return
+    }
+    setDraft((current) => ({
+      ...current,
+      files: sortFiles([...current.files, { path, content: '' }]),
+    }))
+    setSelectedPath(path)
+    setNewPath('references/')
+    setError(null)
+  }
+
+  const selectedFile = draft.files.find((file) => file.path === selectedPath) ?? draft.files[0]
+
   return (
     <div className={styles.skillsSettings}>
       <div className={styles.skillsHeadingRow}>
@@ -148,7 +274,7 @@ export const SkillsSettings = () => {
           <div className={styles.sectionHeading}>{t('skillsTitle')}</div>
           <p className={styles.sectionDescription}>{t('skillsDescription')}</p>
         </div>
-        <Button size="m" variant="outlined" onClick={() => setDraft(newDraft())}>
+        <Button size="m" variant="outlined" onClick={resetDraft}>
           <IconSkillOutline16 />
           {t('skillNew')}
         </Button>
@@ -217,6 +343,7 @@ export const SkillsSettings = () => {
 
       <form
         className={styles.skillEditor}
+        id="skill-editor"
         onSubmit={(event) => {
           event.preventDefault()
           void save()
@@ -233,36 +360,97 @@ export const SkillsSettings = () => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".md,text/markdown,text/plain"
+            accept=".md,.zip,text/markdown,text/plain,application/zip"
             hidden
             onChange={(event) => {
               const file = event.target.files?.[0]
               event.target.value = ''
-              if (!file) {
-                return
+              if (file) {
+                void importFile(file)
               }
-              void file.text().then((source) => {
-                setDraft({
-                  id: null,
-                  source: source.slice(0, SKILL_SOURCE_MAX_LENGTH),
-                  enabled: true,
-                })
-                setError(null)
-              })
             }}
           />
         </div>
         <p className={styles.sectionDescription}>{t('skillEditorDescription')}</p>
-        <textarea
-          id="skill-source"
-          className={styles.skillSource}
-          aria-label={t('skillSource')}
-          value={draft.source}
-          maxLength={SKILL_SOURCE_MAX_LENGTH}
-          spellCheck={false}
-          onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))}
-          required
-        />
+        <div className={styles.skillEditorSplit}>
+          <div className={styles.skillFileTree}>
+            <div className={styles.skillFilesHeader}>
+              <span>{t('skillFilesCount', { count: draft.files.length })}</span>
+            </div>
+            {draft.files.map((file) => {
+              const depth = file.path.split('/').length - 1
+              return (
+                <button
+                  key={file.path}
+                  type="button"
+                  className={
+                    file.path === selectedFile?.path
+                      ? styles.skillFileActive
+                      : styles.skillFileButton
+                  }
+                  style={{ paddingLeft: `${8 + depth * 12}px` }}
+                  onClick={() => setSelectedPath(file.path)}
+                >
+                  {file.path}
+                </button>
+              )
+            })}
+            <div className={styles.skillAddFile}>
+              <input
+                value={newPath}
+                aria-label={t('skillNewFilePlaceholder')}
+                placeholder={t('skillNewFilePlaceholder')}
+                onChange={(event) => setNewPath(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addFile()
+                  }
+                }}
+              />
+              <Button size="s" variant="outlined" onClick={addFile} disabled={!newPath.trim()}>
+                {t('skillAddFile')}
+              </Button>
+            </div>
+          </div>
+          <div className={styles.skillFileEditor}>
+            <div className={styles.skillFileEditorHeader}>
+              <span>{selectedFile?.path ?? SKILL_ENTRYPOINT}</span>
+              {selectedFile && selectedFile.path !== SKILL_ENTRYPOINT ? (
+                <Button
+                  size="s"
+                  variant="dangerOutlined"
+                  onClick={() => {
+                    setDraft((current) => ({
+                      ...current,
+                      files: current.files.filter((file) => file.path !== selectedFile.path),
+                    }))
+                    setSelectedPath(SKILL_ENTRYPOINT)
+                  }}
+                >
+                  {t('skillRemoveFile')}
+                </Button>
+              ) : null}
+            </div>
+            <textarea
+              className={styles.skillSource}
+              aria-label={t('skillFileContent', { path: selectedFile?.path ?? SKILL_ENTRYPOINT })}
+              value={selectedFile?.content ?? ''}
+              maxLength={SKILL_FILE_MAX_LENGTH}
+              spellCheck={false}
+              onChange={(event) => {
+                const content = event.target.value
+                setDraft((current) => ({
+                  ...current,
+                  files: current.files.map((file) =>
+                    file.path === selectedFile?.path ? { ...file, content } : file
+                  ),
+                }))
+              }}
+              required={selectedFile?.path === SKILL_ENTRYPOINT}
+            />
+          </div>
+        </div>
         <div className={styles.skillEditorFooter}>
           <label className={styles.mcpCheckbox}>
             <input
@@ -276,12 +464,7 @@ export const SkillsSettings = () => {
           </label>
           <div className={styles.skillEditorActions}>
             {draft.id ? (
-              <Button
-                size="m"
-                variant="outlined"
-                disabled={saving}
-                onClick={() => setDraft(newDraft())}
-              >
+              <Button size="m" variant="outlined" disabled={saving} onClick={resetDraft}>
                 {t('cancel')}
               </Button>
             ) : null}

@@ -1,16 +1,36 @@
 import {
+  SKILL_BUNDLE_MAX_BYTES,
   SKILL_DESCRIPTION_MAX_LENGTH,
+  SKILL_ENTRYPOINT,
+  SKILL_FILE_MAX_LENGTH,
   SKILL_INSTRUCTIONS_MAX_LENGTH,
+  SKILL_MAX_FILES,
   SKILL_NAME_MAX_LENGTH,
   SKILL_NAME_PATTERN,
   SKILL_SOURCE_MAX_LENGTH,
+  isSafeSkillFilePath,
   type SkillDetail,
+  type SkillFileInput,
   type SkillSummary,
 } from '@sweet-deepseek/contracts/skills'
 import { parse } from 'yaml'
 import { z } from 'zod'
 
 export const SKILL_TOOL_NAME = 'skill'
+export const READ_SKILL_RESOURCE_TOOL_NAME = 'read_skill_resource'
+
+export type NormalizedSkillFile = {
+  path: string
+  mediaType: string
+  sizeBytes: number
+  content: string
+}
+
+export type ParsedSkillBundle = {
+  skill: ParsedSkill
+  files: NormalizedSkillFile[]
+  entrypoint: string
+}
 
 export type ParsedSkill = {
   name: string
@@ -27,6 +47,33 @@ export class SkillParseError extends Error {
     super(message)
     this.name = 'SkillParseError'
   }
+}
+
+const MEDIA_TYPES: Record<string, string> = {
+  '.css': 'text/css',
+  '.csv': 'text/csv',
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.md': 'text/markdown',
+  '.mjs': 'text/javascript',
+  '.py': 'text/x-python',
+  '.sh': 'text/x-shellscript',
+  '.sql': 'application/sql',
+  '.svg': 'image/svg+xml',
+  '.toml': 'application/toml',
+  '.ts': 'text/typescript',
+  '.tsx': 'text/typescript',
+  '.txt': 'text/plain',
+  '.xml': 'application/xml',
+  '.yaml': 'application/yaml',
+  '.yml': 'application/yaml',
+}
+
+export const inferSkillMediaType = (filePath: string): string => {
+  const lower = filePath.toLowerCase()
+  const extension = lower.slice(lower.lastIndexOf('.'))
+  return MEDIA_TYPES[extension] ?? 'text/plain'
 }
 
 const FrontmatterSchema = z
@@ -96,10 +143,73 @@ export const parseSkillSource = (source: string): ParsedSkill => {
   }
 }
 
+export const parseSkillBundle = (files: readonly SkillFileInput[]): ParsedSkillBundle => {
+  if (files.length === 0 || files.length > SKILL_MAX_FILES) {
+    throw new SkillParseError(`A skill bundle must contain 1-${SKILL_MAX_FILES} files`)
+  }
+  const encoder = new TextEncoder()
+  const normalized: NormalizedSkillFile[] = []
+  const seen = new Set<string>()
+  let totalBytes = 0
+  let rootSource: string | null = null
+  for (const file of files) {
+    if (!isSafeSkillFilePath(file.path)) {
+      throw new SkillParseError(`Unsafe skill file path: ${file.path}`)
+    }
+    if (seen.has(file.path)) {
+      throw new SkillParseError(`Duplicate skill file path: ${file.path}`)
+    }
+    if (
+      file.path !== SKILL_ENTRYPOINT &&
+      file.path.toLowerCase().endsWith(`/${SKILL_ENTRYPOINT.toLowerCase()}`)
+    ) {
+      throw new SkillParseError('Nested SKILL.md files are not supported')
+    }
+    if (file.path === SKILL_ENTRYPOINT) {
+      rootSource = file.content
+    }
+    const sizeBytes = encoder.encode(file.content).byteLength
+    if (sizeBytes > SKILL_FILE_MAX_LENGTH) {
+      throw new SkillParseError(`Skill file is too large: ${file.path}`)
+    }
+    totalBytes += sizeBytes
+    if (totalBytes > SKILL_BUNDLE_MAX_BYTES) {
+      throw new SkillParseError('Skill bundle is too large')
+    }
+    seen.add(file.path)
+    normalized.push({
+      path: file.path,
+      mediaType: inferSkillMediaType(file.path),
+      sizeBytes,
+      content: file.content,
+    })
+  }
+  if (rootSource === null) {
+    throw new SkillParseError(`Skill bundle must include ${SKILL_ENTRYPOINT}`)
+  }
+  normalized.sort((left, right) => {
+    if (left.path === SKILL_ENTRYPOINT) {
+      return -1
+    }
+    if (right.path === SKILL_ENTRYPOINT) {
+      return 1
+    }
+    return left.path.localeCompare(right.path)
+  })
+  return {
+    skill: parseSkillSource(rootSource),
+    files: normalized,
+    entrypoint: SKILL_ENTRYPOINT,
+  }
+}
+
 const compact = (value: string): string => value.replace(/\s+/gu, ' ').trim()
 
 const escapeAttribute = (value: string): string =>
   value.replace(/&/gu, '&amp;').replace(/"/gu, '&quot;').replace(/</gu, '&lt;')
+
+const escapeText = (value: string): string =>
+  value.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;')
 
 export const renderSkillCatalog = (
   skills: readonly Pick<SkillSummary, 'name' | 'description' | 'whenToUse'>[]
@@ -145,10 +255,58 @@ export const createSkillTool = (
   }
 }
 
-export const renderSkillContent = (skill: Pick<SkillDetail, 'name' | 'instructions'>): string => {
+export const createSkillResourceTool = (
+  skills: readonly Pick<SkillSummary, 'name'>[]
+): {
+  name: typeof READ_SKILL_RESOURCE_TOOL_NAME
+  description: string
+  input_schema: Record<string, unknown>
+} | null => {
+  if (skills.length === 0) {
+    return null
+  }
+  return {
+    name: READ_SKILL_RESOURCE_TOOL_NAME,
+    description:
+      "Read one text resource from a loaded skill bundle. Use only an exact file path shown inside that skill's <skill_resources> block.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        skill: {
+          type: 'string',
+          enum: skills.map((skill) => skill.name),
+          description: 'Exact skill name.',
+        },
+        path: {
+          type: 'string',
+          description: 'Relative file path shown in the loaded skill resource list.',
+        },
+      },
+      required: ['skill', 'path'],
+      additionalProperties: false,
+    },
+  }
+}
+
+export const renderSkillContent = (
+  skill: Pick<SkillDetail, 'name' | 'instructions' | 'files'>
+): string => {
+  const resources = skill.files
+    .filter((file) => file.path !== SKILL_ENTRYPOINT)
+    .map(
+      (file) =>
+        `- ${escapeText(file.path)} (${escapeText(file.mediaType)}, ${file.sizeBytes} bytes)`
+    )
   return [
     `<skill_content name="${escapeAttribute(skill.name)}">`,
     '<skill_resources>',
+    resources.length > 0
+      ? [
+          `This skill bundle is read through ${READ_SKILL_RESOURCE_TOOL_NAME}.`,
+          'Use only the following relative paths when a resource is needed:',
+          ...resources,
+        ].join('\n')
+      : 'This skill bundle has no additional resource files.',
     '</skill_resources>',
     '<skill_instructions>',
     skill.instructions.trim(),
@@ -156,6 +314,17 @@ export const renderSkillContent = (skill: Pick<SkillDetail, 'name' | 'instructio
     '</skill_content>',
   ].join('\n')
 }
+
+export const renderSkillResourceContent = (
+  skillName: string,
+  path: string,
+  content: string
+): string =>
+  [
+    `<skill_resource skill="${escapeAttribute(skillName)}" path="${escapeAttribute(path)}">`,
+    content,
+    '</skill_resource>',
+  ].join('\n')
 
 /** A user invocation must start with `/name` and use an exact kebab-case skill name. */
 export const getSlashSkillName = (text: string): string | null => {

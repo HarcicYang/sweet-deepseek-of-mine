@@ -3,10 +3,13 @@ import test from 'node:test'
 import {
   SkillParseError,
   createSkillTool,
+  createSkillResourceTool,
   getSlashSkillName,
+  parseSkillBundle,
   parseSkillSource,
   renderSkillCatalog,
   renderSkillContent,
+  renderSkillResourceContent,
   stripSlashSkillCommand,
 } from './index.js'
 
@@ -56,8 +59,52 @@ description: valid
   )
 })
 
+test('normalizes a text skill bundle and preserves its resource paths', () => {
+  const bundle = parseSkillBundle([
+    { path: 'SKILL.md', content: source },
+    { path: 'references/checklist.md', content: '# Checklist\n' },
+    { path: 'scripts/check.py', content: 'print("ok")\n' },
+  ])
+  assert.equal(bundle.skill.name, 'release-review')
+  assert.deepEqual(
+    bundle.files.map((file) => [file.path, file.mediaType]),
+    [
+      ['SKILL.md', 'text/markdown'],
+      ['references/checklist.md', 'text/markdown'],
+      ['scripts/check.py', 'text/x-python'],
+    ]
+  )
+})
+
+test('rejects unsafe paths, duplicate files, and missing bundle entrypoints', () => {
+  assert.throws(
+    () =>
+      parseSkillBundle([
+        { path: 'SKILL.md', content: source },
+        { path: '../secret', content: '' },
+      ]),
+    /Unsafe skill file path/u
+  )
+  assert.throws(
+    () =>
+      parseSkillBundle([
+        { path: 'SKILL.md', content: source },
+        { path: 'SKILL.md', content: source },
+      ]),
+    /Duplicate skill file path/u
+  )
+  assert.throws(
+    () => parseSkillBundle([{ path: 'references/only.md', content: 'content' }]),
+    /must include SKILL\.md/u
+  )
+})
+
 test('renders a progressive catalog, tool schema, and loaded skill content', () => {
-  const parsed = parseSkillSource(source)
+  const bundle = parseSkillBundle([
+    { path: 'SKILL.md', content: source },
+    { path: 'references/checklist.md', content: '# Checklist\n' },
+  ])
+  const parsed = bundle.skill
   const summary = {
     name: parsed.name,
     description: parsed.description,
@@ -69,9 +116,16 @@ test('renders a progressive catalog, tool schema, and loaded skill content', () 
   assert.deepEqual((tool.input_schema.properties as { name: { enum: string[] } }).name.enum, [
     'release-review',
   ])
-  const content = renderSkillContent(parsed)
+  const resourceTool = createSkillResourceTool([summary])
+  assert.ok(resourceTool)
+  const content = renderSkillContent({ ...parsed, files: bundle.files })
   assert.match(content, /<skill_content name="release-review">/u)
   assert.match(content, /rollback/u)
+  assert.match(content, /references\/checklist\.md/u)
+  assert.match(
+    renderSkillResourceContent('release-review', 'references/checklist.md', 'text'),
+    /skill_resource/u
+  )
 })
 
 test('resolves exact slash skill commands without consuming normal text', () => {

@@ -52,14 +52,14 @@ import {
   type McpToolSummary,
 } from '@sweet-deepseek/contracts/mcp'
 import {
-  SKILL_SOURCE_MAX_LENGTH,
+  SKILL_BUNDLE_MAX_BYTES,
   SkillCreateSchema,
   SkillResponseSchema,
   SkillUpdateSchema,
   SkillsResponseSchema,
   type SkillSummary,
 } from '@sweet-deepseek/contracts/skills'
-import { parseSkillSource, SkillParseError } from '@sweet-deepseek/skills'
+import { parseSkillBundle, SkillParseError } from '@sweet-deepseek/skills'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -111,7 +111,7 @@ const MAX_SHARE_BODY_BYTES = 20 * 1024 * 1024
 const MAX_JSON_RENDER_BODY_BYTES = JSON_RENDER_LIMITS.maxDocumentBytes + 1024
 const MAX_MCP_CONFIG_BODY_BYTES = 256 * 1024
 const MAX_MCP_CALL_BODY_BYTES = 2 * 1024 * 1024
-const MAX_SKILL_BODY_BYTES = SKILL_SOURCE_MAX_LENGTH * 2 + 16 * 1024
+const MAX_SKILL_BODY_BYTES = SKILL_BUNDLE_MAX_BYTES * 2 + 32 * 1024
 
 class RequestBodyTooLargeError extends Error {
   constructor() {
@@ -301,20 +301,29 @@ const toSkillSummary = (skill: SkillRecord): SkillSummary => ({
 })
 
 const toSkillWrite = (
-  skill: ReturnType<typeof parseSkillSource>,
-  enabled: boolean,
-  source: string
+  bundle: ReturnType<typeof parseSkillBundle>,
+  enabled: boolean
 ): SkillWrite => ({
-  name: skill.name,
-  description: skill.description,
-  whenToUse: skill.whenToUse,
+  name: bundle.skill.name,
+  description: bundle.skill.description,
+  whenToUse: bundle.skill.whenToUse,
   enabled,
-  userInvocable: skill.userInvocable,
-  modelInvocable: skill.modelInvocable,
-  metadata: skill.metadata,
-  source,
-  instructions: skill.instructions,
+  userInvocable: bundle.skill.userInvocable,
+  modelInvocable: bundle.skill.modelInvocable,
+  metadata: bundle.skill.metadata,
+  files: bundle.files,
 })
+
+const toSkillDetail = (skill: SkillRecord) => {
+  const bundle = parseSkillBundle(
+    skill.files.map((file) => ({ path: file.path, content: file.content }))
+  )
+  return {
+    ...toSkillSummary(skill),
+    instructions: bundle.skill.instructions,
+    files: bundle.files,
+  }
+}
 
 const toSharedMessage = (
   message: SyncSessionPayload['messages'][number]
@@ -965,9 +974,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
     return context.json(
       SkillResponseSchema.parse({
         skill: {
-          ...toSkillSummary(skill),
-          source: skill.source,
-          instructions: skill.instructions,
+          ...toSkillDetail(skill),
         },
       })
     )
@@ -982,9 +989,9 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!parsedBody?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid skill')
     }
-    let parsedSkill: ReturnType<typeof parseSkillSource>
+    let parsedBundle: ReturnType<typeof parseSkillBundle>
     try {
-      parsedSkill = parseSkillSource(parsedBody.data.source)
+      parsedBundle = parseSkillBundle(parsedBody.data.files)
     } catch (error) {
       return apiError(
         context,
@@ -998,14 +1005,12 @@ if(data.ok)setTimeout(()=>window.close(),250);
       const skill = await skillStore.createSkill({
         id: crypto.randomUUID(),
         userId: user.id,
-        ...toSkillWrite(parsedSkill, parsedBody.data.enabled, parsedBody.data.source),
+        ...toSkillWrite(parsedBundle, parsedBody.data.enabled),
       })
       return context.json(
         SkillResponseSchema.parse({
           skill: {
-            ...toSkillSummary(skill),
-            source: skill.source,
-            instructions: skill.instructions,
+            ...toSkillDetail(skill),
           },
         }),
         201
@@ -1036,10 +1041,12 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!parsedBody?.success) {
       return apiError(context, 400, 'invalid_request', 'Invalid skill')
     }
-    const source = parsedBody.data.source ?? current.source
-    let parsedSkill: ReturnType<typeof parseSkillSource>
+    const files =
+      parsedBody.data.files ??
+      current.files.map((file) => ({ path: file.path, content: file.content }))
+    let parsedBundle: ReturnType<typeof parseSkillBundle>
     try {
-      parsedSkill = parseSkillSource(source)
+      parsedBundle = parseSkillBundle(files)
     } catch (error) {
       return apiError(
         context,
@@ -1052,7 +1059,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
       const skill = await skillStore.updateSkill(
         user.id,
         skillId,
-        toSkillWrite(parsedSkill, parsedBody.data.enabled ?? current.enabled, source)
+        toSkillWrite(parsedBundle, parsedBody.data.enabled ?? current.enabled)
       )
       if (!skill) {
         return apiError(context, 404, 'invalid_request', 'Skill not found')
@@ -1060,9 +1067,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
       return context.json(
         SkillResponseSchema.parse({
           skill: {
-            ...toSkillSummary(skill),
-            source: skill.source,
-            instructions: skill.instructions,
+            ...toSkillDetail(skill),
           },
         })
       )

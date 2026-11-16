@@ -12,7 +12,7 @@ An independent community chat tool (unofficial product) developed based on DeepS
 - **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown tables with copy/download/fullscreen tools, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
 - **Generative UI**: Server-validated JSON-Render cards, carousels, metrics, steps, charts, details, and code blocks with Markdown fallback and safe copy/continue actions.
 - **Remote MCP tools**: Add per-account Streamable HTTP MCP servers in Settings with static headers or OAuth authorization. MCP tools participate in the same reply loop and tool timeline as web search and link reading; non-read-only tools require explicit confirmation.
-- **Account Skills**: Create, import, and export DeepSeek Harness-compatible `SKILL.md` files. Requests expose only names and descriptions, the model loads full instructions through the `skill` tool when needed, and users can invoke a skill directly with `/name`.
+- **Account Skills**: Import and export DeepSeek Harness-compatible text bundles with a root `SKILL.md` and relative resources. Requests expose only names and descriptions; the model loads instructions through `skill`, reads individual files through `read_skill_resource`, and users can invoke a skill directly with `/name`.
 - **Temporary sharing**: Create read-only conversation snapshots that expire in 1–30 days without exposing message sending or attachment originals.
 - **Custom instructions**: Add account-level system-prompt guidance in Settings and sync it across devices.
 - **Multimedia Interaction**: Supports drag-and-drop attachment uploads, voice input, and text-to-speech reading.
@@ -89,7 +89,7 @@ docs/               Architecture and protocol documentation
 
 - **API Key Protection**: API keys are encrypted and stored exclusively on the server using AES-256-GCM and are never saved locally in the browser.
 - **MCP credentials**: MCP server URLs and configuration are account-scoped; request headers, OAuth client secrets, and OAuth tokens are encrypted on the server and never returned to the browser.
-- **Skill data**: Skill source is account-scoped on the server, and public shares hide skill content contained in tool results.
+- **Skill data**: Skill bundles and text resources are account-scoped on the server, and public shares hide skill content contained in tool results.
 - **Data Synchronization**: Session text, thinking processes, search results, and related settings are synchronized to the cloud and cached in `chat-demo:<userId>` IndexedDB.
 - **Import & Export**: Supports importing and exporting history in ZIP format (exported content includes sessions and raw images, excluding API keys and sensitive credentials).
 

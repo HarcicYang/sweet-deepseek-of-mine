@@ -306,7 +306,13 @@ Lead with outcomes, then risks, then next actions.
   const created = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ source, enabled: true }),
+    body: JSON.stringify({
+      files: [
+        { path: 'SKILL.md', content: source },
+        { path: 'references/checklist.md', content: '# Checklist\n' },
+      ],
+      enabled: true,
+    }),
   })
   assert.equal(created.status, 201)
   const createdBody = (await created.json()) as {
@@ -314,13 +320,17 @@ Lead with outcomes, then risks, then next actions.
       id: string
       name: string
       enabled: boolean
-      source: string
       instructions: string
+      files: Array<{ path: string; content: string }>
     }
   }
   assert.equal(createdBody.skill.name, 'weekly-review')
   assert.equal(createdBody.skill.enabled, true)
   assert.match(createdBody.skill.instructions, /next actions/u)
+  assert.deepEqual(
+    createdBody.skill.files.map((file) => file.path),
+    ['SKILL.md', 'references/checklist.md']
+  )
 
   const other = await authenticateTestUser(store, security, {
     githubId: '67890',
@@ -357,12 +367,19 @@ Lead with outcomes, then risks, then next actions.
     }
   )
   assert.equal(updated.status, 200)
-  assert.equal(((await updated.json()) as { skill: { enabled: boolean } }).skill.enabled, false)
+  const updatedBody = (await updated.json()) as {
+    skill: { enabled: boolean; files: Array<{ path: string }> }
+  }
+  assert.equal(updatedBody.skill.enabled, false)
+  assert.equal(updatedBody.skill.files.length, 2)
 
   const invalid = await app.request(`${APP_ORIGIN}${apiRoutes.skills}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ source: '# missing frontmatter', enabled: true }),
+    body: JSON.stringify({
+      files: [{ path: 'SKILL.md', content: '# missing frontmatter' }],
+      enabled: true,
+    }),
   })
   assert.equal(invalid.status, 400)
 
