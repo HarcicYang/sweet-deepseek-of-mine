@@ -1,102 +1,103 @@
-# Sweet DeepSeek O'Mine
+## Sweet DeepSeek O' Mine
 
-English | [简体中文](README.md)
+English | [简体中文](README.zh-CN.md)
 
-An independent community chat tool (unofficial product) developed based on DeepSeek's official `chat-demo` and API. Built with a pnpm workspace architecture, it provides a complete chat experience with separated frontend and backend, as well as secure credential management.
+An independent, community-built chat client built on DeepSeek's official `chat-demo` and API — an attempt to take the DeepSeek chat experience further.
 
-## Core Features
+**Not an official product.**
 
-- **Multi-Session Management**: Supports auto-generated titles, renaming, deletion, message branch switching, and regeneration.
-- **Secure Proxy**: Authenticated via GitHub OAuth. DeepSeek API Keys are encrypted and stored on the server using AES-256-GCM, and all API requests are proxied by the same-origin backend, keeping them hidden from the browser.
-- **Cloud Sync & Caching**: Sessions and settings support cloud synchronization, account-isolated IndexedDB caching, offline outbox, and conflict replica handling.
-- **Multimodality & Rich Text**: Supports streaming responses, deep thinking, web search, link reading, and source citations; supports Markdown tables with copy/download/fullscreen tools, syntax highlighting, KaTeX formulas, and Mermaid diagrams.
-- **Generative UI**: Server-validated JSON-Render cards, carousels, metrics, steps, charts, details, and code blocks with Markdown fallback and safe copy/continue actions.
-- **Remote MCP tools**: Add per-account Streamable HTTP MCP servers in Settings with static headers or OAuth authorization. MCP tools participate in the same reply loop and tool timeline as web search and link reading; non-read-only tools require explicit confirmation.
-- **Account Skills**: Import and export DeepSeek Harness-compatible text bundles with a root `SKILL.md` and relative resources. Requests expose only names and descriptions; the model loads instructions through `skill`, reads individual files through `read_skill_resource`, and users can invoke a skill directly with `/name`.
-- **Temporary sharing**: Create read-only conversation snapshots that expire in 1–30 days without exposing message sending or attachment originals.
-- **Custom instructions**: Add account-level system-prompt guidance in Settings and sync it across devices.
-- **Multimedia Interaction**: Supports drag-and-drop attachment uploads, voice input, and text-to-speech reading.
-- **Personalization**: Supports bilingual (English/Chinese), dark/light themes, mobile adaptation, and history import/export.
+[Demo on Cloudflare Workers](https://sdom.harcic.me/)
 
-## Quick Start
+## Features
 
-This project requires **Node.js 22.12+** and **pnpm**.
+- **Multiple conversations**: auto-generated titles, plus rename, delete, message branching and regeneration.
+- **Secure proxy**: GitHub OAuth sign-in; API keys encrypted server-side with AES-256-GCM, all requests forwarded by a same-origin backend.
+- **Cloud sync and caching**: conversations and settings sync to the cloud; per-account IndexedDB cache, offline outbox, conflict copies.
+- **Multimodal and rich text**: streaming, deep thinking, web search, link reading and citations; full Markdown, syntax highlighting, KaTeX and Mermaid rendering; tables can be copied, downloaded or viewed fullscreen.
+- **Generative UI**: server-validated JSON-Render structures (cards, carousels, stats, steps, charts, collapsible details, code blocks), falling back to Markdown.
+- **Remote MCP tools**: add Streamable HTTP MCP servers per account with static headers or OAuth; shares the tool timeline with web search; non-read-only tools need confirmation.
+- **Skills**: import and export Harness-compatible text bundles (`SKILL.md` plus relative-path resources); requests carry only name and description, with the body loaded on demand via `skill` and resources via `read_skill_resource`, or called directly with `/name`.
+- **Temporary sharing**: read-only snapshot links valid for 1–30 days; visitors can't send messages or get original attachments.
+- **Custom instructions**: account-level system prompt supplement, synced across devices.
+- **Multimedia**: drag-and-drop attachments, voice input and read-aloud.
+- **Personalization**: bilingual UI, light and dark themes, mobile layout, history import/export.
 
-### 1. Clone & Install
+## Getting started
+
+You'll need **Node.js 22.12+** and **pnpm**.
+
+### 1. Clone and install
 
 ```sh
-git clone [https://github.com/HarcicYang/sweet-deepseek-of-mine.git](https://github.com/HarcicYang/sweet-deepseek-of-mine.git)
+git clone https://github.com/HarcicYang/sweet-deepseek-of-mine.git
 cd sweet-deepseek-of-mine
 pnpm install
-
 ```
 
-### 2. Configure Environment Variables
+### 2. Configure environment variables
 
-1. Create an OAuth App in GitHub and set the callback URL to: `http://localhost:8090/api/auth/github/callback`.
-2. Copy `.env.example` to `.env`, and fill in your `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
-3. Run the following command to generate a 32-byte master key and write it to `.env`:
+1. Create a GitHub OAuth App and set the callback URL to `http://localhost:8090/api/auth/github/callback`.
+2. Copy `.env.example` to `.env` and fill in your `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
+3. Generate a 32-byte master key and add it to `.env`:
 
 ```sh
 openssl rand -base64 32
-
 ```
 
-### 3. Run the Services
+### 3. Run the services
 
-Execute the following commands in two separate terminals:
+Use two terminals:
 
 ```sh
-pnpm dev         # Start the frontend development server (http://localhost:8090)
-pnpm dev:server  # Start the Hono backend service (http://localhost:8787)
-
+pnpm dev         # frontend dev server (http://localhost:8090)
+pnpm dev:server  # Hono backend (http://localhost:8787)
 ```
 
-> **Note**: The full application requires the Hono backend for same-origin `/api` forwarding and cannot run online chat with just a static `index.html`.
-> For detailed deployment schemes, refer to [Authentication & API Key](https://www.google.com/search?q=docs/authentication.md) and [Deployment Guide](https://www.google.com/search?q=docs/deployment.md).
+> **Note**: online chat needs the Hono server to proxy same-origin `/api` requests — opening the static `index.html` on its own won't work. For deployment details, see [Authentication and API keys](docs/authentication.md) and [Deployment](docs/deployment.md).
 
 ---
 
-## Project Structure
+## Project layout
 
 ```text
 apps/
-  web/              React chat client
-  server/           TypeScript + Hono backend
+  web/               React chat client
+  server/            TypeScript + Hono backend
 packages/
-  contracts/        Shared frontend/backend protocols and runtime validation
-  json-render/      Versioned JSON UI schema and validation
-  skills/           Harness-compatible skill parsing, catalog, and loading format
-docs/               Architecture and protocol documentation
-
+  contracts/         Shared protocols and runtime validation
+  json-render/       Versioned JSON UI schema and validation
+  skills/            Harness-compatible skill parsing, catalog and loading format
+docs/                Architecture and protocol notes
 ```
-
-## Development Commands
-
-| Command           | Description                                   |
-| ----------------- | --------------------------------------------- |
-| `pnpm dev`        | Start frontend development server             |
-| `pnpm dev:server` | Start Hono backend service                    |
-| `pnpm build`      | Build production artifacts (`apps/web/dist/`) |
-| `pnpm type`       | TypeScript type checking                      |
-| `pnpm lint`       | oxlint code linting                           |
-| `pnpm test`       | Run backend tests                             |
-| `pnpm format`     | oxfmt code formatting                         |
 
 ---
 
-## Data & Privacy
+## Development commands
 
-- **API Key Protection**: API keys are encrypted and stored exclusively on the server using AES-256-GCM and are never saved locally in the browser.
-- **MCP credentials**: MCP server URLs and configuration are account-scoped; request headers, OAuth client secrets, and OAuth tokens are encrypted on the server and never returned to the browser.
-- **Skill data**: Skill bundles and text resources are account-scoped on the server, and public shares hide skill content contained in tool results.
-- **Data Synchronization**: Session text, thinking processes, search results, and related settings are synchronized to the cloud and cached in `chat-demo:<userId>` IndexedDB.
-- **Import & Export**: Supports importing and exporting history in ZIP format (exported content includes sessions and raw images, excluding API keys and sensitive credentials).
+| Command           | What it does                        |
+| ----------------- | ----------------------------------- |
+| `pnpm dev`        | Start the frontend dev server       |
+| `pnpm dev:server` | Start the Hono backend              |
+| `pnpm build`      | Build for production (`apps/web/dist/`) |
+| `pnpm type`       | TypeScript type check               |
+| `pnpm lint`       | Lint with oxlint                    |
+| `pnpm test`       | Run server tests                    |
+| `pnpm format`     | Format with oxfmt                   |
 
-For more synchronization protocols and design details, please refer to the [Cloud Session Sync Guide](https://www.google.com/search?q=docs/sync.md).
+---
+
+## Data and privacy
+
+- **API keys**: keys are stored encrypted on the server (AES-256-GCM) and never written to browser storage.
+- **MCP credentials**: MCP config is isolated per account. Request headers, OAuth client secrets and OAuth tokens are all encrypted and stored server-side; they're never sent back to the browser.
+- **Skill data**: skill bundles and text resources are stored per account on the backend. Shared conversations strip skill content from tool results.
+- **Data sync**: conversation text, reasoning, search content and related settings sync to the cloud and are cached in the `chat-demo:<userId>` IndexedDB database.
+- **Import/export**: history can be imported and exported as ZIP. The archive contains conversations and original images; it does not contain API keys or other credentials.
+
+For the sync protocol and design details, see [Cloud conversation sync](docs/sync.md).
 
 ---
 
 ## License
 
-[MIT](https://www.google.com/search?q=LICENSE) © HarcicYang
+[MIT](LICENSE) © HarcicYang
