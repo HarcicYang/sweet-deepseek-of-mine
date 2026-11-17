@@ -149,7 +149,6 @@ export const ChatProxyRequestSchema = z
     output_config: z.object({ effort: ThinkingEffortSchema }).strict().optional(),
     tools: z
       .array(ChatToolSchema)
-      .max(64)
       .superRefine((tools, context) => {
         const names = new Set<string>()
         tools.forEach((tool, index) => {

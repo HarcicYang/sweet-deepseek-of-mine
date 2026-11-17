@@ -1926,7 +1926,18 @@ if(data.ok)setTimeout(()=>window.close(),250);
     }
     const parsed = json.ok ? ChatProxyRequestSchema.safeParse(json.value) : null
     if (!parsed?.success) {
-      return apiError(context, 400, 'invalid_request', 'Invalid chat request')
+      const issues =
+        parsed?.error.issues.slice(0, 8).map((issue) => ({
+          path: issue.path.join('.') || 'body',
+          code: issue.code,
+        })) ?? [{ path: 'body', code: 'invalid_json' }]
+      logger.warn('Rejected invalid chat request', { issues })
+      return apiError(
+        context,
+        400,
+        'invalid_request',
+        `Invalid chat request: ${issues[0].path} (${issues[0].code})`
+      )
     }
 
     const clientSignal = context.req.raw.signal
