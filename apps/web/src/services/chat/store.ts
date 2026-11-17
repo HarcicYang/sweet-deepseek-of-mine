@@ -995,7 +995,15 @@ export const continueReply = (sessionId: string, messageId: string) => {
   updateReply(sessionId, reply)
   updateSession(sessionId, (s) => ({ ...s, updatedAt: Date.now() }))
   persist(sessionId)
-  void streamReply(sessionId, reply, { history: path.slice(0, -2), question, prefix: previous })
+  void streamReply(sessionId, reply, {
+    history: path.slice(0, -2),
+    question,
+    prefix: previous,
+    // 工具调用后的报错需要把已有的 tool_use/tool_result 作为上下文继续请求。
+    toolLoop: previous.blocks.some(
+      (block) => block.type === 'tool_use' || block.type === 'tool_result'
+    ),
+  })
 }
 
 /** 附件补传失败后重试：保留原回答位置，重新补传并请求 */
@@ -1024,7 +1032,12 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question })
 }
 
-type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
+type Request = {
+  history: Message[]
+  question: UserMessage
+  prefix?: AssistantMessage
+  toolLoop?: boolean
+}
 
 /** 把补传得到的 serverId 写回会话里所有引用同一附件的消息（编辑、重新生成会共用附件） */
 const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
@@ -1487,7 +1500,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
     }
   }
-  let modelRound = 0
+  let modelRound = request.toolLoop ? 1 : 0
 
   try {
     for (let attempt = 0; ; attempt += 1) {

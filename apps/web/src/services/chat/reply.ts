@@ -233,25 +233,45 @@ export const getReplyText = (reply: AssistantMessage) =>
 
 /**
  * 正常达到输出上限、被停止或请求出错的回复可续写，便于保留已经收到的内容。
- * 末条限制由调用方判断，拒绝和客户端工具调用不能续写。
- * 本轮含服务端工具调用或结果（含 READ_LINK 和孤立结果块）的回复不能续写。
- * 服务端模板提示不能作为续写前缀。
+ * 报错发生在工具调用后时，已经完成结果的工具调用可以继续进入下一条消息。
+ * 末尾仍有未完成工具调用的回复不能续写。
+ * 拒绝回复和客户端工具调用（未完成结果）不能续写。
+ * 非报错态的服务端工具块或模板提示不能作为续写前缀。
  */
 export const canContinueReply = (reply: AssistantMessage): boolean => {
   if (
     !reply.prefix ||
     reply.stopReason === 'refusal' ||
-    reply.stopReason === 'tool_use' ||
     reply.blocks.some(
       (block) =>
-        block.type === 'server_tool_use' ||
-        block.type === 'web_search_tool_result' ||
-        block.type === 'web_fetch_tool_result' ||
-        block.type === 'tool_use' ||
-        block.type === 'tool_result' ||
         (block.type === 'text' && block.isTemplate)
     )
   ) {
+    return false
+  }
+  const hasServerToolBlocks = reply.blocks.some(
+    (block) =>
+      block.type === 'server_tool_use' ||
+      block.type === 'web_search_tool_result' ||
+      block.type === 'web_fetch_tool_result'
+  )
+  if (reply.status !== 'error' && hasServerToolBlocks) {
+    return false
+  }
+  const completedToolUses = new Set(
+    reply.blocks.flatMap((block) => (block.type === 'tool_result' ? [block.tool_use_id] : []))
+  )
+  if (
+    reply.blocks.some(
+      (block) => block.type === 'tool_use' && !completedToolUses.has(block.id)
+    )
+  ) {
+    return false
+  }
+  const hasToolLoop = reply.blocks.some(
+    (block) => block.type === 'tool_use' || block.type === 'tool_result'
+  )
+  if (reply.status !== 'error' && hasToolLoop) {
     return false
   }
   return (
