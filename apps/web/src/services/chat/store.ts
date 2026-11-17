@@ -193,8 +193,6 @@ const SAFETY_CHECK = { level: 'high' } as const
 const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
-/** 防止模型在单次回复中无限重复工具调用；正常任务远低于此上限。 */
-const TOOL_ROUND_LIMIT = 16
 
 /** 阅读链接始终开启，智能搜索开关控制是否另行声明搜索工具（含边想边搜）。 */
 const serverTools = (
@@ -1585,13 +1583,6 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         if (reply.stopReason === 'tool_use') {
           const pending = getPendingToolUses(reply)
           if (pending.length > 0) {
-            if (modelRound >= TOOL_ROUND_LIMIT) {
-              reply = settleReply(reply, 'error', Date.now(), {
-                kind: 'protocol',
-                message: 'Tool loop exceeded the configured round limit',
-              })
-              break
-            }
             reply = await executePendingTools(
               sessionId,
               reply,
