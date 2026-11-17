@@ -232,7 +232,7 @@ export const getReplyText = (reply: AssistantMessage) =>
   reply.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('')
 
 /**
- * 只有正常达到输出上限或被停止的回复可续写，报错回复不能续写。
+ * 正常达到输出上限、被停止或请求出错的回复可续写，便于保留已经收到的内容。
  * 末条限制由调用方判断，拒绝和客户端工具调用不能续写。
  * 本轮含服务端工具调用或结果（含 READ_LINK 和孤立结果块）的回复不能续写。
  * 服务端模板提示不能作为续写前缀。
@@ -255,7 +255,9 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
     return false
   }
   return (
-    reply.status === 'stopped' || (reply.status === 'done' && reply.stopReason === 'max_tokens')
+    reply.status === 'stopped' ||
+    reply.status === 'error' ||
+    (reply.status === 'done' && reply.stopReason === 'max_tokens')
   )
 }
 
