@@ -439,10 +439,32 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 8px;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.actions :global(button) {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: var(--ds-control-height-m);
+  padding-top: 5px;
+  padding-bottom: 5px;
+  gap: 4px;
+  white-space: normal;
+}
+
+.actionButton {
+  max-width: 100%;
+}
+
+.actionLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .callout {
@@ -810,11 +832,15 @@
   overflow-wrap: anywhere;
 }
 
-.rowAction {
-  flex: none;
+.listItem .rowAction {
+  flex: 0 1 auto;
   min-width: 0;
-  padding: 0 10px;
+  max-width: 100%;
+  height: auto;
+  min-height: var(--ds-control-height-s);
+  padding: 4px 10px;
   font-size: 13px;
+  white-space: normal;
 }
 
 .imageFigure {
@@ -1188,6 +1214,12 @@
   }
 
   .actions :global(button) {
-    flex: 1;
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .listItem .rowAction {
+    flex: 1 1 100%;
+    width: 100%;
   }
 }

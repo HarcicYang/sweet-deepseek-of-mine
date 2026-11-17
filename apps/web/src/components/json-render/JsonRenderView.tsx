@@ -178,7 +178,7 @@ const JsonActionButton = ({
     <Button
       variant={primary ? 'primary' : 'outlined'}
       size={compact ? 's' : 'm'}
-      className={compact ? styles.rowAction : undefined}
+      className={compact ? styles.rowAction : styles.actionButton}
       disabled={!interactive}
       onClick={async () => {
         if (action.kind === 'prompt') {
@@ -193,7 +193,7 @@ const JsonActionButton = ({
       }}
     >
       {copied ? <IconCheckOutline16 /> : null}
-      {label}
+      <span className={styles.actionLabel}>{label}</span>
     </Button>
   )
 }
