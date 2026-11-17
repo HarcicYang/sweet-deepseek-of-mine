@@ -37,6 +37,7 @@
     "zustand": "4.4.7"
   },
   "devDependencies": {
+    "@aaroon/workbox-rspack-plugin": "1.0.1",
     "@rspack/cli": "2.0.2",
     "@rspack/core": "2.0.2",
     "@rspack/dev-server": "2.0.1",

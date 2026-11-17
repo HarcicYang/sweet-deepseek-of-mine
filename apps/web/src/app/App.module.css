@@ -20,6 +20,17 @@
   min-height: 0;
 }
 
+.offlineNotice {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+
 .saveError {
   display: flex;
   align-items: center;

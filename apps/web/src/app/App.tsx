@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslate } from '../i18n/index.js'
 import { useSettings } from '../services/settings.js'
-import { initAuth, useAuth } from '../services/auth/store.js'
+import { initAuth, isOffline, useAuth } from '../services/auth/store.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
   bindChatPersistence,
@@ -13,7 +13,7 @@ import {
   useChatStore,
 } from '../services/chat/store.js'
 import { configureChatDatabase } from '../services/chat/db.js'
-import { initSync, stopSyncScheduler } from '../services/sync/engine.js'
+import { initSync, stopSyncScheduler, useSync } from '../services/sync/engine.js'
 import { SearchPanel } from '../components/search/SearchPanel.js'
 import { LoginView } from '../components/auth/LoginView.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
@@ -33,6 +33,7 @@ import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
 import { SharedSessionPage } from '../components/share/SharedSessionPage.js'
 import { readShareToken } from '../services/share.js'
+import { PwaUpdateBanner } from '../components/pwa/PwaUpdateBanner.js'
 import styles from './App.module.css'
 
 export const App = () => {
@@ -42,6 +43,9 @@ export const App = () => {
   const authStatus = useAuth((state) => state.status)
   const authUser = useAuth((state) => state.user)
   const authUserId = authUser?.id
+  const authOffline = useAuth((state) => state.offline)
+  const syncStatus = useSync((state) => state.status)
+  const offline = authOffline || syncStatus === 'offline'
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -114,7 +118,9 @@ export const App = () => {
             return
           }
           await initChat()
-          ensureApiKey()
+          if (!isOffline()) {
+            ensureApiKey()
+          }
           await initSync(authUserId)
         } catch {
           showToast({ key: 'sessionListLoadFailed', type: 'error' })
@@ -129,13 +135,14 @@ export const App = () => {
     return () => {
       cancelled = true
     }
-  }, [authStatus, authUserId])
+  }, [authOffline, authStatus, authUserId])
 
   if (shareToken) {
     return (
       <>
         <SharedSessionPage token={shareToken} />
         <Toast />
+        <PwaUpdateBanner />
       </>
     )
   }
@@ -145,6 +152,7 @@ export const App = () => {
       <>
         <LoginView />
         <Toast />
+        <PwaUpdateBanner />
       </>
     )
   }
@@ -154,6 +162,11 @@ export const App = () => {
       <div ref={frameRef} className={styles.frame}>
         {isMobile ? <MobileSider /> : siderCollapsed ? null : <Sider />}
         <main className={styles.main}>
+          {offline ? (
+            <div className={styles.offlineNotice} role="status">
+              {t('offlineModeNotice')}
+            </div>
+          ) : null}
           {saveError ? (
             <div className={styles.saveError} role="alert">
               <span>{t('sessionSaveFailed')}</span>
@@ -174,9 +187,13 @@ export const App = () => {
                 {isMobile ? <MobileHeader /> : null}
                 <div className={styles.loadingState} role="status" aria-live="polite">
                   <span>
-                    {(!ready ? initError : sessionLoadError)
-                      ? t(!ready ? 'sessionListLoadFailed' : 'sessionLoadFailed')
-                      : t('sessionLoading')}
+                    {!ready
+                      ? initError
+                        ? t('sessionListLoadFailed')
+                        : t('sessionLoading')
+                      : sessionLoadError
+                        ? t(offline ? 'offlineSessionBodyMissing' : 'sessionLoadFailed')
+                        : t('sessionLoading')}
                   </span>
                   {(!ready ? initError : sessionLoadError) ? (
                     <Button
@@ -211,6 +228,7 @@ export const App = () => {
       <SettingsDialog />
       <McpApprovalDialog />
       <Toast />
+      <PwaUpdateBanner />
     </>
   )
 }

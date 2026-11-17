@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { useAuth } from '../../services/auth/store.js'
+import { isOffline, useAuth } from '../../services/auth/store.js'
+import { showToast } from '../base/toastState.js'
 
 /** 设置弹窗的分组：通用设置 / 数据管理 / Skills / MCP 工具 */
 export type SettingsSection = 'general' | 'data' | 'skills' | 'mcp'
@@ -17,6 +18,10 @@ export const closeSettings = () => useSettingsDialog.setState({ open: false })
 
 /** 没有 API Key 时打开设置并选中 API Key 所在的「数据管理」，返回是否已有 Key */
 export const ensureApiKey = () => {
+  if (isOffline()) {
+    showToast({ key: 'offlineActionUnavailable' })
+    return false
+  }
   const auth = useAuth.getState()
   if (auth.status === 'authenticated' && auth.user?.hasApiKey) {
     return true

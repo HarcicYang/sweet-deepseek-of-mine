@@ -9,8 +9,10 @@ import {
   IconThinkOutline14,
 } from '../base/icons.js'
 import { setSearch, setThinkingMode, useSettings } from '../../services/settings.js'
+import { useAuth } from '../../services/auth/store.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
+import { useSync } from '../../services/sync/engine.js'
 import {
   addDraftFiles,
   EMPTY_DRAFT,
@@ -55,6 +57,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const offline =
+    useAuth((state) => state.offline) || useSync((state) => state.status === 'offline')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
@@ -132,7 +136,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const recording = voice.status === 'recording'
 
   // 排队、上传中或上传失败的附件都留在输入框，全部上传成功后才能发送
-  const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
+  const canSend =
+    !offline && !importingHistory && !streaming && voice.status === 'idle' && draftReady
 
   const send = () => {
     if (
@@ -240,7 +245,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         <div className={styles.right}>
           <VoiceButton
             status={voice.status}
-            disabled={!voice.available}
+            disabled={!voice.available || offline}
             seconds={voice.seconds}
             onClick={() => {
               if (
@@ -256,7 +261,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             tone="primary"
             icon={<IconPaperclipOutline16 />}
             tooltip={t('uploadFile')}
-            disabled={importingHistory}
+            disabled={importingHistory || offline}
             onClick={() => ensureApiKey() && fileInputRef.current?.click()}
           />
           <input

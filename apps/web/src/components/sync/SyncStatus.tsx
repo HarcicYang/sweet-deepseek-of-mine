@@ -21,7 +21,7 @@ export const SyncStatus = () => {
       type="button"
       className={styles.status}
       data-status={status}
-      title={error ?? undefined}
+      title={status === 'offline' ? undefined : error ?? undefined}
       disabled={status === 'syncing'}
       onClick={retryable ? () => void syncNow() : undefined}
     >

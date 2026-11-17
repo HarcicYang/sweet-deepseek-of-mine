@@ -18,6 +18,27 @@ SDOM_API_BASE_URL=https://api.example.com pnpm --filter @sweet-deepseek/web buil
 
 产物位于 `apps/web/dist/`，可以部署到任意静态托管服务。
 
+## PWA
+
+生产构建会生成完整的 PWA 资源：
+
+- `site.webmanifest` 和 192/512/maskable PNG 图标。
+- `sw.js` 与 Workbox runtime；Service Worker 会预缓存应用壳、脚本、样式和渲染依赖。
+- `_headers` 示例，用于让入口和 Service Worker 保持可更新，并让哈希静态资源长期缓存。
+
+部署时要求：
+
+- 前端必须通过 HTTPS 访问；`localhost` 开发环境除外。
+- `sw.js` 必须位于前端作用域根目录，并返回 `Cache-Control: no-cache`。
+- `index.html` 同样不能长期缓存。
+- `/static/*` 下的哈希资源可以设置为长期缓存。
+- `/api/*` 永不进入 Service Worker 缓存；离线时只从 IndexedDB 读取已缓存会话。
+- 如果使用支持 `_headers` 的静态托管，可以直接保留产物中的 `_headers`；其他平台需要在控制台或反向代理中配置等价规则。
+
+首次在线登录后，Service Worker 会缓存应用壳。断网启动时，应用使用最近登录用户对应的本地数据库
+展示已缓存会话；发送聊天、上传附件、语音、分享、MCP 和 Skill 调用会要求重新联网。发布新版本后，
+已打开的页面会显示刷新提示，不会在用户阅读或生成回复时静默刷新。
+
 ## Node / ECS / PC
 
 Node adapter 使用 `.data/` 下的文件存储，适合单实例自托管。复制 `.env.example` 为 `.env`，

@@ -9,6 +9,7 @@ import type { UserMessage as UserMessageType } from '../../services/chat/types.j
 import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
+import { useAuth } from '../../services/auth/store.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -45,7 +46,8 @@ export const UserMessage = memo(function UserMessage({
   const [draft, setDraft] = useState(message.content)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isMobile = useIsMobile()
-  const canSend = !busy && (draft.trim() !== '' || message.files.length > 0)
+  const offline = useAuth((state) => state.offline)
+  const canSend = !offline && !busy && (draft.trim() !== '' || message.files.length > 0)
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current
@@ -124,7 +126,7 @@ export const UserMessage = memo(function UserMessage({
                   icon={<IconEditOutline16 />}
                   tooltip={t('editMessage')}
                   tooltipPlacement="bottom"
-                  disabled={busy}
+                  disabled={busy || offline}
                   onClick={() => {
                     setDraft(message.content)
                     setEditing(true)

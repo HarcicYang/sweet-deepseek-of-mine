@@ -41,6 +41,7 @@ import { AccountField } from './AccountField.js'
 import { McpServersSettings } from './McpServersSettings.js'
 import { SkillsSettings } from './SkillsSettings.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
+import { canShowInstallHelp, requestPwaInstall, usePwa } from '../../services/pwa.js'
 import styles from './Settings.module.css'
 
 /**
@@ -107,6 +108,7 @@ const SettingsContent = () => {
             <>
               <ThemeSetting />
               <LocaleSetting />
+              <PwaInstallSetting />
               <TtsVoiceSetting />
               <LocationSetting />
               <CustomInstructionsSetting />
@@ -325,6 +327,38 @@ const LocaleSetting = () => {
           ]}
           onChange={setLocale}
         />
+      }
+    />
+  )
+}
+
+const PwaInstallSetting = () => {
+  const t = useTranslate()
+  const installed = usePwa((state) => state.installed)
+  const installPrompt = usePwa((state) => state.installPrompt)
+  if (installed || (!installPrompt && !canShowInstallHelp())) {
+    return null
+  }
+  return (
+    <SettingCell
+      label={t('pwaInstallApp')}
+      description={t('pwaInstallDescription')}
+      status={null}
+      action={
+        <Button
+          variant="outlined"
+          size="m"
+          className={styles.cellButton}
+          onClick={() => {
+            void requestPwaInstall().then((result) => {
+              if (result === 'unavailable') {
+                showToast({ key: 'pwaInstallIosHint' })
+              }
+            })
+          }}
+        >
+          {installPrompt ? t('pwaInstallButton') : t('pwaInstallHelpButton')}
+        </Button>
       }
     />
   )

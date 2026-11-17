@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@rspack/cli'
 import { rspack, type Configuration } from '@rspack/core'
+import { GenerateSW } from '@aaroon/workbox-rspack-plugin'
 
 const dev = process.env.NODE_ENV !== 'production'
 const targets = ['chrome >= 105', 'edge >= 105', 'safari >= 16', 'firefox >= 110']
@@ -71,6 +72,7 @@ export const createConfig = ({ devServer }: ConfigOptions = {}): Configuration =
   plugins: [
     new rspack.DefinePlugin({
       __SDOM_API_BASE_URL__: JSON.stringify(process.env.SDOM_API_BASE_URL ?? ''),
+      __SDOM_PWA__: JSON.stringify(!dev),
     }),
     // 经典 defer 脚本支持 file:// 页面的资源加载
     new rspack.HtmlRspackPlugin({
@@ -84,8 +86,31 @@ export const createConfig = ({ devServer }: ConfigOptions = {}): Configuration =
         { from: path.resolve(root, 'public/app-icon.svg'), to: 'app-icon.svg' },
         { from: path.resolve(root, 'public/favicon.svg'), to: 'favicon.svg' },
         { from: path.resolve(root, 'public/site.webmanifest'), to: 'site.webmanifest' },
+        { from: path.resolve(root, 'public/icons'), to: 'icons' },
+        { from: path.resolve(root, 'public/_headers'), to: '_headers', toType: 'file' },
       ],
     }),
+    ...(!dev
+      ? [
+          new GenerateSW({
+            swDest: 'sw.js',
+            cacheId: 'sdom',
+            clientsClaim: false,
+            skipWaiting: false,
+            cleanupOutdatedCaches: true,
+            navigateFallback: 'index.html',
+            navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/api$/],
+            runtimeCaching: [
+              {
+                urlPattern: /\/api(?:\/|$)/,
+                handler: 'NetworkOnly',
+              },
+            ],
+            maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+            exclude: [/^_headers$/u],
+          }),
+        ]
+      : []),
   ],
   performance: { hints: false },
   devServer: {

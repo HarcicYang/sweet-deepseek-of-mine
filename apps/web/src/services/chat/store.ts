@@ -25,6 +25,7 @@ import {
 } from '../api/client.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
+import { isOffline } from '../auth/store.js'
 import { useSettings } from '../settings.js'
 import { queueCloudReset, queueSessionDelete, queueSessionUpsert } from '../sync/engine.js'
 import { requestMcpApproval } from '../mcp/approval.js'
@@ -795,6 +796,9 @@ const submitMessage = (
   files: SubmitFile[],
   clearDraft: boolean
 ) => {
+  if (isOffline()) {
+    return false
+  }
   const now = Date.now()
   let sessionId = targetSessionId
   if (deletingSessions.has(sessionId) || getStreamController(sessionId) || !getSession(sessionId)) {
@@ -843,7 +847,7 @@ const submitMessage = (
  * 同步接收成功才清空草稿，附件原件由会话接管；保存失败仍通过保存入口重试。
  */
 export const sendMessage = (targetSessionId: string | null) => {
-  if (get().importingHistory || !get().ready) {
+  if (isOffline() || get().importingHistory || !get().ready) {
     return false
   }
   const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
@@ -883,7 +887,7 @@ export const sendPromptFromRender = (sessionId: string, prompt: string) => {
 
 /** 重新生成当前路径上的回答：在原问题下新增版本，不覆盖旧回答和后续对话。 */
 export const regenerateReply = (sessionId: string, messageId?: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (isOffline() || get().importingHistory || deletingSessions.has(sessionId)) {
     return
   }
   const session = getSession(sessionId)
@@ -909,7 +913,7 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
 
 /** 编辑提问后新增同父版本，保留原文件；旧问题的所有回答与后续对话仍可切回。 */
 export const editMessage = (sessionId: string, messageId: string, content: string): boolean => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (isOffline() || get().importingHistory || deletingSessions.has(sessionId)) {
     return false
   }
   const session = getSession(sessionId)
@@ -953,7 +957,7 @@ export const selectMessageVersion = (sessionId: string, messageId: string) => {
 
 /** 继续最后一条未完成的回答：保留原消息与开关，仅将新流的内容追加到原块之后。 */
 export const continueReply = (sessionId: string, messageId: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (isOffline() || get().importingHistory || deletingSessions.has(sessionId)) {
     return
   }
   const session = getSession(sessionId)
@@ -998,7 +1002,7 @@ export const continueReply = (sessionId: string, messageId: string) => {
 
 /** 附件补传失败后重试：保留原回答位置，重新补传并请求 */
 export const retryUpload = (sessionId: string, messageId: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (isOffline() || get().importingHistory || deletingSessions.has(sessionId)) {
     return
   }
   const session = getSession(sessionId)

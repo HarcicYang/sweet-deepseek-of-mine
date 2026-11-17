@@ -35,8 +35,10 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
 - `packages/json-render` 保存版本化 JSON UI schema、围栏提取和结构限制校验。
 - Web 默认通过同源 `/api` 接口访问服务端，也可通过 `SDOM_API_BASE_URL` 指向独立后端，不再直接请求 DeepSeek API。
+- Web 生产构建同时生成可安装的 PWA：manifest、PNG 图标、Workbox Service Worker 和应用壳预缓存；`/api/*` 不进入缓存。
 - DeepSeek API Key 只加密保存在服务端，浏览器不持久化明文。
 - 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。
+- 离线启动只使用最近登录用户的本地 IndexedDB 缓存；网络请求、附件上传、语音、分享、MCP 和 Skill 调用必须重新联网。
 - 同步使用 IndexedDB outbox、会话 revision、删除墓碑和冲突副本，支持离线恢复。
 - 思考、搜索、TTS 音色和位置设置已支持云端同步；主题、语言和侧栏状态保持设备本地。
 - 自定义指令是账号级同步设置，最多 16,000 字符；在回答风格、结构、称呼、工作流和界面使用倾向上优先于默认行为，但不能突破安全、隐私和工具权限边界，也不能改写实际模型身份。

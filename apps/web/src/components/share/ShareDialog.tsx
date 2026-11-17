@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { createShare } from '../../services/api/client.js'
+import { isOffline } from '../../services/auth/store.js'
 import { copyText } from '../../utils/clipboard.js'
 import { toShareSessionPayload } from '../../services/share.js'
 import type { Session } from '../../services/chat/types.js'
@@ -22,6 +23,10 @@ export const ShareDialog = ({ session, onClose }: { session: Session; onClose: (
 
   const create = async () => {
     if (!validDays || pending) {
+      return
+    }
+    if (isOffline()) {
+      setError(t('offlineActionUnavailable'))
       return
     }
     setPending(true)

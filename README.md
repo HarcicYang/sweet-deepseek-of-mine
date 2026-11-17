@@ -13,6 +13,7 @@ An independent, community-built chat client built on DeepSeek's official `chat-d
 - **Multiple conversations**: auto-generated titles, plus rename, delete, message branching and regeneration.
 - **Secure proxy**: GitHub OAuth sign-in; API keys encrypted server-side with AES-256-GCM, all requests forwarded by a same-origin backend.
 - **Cloud sync and caching**: conversations and settings sync to the cloud; per-account IndexedDB cache, offline outbox, conflict copies.
+- **Installable PWA**: install to the home screen and start from a cached app shell; cached chats remain readable offline while network-only actions wait for a connection.
 - **Multimodal and rich text**: streaming, deep thinking, web search, link reading and citations; full Markdown, syntax highlighting, KaTeX and Mermaid rendering; tables can be copied, downloaded or viewed fullscreen.
 - **Generative UI**: server-validated JSON-Render structures (cards, carousels, stats, steps, charts, collapsible details, code blocks), falling back to Markdown.
 - **Remote MCP tools**: add Streamable HTTP MCP servers per account with static headers or OAuth; shares the tool timeline with web search; non-read-only tools need confirmation.

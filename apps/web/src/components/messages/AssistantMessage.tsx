@@ -18,6 +18,7 @@ import { ReadAloudButton } from './ReadAloudButton.js'
 import { CopyButton } from './CopyButton.js'
 import { ReplyArea } from './ReplyArea.js'
 import { useReplyView } from './useReplyView.js'
+import { useAuth } from '../../services/auth/store.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -47,6 +48,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   onSelectVersion: SelectMessageVersion
 }) {
   const t = useTranslate()
+  const offline = useAuth((state) => state.offline)
   const view = useReplyView(message, streaming)
   const panelEntry = useSearchPanel((state) => state.entry)
   const notice = streaming ? null : describeReply(message)
@@ -153,7 +155,7 @@ export const AssistantMessage = memo(function AssistantMessage({
                 icon={<IconRefreshOutline16 />}
                 tooltip={t('regenerate')}
                 tooltipPlacement="bottom"
-                disabled={busy || refused}
+                disabled={busy || refused || offline}
                 onClick={() => {
                   stopReadAloud()
                   regenerateReply(sessionId, message.id)
@@ -166,7 +168,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               variant="outlined"
               size="s"
               className={styles.continueButton}
-              disabled={busy}
+              disabled={busy || offline}
               onClick={() => {
                 stopReadAloud()
                 continueReply(sessionId, message.id)

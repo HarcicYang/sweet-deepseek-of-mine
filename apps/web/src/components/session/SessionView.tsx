@@ -9,6 +9,8 @@ import { IconShareOutline16 } from '../base/icons.js'
 import { MessageList } from '../messages/MessageList.js'
 import { ShareDialog } from '../share/ShareDialog.js'
 import { MobileHeader } from './MobileHeader.js'
+import { useAuth } from '../../services/auth/store.js'
+import { useSync } from '../../services/sync/engine.js'
 import styles from './SessionView.module.css'
 
 /** 会话页：标题栏（移动端为顶栏）+ 消息列表，输入框吸底 */
@@ -28,6 +30,8 @@ export const SessionView = ({
   const t = useTranslate()
   const isMobile = useIsMobile()
   const [shareOpen, setShareOpen] = useState(false)
+  const offline =
+    useAuth((state) => state.offline) || useSync((state) => state.status === 'offline')
   const title = session.title || t('untitledChat')
   const expiry = shareExpiresAt
     ? t('shareExpiresAt', {
@@ -41,7 +45,7 @@ export const SessionView = ({
           title={title}
           readOnly={readOnly}
           onShare={readOnly ? undefined : () => setShareOpen(true)}
-          shareDisabled={streaming}
+          shareDisabled={streaming || offline}
         />
       ) : (
         <div className={styles.header}>
@@ -54,7 +58,7 @@ export const SessionView = ({
               icon={<IconShareOutline16 />}
               tooltip={t('shareButton')}
               tooltipPlacement="bottom"
-              disabled={streaming}
+              disabled={streaming || offline}
               onClick={() => setShareOpen(true)}
             />
           ) : null}
