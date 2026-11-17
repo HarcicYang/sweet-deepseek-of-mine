@@ -1501,6 +1501,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     }
   }
   let modelRound = request.toolLoop ? 1 : 0
+  let pendingToolsPrepared = false
 
   try {
     for (let attempt = 0; ; attempt += 1) {
@@ -1508,6 +1509,26 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       let preparing = true
       let receivedContent = false
       try {
+        if (!pendingToolsPrepared) {
+          pendingToolsPrepared = true
+          if (request.toolLoop && getPendingToolUses(reply).length > 0) {
+            preparing = false
+            reply = await executePendingTools(
+              sessionId,
+              reply,
+              mcpTools,
+              skills,
+              loadedSkills,
+              controller.signal
+            )
+            if (controller.signal.aborted) {
+              reply = settleReply(reply, 'stopped', Date.now())
+              break
+            }
+            updateReply(sessionId, reply)
+            persist(sessionId)
+          }
+        }
         const prepared = await prepareFiles(sessionId, request, controller.signal)
         preparing = false
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。

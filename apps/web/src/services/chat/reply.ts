@@ -234,8 +234,8 @@ export const getReplyText = (reply: AssistantMessage) =>
 /**
  * 正常达到输出上限、被停止或请求出错的回复可续写，便于保留已经收到的内容。
  * 报错或中断发生在工具调用后时，已经完成结果的工具调用可以继续进入下一条消息。
- * 末尾仍有未完成工具调用的回复不能续写。
- * 拒绝回复和客户端工具调用（未完成结果）不能续写。
+ * 末尾仍有未完成工具调用时，续写会先补执行这些工具。
+ * 拒绝回复不能续写。
  * 非报错态的服务端工具块或模板提示不能作为续写前缀。
  */
 export const canContinueReply = (reply: AssistantMessage): boolean => {
@@ -256,16 +256,6 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
       block.type === 'web_fetch_tool_result'
   )
   if (reply.status !== 'error' && hasServerToolBlocks) {
-    return false
-  }
-  const completedToolUses = new Set(
-    reply.blocks.flatMap((block) => (block.type === 'tool_result' ? [block.tool_use_id] : []))
-  )
-  if (
-    reply.blocks.some(
-      (block) => block.type === 'tool_use' && !completedToolUses.has(block.id)
-    )
-  ) {
     return false
   }
   return (
