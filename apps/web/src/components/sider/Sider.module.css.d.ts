@@ -17,8 +17,11 @@ declare const styles: {
   readonly collapsed: string
   readonly collapsedBrand: string
   readonly collapsedGroup: string
+  readonly drawerRoot: string
+  readonly drawerRootOpen: string
   readonly drawer: string
   readonly drawerMask: string
+  readonly edgeSwipeArea: string
   readonly mobile: string
 }
 export = styles

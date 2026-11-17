@@ -215,18 +215,57 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
-.drawer {
+.drawerRoot {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 800;
+  inset: 0;
+  z-index: 799;
+  pointer-events: none;
 }
 
 .drawerMask {
   position: absolute;
   inset: 0;
   z-index: 799;
+  background-color: rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 220ms ease;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 800;
+  pointer-events: auto;
+  transform: translate3d(-100%, 0, 0);
+  transition: transform 240ms cubic-bezier(0.22, 0.8, 0.24, 1);
+  will-change: transform;
+}
+
+.drawerRootOpen .drawerMask {
+  opacity: 1;
+}
+
+.drawerRootOpen .drawer {
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerMask,
+  .drawer {
+    transition-duration: 1ms;
+  }
+}
+
+.edgeSwipeArea {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  touch-action: pan-y;
 }
 
 .mobile {

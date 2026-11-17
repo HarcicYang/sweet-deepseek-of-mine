@@ -1,5 +1,11 @@
 import clsx from 'clsx'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
@@ -12,7 +18,7 @@ import { IconButton } from '../base/IconButton.js'
 import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
-import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
+import { closeMobileSider, openMobileSider, useMobileSider } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
 import { SyncStatus } from '../sync/SyncStatus.js'
 import styles from './Sider.module.css'
@@ -149,15 +155,98 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
 /** 移动端抽屉：浮在页面上方，点空白区域关闭。 */
 export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
-  if (!open) {
-    return null
+  const [mounted, setMounted] = useState(open)
+  const [visible, setVisible] = useState(open)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      const frame = requestAnimationFrame(() => setVisible(true))
+      return () => cancelAnimationFrame(frame)
+    }
+    if (!mounted) {
+      return
+    }
+    setVisible(false)
+    const timer = window.setTimeout(() => setMounted(false), 240)
+    return () => window.clearTimeout(timer)
+  }, [mounted, open])
+
+  if (!mounted) {
+    return <EdgeSwipeArea />
   }
+
   return (
-    <>
+    <div className={clsx(styles.drawerRoot, visible && styles.drawerRootOpen)}>
       <div className={styles.drawerMask} onClick={closeMobileSider} />
       <div className={styles.drawer}>
         <Sider mobile />
       </div>
-    </>
+    </div>
+  )
+}
+
+const EDGE_SWIPE_WIDTH = 24
+const EDGE_SWIPE_THRESHOLD = 48
+const EDGE_SWIPE_RATIO = 1.25
+
+/** 屏幕左边缘的透明热区：只有横向触摸滑动达到阈值才打开抽屉。 */
+const EdgeSwipeArea = () => {
+  const gesture = useRef<{ pointerId: number; x: number; y: number } | null>(null)
+
+  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+    gesture.current = null
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+    } catch {
+      // Synthetic or already-cancelled pointers may no longer be capturable.
+    }
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className={styles.edgeSwipeArea}
+      style={{ width: EDGE_SWIPE_WIDTH }}
+      onPointerDown={(event) => {
+        if (
+          (event.pointerType !== 'touch' &&
+            event.pointerType !== 'pen' &&
+            event.pointerType !== 'mouse') ||
+          !event.isPrimary
+        ) {
+          return
+        }
+        gesture.current = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+        }
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId)
+        } catch {
+          // Pointer capture is an optimization; the gesture still works without it.
+        }
+      }}
+      onPointerMove={(event) => {
+        const start = gesture.current
+        if (!start || start.pointerId !== event.pointerId) {
+          return
+        }
+        const dx = event.clientX - start.x
+        const dy = event.clientY - start.y
+        if (dx >= EDGE_SWIPE_THRESHOLD && dx >= Math.abs(dy) * EDGE_SWIPE_RATIO) {
+          finish(event)
+          openMobileSider()
+        }
+      }}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onLostPointerCapture={() => {
+        gesture.current = null
+      }}
+    />
   )
 }
