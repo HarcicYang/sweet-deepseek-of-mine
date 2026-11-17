@@ -233,7 +233,7 @@ export const getReplyText = (reply: AssistantMessage) =>
 
 /**
  * 正常达到输出上限、被停止或请求出错的回复可续写，便于保留已经收到的内容。
- * 报错发生在工具调用后时，已经完成结果的工具调用可以继续进入下一条消息。
+ * 报错或中断发生在工具调用后时，已经完成结果的工具调用可以继续进入下一条消息。
  * 末尾仍有未完成工具调用的回复不能续写。
  * 拒绝回复和客户端工具调用（未完成结果）不能续写。
  * 非报错态的服务端工具块或模板提示不能作为续写前缀。
@@ -266,12 +266,6 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
       (block) => block.type === 'tool_use' && !completedToolUses.has(block.id)
     )
   ) {
-    return false
-  }
-  const hasToolLoop = reply.blocks.some(
-    (block) => block.type === 'tool_use' || block.type === 'tool_result'
-  )
-  if (reply.status !== 'error' && hasToolLoop) {
     return false
   }
   return (
