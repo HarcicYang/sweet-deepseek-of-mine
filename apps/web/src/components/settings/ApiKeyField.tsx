@@ -27,6 +27,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
     <div className={styles.cell}>
       <div className={styles.apiKey}>
         <div className={styles.label}>{t(configured ? 'apiKeyStoredServer' : 'apiKeyStart')}</div>
+        <div className={styles.description}>{t('apiKeyDescription')}</div>
         {configured && !editing ? (
           <div className={styles.apiKeySaved}>
             <span className={styles.apiKeyMask}>{'********'}</span>

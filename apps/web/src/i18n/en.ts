@@ -341,6 +341,8 @@ export const en = {
   apiKeyPlaceholder: 'Enter API Key',
   apiKeyVerifying: 'Verifying...',
   apiKeyStoredServer: 'API key encrypted and stored on the server',
+  apiKeyDescription:
+    'This account-level DeepSeek API key is also used by the DeepSeek provider, web search, files, and speech.',
   confirm: 'Confirm',
   apiKeyInvalid: 'Invalid API Key. Please check it and try again.',
   apiKeyVerificationFailed: 'Verification failed: {message}',

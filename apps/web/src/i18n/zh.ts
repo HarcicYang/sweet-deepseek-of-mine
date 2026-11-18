@@ -326,6 +326,8 @@ export const zh = {
   apiKeyPlaceholder: '请输入 API Key',
   apiKeyVerifying: '正在验证...',
   apiKeyStoredServer: 'API Key 已加密保存在服务端',
+  apiKeyDescription:
+    '这是账号级 DeepSeek API Key，也会用于“模型与提供商”中的 DeepSeek 配置、联网搜索、文件和语音功能。',
   confirm: '确定',
   apiKeyInvalid: 'API Key 无效，请检查后重试',
   apiKeyVerificationFailed: '校验失败：{message}',
