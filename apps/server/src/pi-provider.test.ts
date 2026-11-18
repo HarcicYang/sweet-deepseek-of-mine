@@ -123,6 +123,90 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
   }
 })
 
+test('Pi providers receive base64 image content', async () => {
+  let requestBody: Record<string, unknown> | undefined
+  const upstream = http.createServer((request, response) => {
+    let body = ''
+    request.setEncoding('utf8')
+    request.on('data', (chunk: string) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      requestBody = JSON.parse(body) as Record<string, unknown>
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      response.end(
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-image',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: 'mock-model',
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'OK' }, finish_reason: null }],
+        })}\n\n` +
+          `data: ${JSON.stringify({
+            id: 'chatcmpl-image',
+            object: 'chat.completion.chunk',
+            created: 1,
+            model: 'mock-model',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          })}\n\n` +
+          'data: [DONE]\n\n'
+      )
+    })
+  })
+  try {
+    const port = await listen(upstream)
+    const response = await createPiSseResponse(
+      {
+        providerId: 'custom-test',
+        model: 'mock-model',
+        system: 'test',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/png', data: 'YWJj' },
+              },
+              { type: 'text', text: 'Who is in this image?' },
+            ],
+          },
+        ],
+        thinking: { type: 'disabled' },
+        tools: [],
+        safety_check: { level: 'high' },
+      },
+      {
+        id: 'custom-test',
+        userId: 'user-test',
+        kind: 'custom',
+        name: 'Custom Test',
+        api: 'openai-completions',
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        models: [
+          {
+            id: 'mock-model',
+            contextWindow: 1_000,
+            maxTokens: 100,
+            input: ['text', 'image'],
+            reasoning: false,
+            thinkingLevels: [],
+          },
+        ],
+        encryptedApiKey: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      'test-key',
+      new AbortController().signal
+    )
+    await response.text()
+    assert.match(JSON.stringify(requestBody), /data:image\/png;base64,YWJj/u)
+  } finally {
+    await close(upstream)
+  }
+})
+
 test('Pi tool calls are exposed through the client tool-use stream', async () => {
   const upstream = http.createServer((request, response) => {
     request.resume()

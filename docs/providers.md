@@ -41,8 +41,10 @@ DeepSeek 官方 Provider 继续使用现有专用聊天代理，以保留：
 DeepSeek Search API 和 Fetch API，浏览器不接触 DeepSeek Key；搜索结果继续复用现有
 搜索时间线、来源列表与 `[citation:N]` 渲染。
 
-非 DeepSeek Provider 当前仍只支持文本、图片输入能力声明、工具调用和 reasoning；
-附件原件、语音、`latest_reminder`、标题生成和安全参数继续只支持 DeepSeek。
+文件上传和语音转写由账号级 DeepSeek Key 提供，因此对非 DeepSeek Provider 也可用。
+图片能否随消息发送由当前模型是否声明 `image` 输入能力决定；非 DeepSeek 模型会读取
+IndexedDB 中的本地原件并转换为 base64。文档解析仍只支持 DeepSeek 模型路径，
+`latest_reminder`、标题生成和安全参数也继续只支持 DeepSeek。
 
 ## 凭据与数据
 

@@ -18,20 +18,38 @@ import type {
 } from './types.js'
 
 /**
- * 文件按 Files API 的 file_id（附件的 serverId）引用：图片用 image 块，其余用 document 块。
- * 发送前 streamReply 会先补齐 serverId；仍为 null 的是本地没有原件的附件，不进入请求。
+ * DeepSeek 用 Files API 的 file_id；Pi 提供商只接受 base64 图片。
+ * 没有 serverId 或本地原件的附件不进入请求。
  */
-const toFileBlocks = (files: FileAttachment[]): FileBlockParam[] =>
-  files.flatMap(({ serverId, isImage }) =>
-    serverId
-      ? [
+export type PromptImageData = { mediaType: string; data: string }
+type PromptFileOptions = {
+  useServerFileIds?: boolean
+  images?: ReadonlyMap<string, PromptImageData>
+}
+
+const toFileBlocks = (
+  files: FileAttachment[],
+  { useServerFileIds = true, images }: PromptFileOptions = {}
+): FileBlockParam[] =>
+  files.flatMap((file): FileBlockParam[] => {
+    if (file.isImage) {
+      const image = images?.get(file.id)
+      if (image) {
+        return [
           {
-            type: isImage ? 'image' : 'document',
-            source: { type: 'file', file_id: serverId },
+            type: 'image',
+            source: { type: 'base64', media_type: image.mediaType, data: image.data },
           },
         ]
+      }
+      return useServerFileIds && file.serverId
+        ? [{ type: 'image', source: { type: 'file', file_id: file.serverId } }]
+        : []
+    }
+    return useServerFileIds && file.serverId
+      ? [{ type: 'document', source: { type: 'file', file_id: file.serverId } }]
       : []
-  )
+  })
 
 const toReplyBlock = (block: OutputBlockStart, now: number): ReplyBlock | null => {
   switch (block.type) {
@@ -276,9 +294,12 @@ const isUsableReply = (message: Message): message is AssistantMessage =>
   !message.blocks.some((block) => block.type === 'text' && block.isTemplate) &&
   getReplyText(message) !== ''
 
-/** 有文件时用内容块数组：先文件后文本，文件按 Files API 的 file_id 引用 */
-const toUserParam = ({ content, files }: UserMessage): MessageParam => {
-  const blocks = toFileBlocks(files)
+/** 有文件时用内容块数组：先文件后文本 */
+const toUserParam = (
+  { content, files }: UserMessage,
+  options?: PromptFileOptions
+): MessageParam => {
+  const blocks = toFileBlocks(files, options)
   return blocks.length === 0
     ? { role: 'user', content }
     : {
@@ -380,9 +401,17 @@ export const toToolLoopMessages = (
   question: UserMessage,
   reply: AssistantMessage,
   latestReminder: string | undefined,
-  thinking: boolean
+  thinking: boolean,
+  fileOptions?: PromptFileOptions
 ): MessageParam[] => {
-  const messages = toRequestMessages(history, question, undefined, false, latestReminder)
+  const messages = toRequestMessages(
+    history,
+    question,
+    undefined,
+    false,
+    latestReminder,
+    fileOptions
+  )
   let assistant: Extract<MessageParam, { role: 'assistant' }> | null = null
   // All results for one assistant tool-use turn must share the immediately following user message.
   let toolResultContent: ToolResultBlockParam[] | null = null
@@ -464,7 +493,8 @@ export const toRequestMessages = (
   question: UserMessage,
   prefix?: AssistantMessage,
   thinking = prefix?.thinking ?? false,
-  latestReminder?: string
+  latestReminder?: string,
+  fileOptions?: PromptFileOptions
 ): MessageParam[] => {
   const messages: MessageParam[] = []
   let previousReminder: string | undefined
@@ -477,14 +507,14 @@ export const toRequestMessages = (
   }
   for (const [user, reply] of getContextRounds(history)) {
     // 历史提问没有文字、附件也都没有 serverId 时，提问为空，连同回答一起省略。
-    if (!user.content && toFileBlocks(user.files).length === 0) {
+    if (!user.content && toFileBlocks(user.files, fileOptions).length === 0) {
       continue
     }
     appendReminder(reply.latestReminder)
-    messages.push(toUserParam(user), toAssistantParam(reply))
+    messages.push(toUserParam(user, fileOptions), toAssistantParam(reply))
   }
   appendReminder(latestReminder)
-  messages.push(toUserParam(question))
+  messages.push(toUserParam(question, fileOptions))
   if (prefix?.prefix) {
     const assistant = toAssistantParam(prefix, true, thinking)
     // 没有非空白正文或有效思考时直接重发原问题，避免服务端拒绝空 Prefill。

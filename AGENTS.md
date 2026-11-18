@@ -46,7 +46,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 自定义指令是账号级同步设置，最多 16,000 字符；在回答风格、结构、称呼、工作流和界面使用倾向上优先于默认行为，但不能突破安全、隐私和工具权限边界，也不能改写实际模型身份。
 - 附件元数据随会话同步，附件原件和对象存储尚未进入云端同步。
 - 附件和 ASR multipart 以限长流转发，不在服务端整体缓冲。
-- 账号配置 DeepSeek Key 后，联网搜索和网页读取对所有 Provider 开放，通过服务端代理 DeepSeek Search / Fetch API；文件、语音和 `latest_reminder` 继续走 DeepSeek 专用路径，其他提供商通过 Pi 的标准协议适配器运行。附件原件和语音当前仍只支持 DeepSeek 路径。
+- 账号配置 DeepSeek Key 后，联网搜索、网页读取、文件上传和语音转写对所有 Provider 开放；图片能否随消息发送还要检查当前模型是否声明 `image` 输入能力，非 DeepSeek 模型发送图片时使用本地原件转 base64。文档解析仍走 DeepSeek 模型路径，`latest_reminder` 继续走 DeepSeek 专用路径。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主回答已支持受约束的 JSON-Render、服务端二次校验和 Markdown 回退；当前 action 仅限复制和发起 prompt。

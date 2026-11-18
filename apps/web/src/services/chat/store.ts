@@ -26,7 +26,11 @@ import {
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { isOffline } from '../auth/store.js'
-import { hasConfiguredDeepSeekProvider, selectedModel } from '../providers.js'
+import {
+  hasConfiguredDeepSeekProvider,
+  selectedModel,
+  useProviders,
+} from '../providers.js'
 import { useSettings } from '../settings.js'
 import { queueCloudReset, queueSessionDelete, queueSessionUpsert } from '../sync/engine.js'
 import { requestMcpApproval } from '../mcp/approval.js'
@@ -53,6 +57,7 @@ import {
   settleReply,
   toToolLoopMessages,
   toRequestMessages,
+  type PromptImageData,
 } from './reply.js'
 import {
   toSessionSummary,
@@ -1240,6 +1245,15 @@ const reuploadInvalidatedFiles = (sessionId: string, request: Request, error: un
   return true
 }
 
+const blobToBase64 = async (blob: Blob): Promise<string> => {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
 /** 重传前的退避等待；停止生成时立即返回，由调用方按已停止收尾 */
 const waitForRetry = (attempt: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -1553,6 +1567,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   }
   let modelRound = request.toolLoop ? 1 : 0
   let pendingToolsPrepared = false
+  const promptImages = new Map<string, PromptImageData>()
 
   try {
     for (let attempt = 0; ; attempt += 1) {
@@ -1582,6 +1597,40 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         const prepared = await prepareFiles(sessionId, request, controller.signal)
         preparing = false
+        const providerId = initial.providerId ?? selectedModel().providerId
+        const modelId = initial.model ?? selectedModel().modelId
+        const currentModel = useProviders
+          .getState()
+          .providers.find((provider) => provider.id === providerId)
+          ?.models.find((model) => model.id === modelId)
+        const useServerFileIds = providerId === 'deepseek'
+        if (!useServerFileIds && currentModel?.input.includes('image')) {
+          const files = new Map(
+            [
+              ...prepared.question.files,
+              ...getContextRounds(prepared.history).flatMap(([user]) => user.files),
+            ].map((file) => [file.id, file])
+          )
+          await Promise.all(
+            [...files.values()]
+              .filter((file) => file.isImage && !promptImages.has(file.id))
+              .map(async (file) => {
+                const blob = await db.loadFile(file.id)
+                if (!blob) {
+                  return
+                }
+                promptImages.set(file.id, {
+                  mediaType: file.mimeType || blob.type || 'image/png',
+                  data: await blobToBase64(blob),
+                })
+              })
+          )
+          controller.signal.throwIfAborted()
+        }
+        const fileOptions = {
+          useServerFileIds,
+          images: promptImages,
+        }
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
         const latestReminder = prepared.prefix
           ? prepared.prefix.latestReminder
@@ -1609,14 +1658,16 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                 modelQuestion,
                 prepared.prefix,
                 initial.thinking ?? false,
-                latestReminder
+                latestReminder,
+                fileOptions
               )
             : toToolLoopMessages(
                 prepared.history,
                 modelQuestion,
                 reply,
                 latestReminder,
-                initial.thinking ?? false
+                initial.thinking ?? false,
+                fileOptions
               )
         const requestTitle = modelRound === 0 && titleRequests.has(controller)
         const thinkingMode: ThinkingMode =
@@ -1626,12 +1677,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
               ? (initial.thinkingEffort ?? 'high')
               : 'disabled'
         const customInstructions = useSettings.getState().customInstructions
-        const providerId = initial.providerId ?? selectedModel().providerId
         const deepSeekToolsAvailable = hasConfiguredDeepSeekProvider()
         const events = streamMessage(
           {
             providerId,
-            model: initial.model ?? selectedModel().modelId,
+            model: modelId,
             sessionId,
             system: buildSystemPrompt(
               customInstructions,
