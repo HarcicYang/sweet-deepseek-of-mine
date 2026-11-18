@@ -30,7 +30,7 @@ export const ModelThinkingMenu = ({
   const t = useTranslate()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const contentRef = useRef<HTMLDivElement>(null)
+  const modelListRef = useRef<HTMLDivElement>(null)
   const deferredQuery = useDeferredValue(query)
   const { anchorRef, floatingRef, position } = useAnchoredPosition<
     HTMLButtonElement,
@@ -46,7 +46,7 @@ export const ModelThinkingMenu = ({
 
   useLayoutEffect(() => {
     if (open) {
-      contentRef.current?.scrollTo({ top: 0 })
+      modelListRef.current?.scrollTo({ top: 0 })
     }
   }, [open, query])
 
@@ -94,8 +94,12 @@ export const ModelThinkingMenu = ({
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
-              <div ref={contentRef} className={styles.content}>
-                <div className={styles.modelList} role="listbox" aria-label={t('modelProvider')}>
+              <div
+                ref={modelListRef}
+                className={styles.modelList}
+                role="listbox"
+                aria-label={t('modelProvider')}
+              >
                   {visibleModels.map((option) => (
                     <button
                       key={option.value}
@@ -115,34 +119,33 @@ export const ModelThinkingMenu = ({
                   {visibleModels.length === 0 ? (
                     <div className={styles.empty}>{t('modelSearchEmpty')}</div>
                   ) : null}
-                </div>
-                <div className={styles.thinkingSection}>
-                  <div className={styles.sectionTitle}>{t('thinkingMode')}</div>
-                  <div
-                    className={styles.thinkingOptions}
-                    role="radiogroup"
-                    aria-label={t('thinkingMode')}
-                  >
-                    {thinkingOptions.map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="radio"
-                        aria-checked={thinkingMode === mode}
-                        className={clsx(
-                          styles.thinkingOption,
-                          thinkingMode === mode && styles.selected
-                        )}
-                        onClick={() => {
-                          onThinkingChange(mode)
-                          setOpen(false)
-                        }}
-                      >
-                        <span>{t(thinkingLabel(mode))}</span>
-                        {thinkingMode === mode ? <IconCheckOutline16 /> : null}
-                      </button>
-                    ))}
-                  </div>
+              </div>
+              <div className={styles.thinkingSection}>
+                <div className={styles.sectionTitle}>{t('thinkingMode')}</div>
+                <div
+                  className={styles.thinkingOptions}
+                  role="radiogroup"
+                  aria-label={t('thinkingMode')}
+                >
+                  {thinkingOptions.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={thinkingMode === mode}
+                      className={clsx(
+                        styles.thinkingOption,
+                        thinkingMode === mode && styles.selected
+                      )}
+                      onClick={() => {
+                        onThinkingChange(mode)
+                        setOpen(false)
+                      }}
+                    >
+                      <span>{t(thinkingLabel(mode))}</span>
+                      {thinkingMode === mode ? <IconCheckOutline16 /> : null}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>,
