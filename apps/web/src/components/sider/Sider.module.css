@@ -39,9 +39,11 @@
 .appName {
   min-width: 0;
   overflow: hidden;
+  font-family: var(--dsw-font-wordmark);
   font-size: 20px;
   line-height: 22px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--dsw-alias-brand-primary);

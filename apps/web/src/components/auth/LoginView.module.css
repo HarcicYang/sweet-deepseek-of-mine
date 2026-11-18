@@ -27,9 +27,11 @@
   gap: 10px;
   margin-bottom: 28px;
   color: var(--dsw-alias-brand-primary);
+  font-family: var(--dsw-font-wordmark);
   font-size: 20px;
   line-height: 22px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .brandMark {

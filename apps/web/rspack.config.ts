@@ -87,6 +87,7 @@ export const createConfig = ({ devServer }: ConfigOptions = {}): Configuration =
         { from: path.resolve(root, 'public/favicon.svg'), to: 'favicon.svg' },
         { from: path.resolve(root, 'public/site.webmanifest'), to: 'site.webmanifest' },
         { from: path.resolve(root, 'public/icons'), to: 'icons' },
+        { from: path.resolve(root, 'public/fonts'), to: 'fonts' },
         { from: path.resolve(root, 'public/_headers'), to: '_headers', toType: 'file' },
       ],
     }),

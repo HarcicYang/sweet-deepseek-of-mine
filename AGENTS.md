@@ -51,6 +51,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主回答已支持受约束的 JSON-Render、服务端二次校验和 Markdown 回退；当前 action 仅限复制和发起 prompt。
 - 主题 token 位于 `apps/web/src/app/theme.css`。
+- 品牌字标使用 Urbanist Variable（SIL OFL 1.1），字体位于 `apps/web/src/assets/fonts/`，许可证保留在 `apps/web/public/fonts/`；不要用它替换中文正文的系统字体。
 - 文案必须同时维护 `apps/web/src/i18n/zh.ts` 和 `apps/web/src/i18n/en.ts`。
 - GitHub OAuth 登录、Key 设置以及聊天、附件、语音代理均已接入 Web 客户端。
 - Worker adapter 使用免费 D1 保存账号、设置和分块会话快照；Node adapter 继续使用本地文件存储。
