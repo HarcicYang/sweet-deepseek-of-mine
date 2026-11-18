@@ -146,6 +146,7 @@ export const ChatProxyRequestSchema = z
   .object({
     providerId: z.string().min(1).max(128).default('deepseek'),
     model: z.string().min(1).max(256),
+    sessionId: z.string().min(1).max(256).optional(),
     system: z.string().max(200_000),
     messages: z.array(ChatMessageSchema).min(1).max(500),
     thinking: z.object({ type: z.enum(['enabled', 'disabled']) }).strict(),

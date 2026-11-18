@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import test from 'node:test'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ChatProxyRequest } from '@sweet-deepseek/contracts/api'
 import type { ProviderRecord } from './provider-store.js'
 import { createPiSseResponse } from './pi-provider-runtime.js'
@@ -22,6 +23,20 @@ const close = async (server: http.Server): Promise<void> =>
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))
   })
+
+const headersFromIncoming = (headers: http.IncomingHttpHeaders): Headers => {
+  const result = new Headers()
+  for (const [name, value] of Object.entries(headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        result.append(name, item)
+      }
+    } else if (value !== undefined) {
+      result.set(name, value)
+    }
+  }
+  return result
+}
 
 test('Pi custom provider streams through the normalized SSE bridge', async () => {
   const upstream = http.createServer((request, response) => {
@@ -198,6 +213,164 @@ test('Pi tool calls are exposed through the client tool-use stream', async () =>
     assert.match(body, /"type":"tool_use"/)
     assert.match(body, /input_json_delta/)
     assert.match(body, /"stop_reason":"tool_use"/)
+  } finally {
+    await close(upstream)
+  }
+})
+
+test('OpenCode requests include session and client attribution headers', async () => {
+  let requestHeaders: Headers | undefined
+  const upstream = http.createServer((request, response) => {
+    requestHeaders = headersFromIncoming(request.headers)
+    request.resume()
+    request.on('end', () => {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      response.end(
+        [
+          'event: message_start',
+          `data: ${JSON.stringify({
+            type: 'message_start',
+            message: {
+              id: 'msg-test',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-haiku-5-5',
+              content: [],
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 1, output_tokens: 0 },
+            },
+          })}`,
+          '',
+          'event: content_block_start',
+          `data: ${JSON.stringify({
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'text', text: '' },
+          })}`,
+          '',
+          'event: content_block_delta',
+          `data: ${JSON.stringify({
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'text_delta', text: 'OK' },
+          })}`,
+          '',
+          'event: content_block_stop',
+          `data: ${JSON.stringify({ type: 'content_block_stop', index: 0 })}`,
+          '',
+          'event: message_delta',
+          `data: ${JSON.stringify({
+            type: 'message_delta',
+            delta: { stop_reason: 'end_turn', stop_sequence: null },
+            usage: { output_tokens: 1 },
+          })}`,
+          '',
+          'event: message_stop',
+          `data: ${JSON.stringify({ type: 'message_stop' })}`,
+          '',
+          '',
+        ].join('\n')
+      )
+    })
+  })
+  try {
+    const port = await listen(upstream)
+    const response = await createPiSseResponse(
+      {
+        providerId: 'opencode-go',
+        model: 'claude-haiku-5-5',
+        sessionId: 'conversation-test',
+        system: 'test',
+        messages: [{ role: 'user', content: 'hello' }],
+        thinking: { type: 'disabled' },
+        tools: [],
+        safety_check: { level: 'high' },
+      },
+      {
+        id: 'opencode-go',
+        userId: 'user-test',
+        kind: 'builtin',
+        name: 'OpenCode Go',
+        api: null,
+        baseUrl: `http://127.0.0.1:${port}`,
+        models: [],
+        encryptedApiKey: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      'test-key',
+      new AbortController().signal
+    )
+    await response.text()
+    assert.equal(requestHeaders?.get('x-opencode-session'), 'conversation-test')
+    assert.equal(requestHeaders?.get('x-opencode-client'), "Sweet DeepSeek O'Mine")
+  } finally {
+    await close(upstream)
+  }
+})
+
+test('provider attribution and model headers are preserved for other built-ins', async () => {
+  const provider = builtinProviders().find((candidate) => candidate.id === 'nvidia')
+  const model = provider?.getModels().find((candidate) => candidate.api === 'openai-completions')
+  assert.ok(model)
+  let requestHeaders: Headers | undefined
+  const upstream = http.createServer((request, response) => {
+    requestHeaders = headersFromIncoming(request.headers)
+    request.resume()
+    request.on('end', () => {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      response.end(
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: model.id,
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'OK' }, finish_reason: null }],
+        })}\n\n` +
+          `data: ${JSON.stringify({
+            id: 'chatcmpl-test',
+            object: 'chat.completion.chunk',
+            created: 1,
+            model: model.id,
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          })}\n\n` +
+          'data: [DONE]\n\n'
+      )
+    })
+  })
+  try {
+    const port = await listen(upstream)
+    const response = await createPiSseResponse(
+      {
+        providerId: 'nvidia',
+        model: model.id,
+        sessionId: 'conversation-test',
+        system: 'test',
+        messages: [{ role: 'user', content: 'hello' }],
+        thinking: { type: 'disabled' },
+        tools: [],
+        safety_check: { level: 'high' },
+      },
+      {
+        id: 'nvidia',
+        userId: 'user-test',
+        kind: 'builtin',
+        name: 'NVIDIA',
+        api: null,
+        baseUrl: `http://127.0.0.1:${port}`,
+        models: [],
+        encryptedApiKey: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      'test-key',
+      new AbortController().signal
+    )
+    await response.text()
+    assert.equal(requestHeaders?.get('x-billing-invoke-origin'), "Sweet DeepSeek O'Mine")
+    assert.equal(requestHeaders?.get('nvcf-poll-seconds'), '3600')
   } finally {
     await close(upstream)
   }

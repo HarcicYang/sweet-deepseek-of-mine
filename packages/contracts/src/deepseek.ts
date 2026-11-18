@@ -206,6 +206,8 @@ export type DeepseekReadUrlTool = {
 export type CreateMessageRequest = {
   providerId: string
   model: string
+  /** 会话级请求标识；支持会话亲和或路由的提供商可据此保持同一对话。 */
+  sessionId?: string
   system: string
   messages: MessageParam[]
   thinking: ThinkingConfig

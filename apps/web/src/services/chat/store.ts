@@ -1590,6 +1590,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           {
             providerId: initial.providerId ?? selectedModel().providerId,
             model: initial.model ?? selectedModel().modelId,
+            sessionId,
             system: buildSystemPrompt(
               customInstructions,
               initial.providerId ?? selectedModel().providerId,

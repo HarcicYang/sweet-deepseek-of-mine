@@ -90,6 +90,14 @@ const ZERO_USAGE = {
   cost: { ...ZERO_COST, total: 0 },
 } as const
 
+const CLIENT_IDENTITY = {
+  attribution: {
+    name: "Sweet DeepSeek O'Mine",
+    url: 'https://sdom.harcic.me/',
+    categories: ['chat-client'],
+  },
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
@@ -185,6 +193,7 @@ const createBuiltinProvider = (
     id: record.id,
     name: record.name,
     baseUrl: record.baseUrl ?? original.baseUrl,
+    headers: original.headers,
     auth: {
       apiKey: {
         name: `${record.name} API key`,
@@ -387,7 +396,7 @@ export const createPiSseResponse = async (
   if (!model) {
     throw new Error(`Provider ${record.name} has no model ${request.model}`)
   }
-  const models = createModels()
+  const models = createModels({ identity: CLIENT_IDENTITY })
   models.setProvider(provider)
   const context: PiContext = {
     systemPrompt: request.system,
@@ -404,6 +413,7 @@ export const createPiSseResponse = async (
           : 'high'
   const events = models.streamSimple(model, context, {
     apiKey,
+    sessionId: request.sessionId,
     ...(reasoning === undefined ? {} : { reasoning }),
     signal,
   })
