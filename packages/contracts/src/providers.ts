@@ -1,13 +1,23 @@
 import { z } from 'zod'
 
 export const ProviderApiSchema = z.enum([
-  'openai-completions',
   'anthropic-messages',
-  'openai-responses',
+  'azure-openai-responses',
+  'bedrock-converse-stream',
   'google-generative-ai',
+  'google-vertex',
+  'mistral-conversations',
+  'openai-completions',
+  'openai-codex-responses',
+  'openai-responses',
+  'pi-messages',
 ])
 
 export type ProviderApi = z.infer<typeof ProviderApiSchema>
+
+export const ProviderAuthModeSchema = z.enum(['api_key', 'oauth'])
+
+export type ProviderAuthMode = z.infer<typeof ProviderAuthModeSchema>
 
 export const ModelThinkingLevelSchema = z.enum([
   'off',
@@ -54,6 +64,7 @@ export const ProviderTemplateSchema = z
     id: z.string().min(1).max(128),
     name: z.string().min(1).max(128),
     kind: z.enum(['builtin', 'custom']),
+    authModes: z.array(ProviderAuthModeSchema).min(1),
     api: ProviderApiSchema.optional(),
     baseUrl: z.string().url().optional(),
   })
@@ -66,6 +77,7 @@ export const ProviderSummarySchema = z
     id: z.string().min(1).max(128),
     name: z.string().min(1).max(128),
     kind: z.enum(['deepseek', 'builtin', 'custom']),
+    authModes: z.array(ProviderAuthModeSchema).min(1),
     configured: z.boolean(),
     api: ProviderApiSchema.optional(),
     baseUrl: z.string().url().optional(),

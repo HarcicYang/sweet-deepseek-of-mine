@@ -3,11 +3,9 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from '
 import type { ThinkingMode } from '@sweet-deepseek/contracts'
 import {
   IconGlobeLanguageOutline14,
-  IconLinkOutline16,
   IconPaperclipOutline16,
   IconSendOutline16,
   IconStopFill16,
-  IconThinkOutline14,
 } from '../base/icons.js'
 import {
   setDefaultModel,
@@ -31,7 +29,6 @@ import {
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
-import { Select, type SelectOption } from '../base/Select.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import {
@@ -46,6 +43,7 @@ import { DraftAttachments } from './DraftAttachments.js'
 import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
 import { Spectrum } from './Spectrum.js'
+import { ModelThinkingMenu } from './ModelThinkingMenu.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
 
@@ -271,45 +269,19 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       <div className={styles.functionRow}>
         {/* 思考模式 / 智能搜索，tooltip 在控件上方 */}
         <div ref={togglesRef} className={styles.toggles}>
-          <Tooltip content={t('modelProvider')}>
-            <Select<string>
-              value={currentModelValue}
-              options={modelOptions}
-              placeholder={t('modelProviderSelect')}
-              ariaLabel={t('modelProvider')}
-              className={styles.modelSelect}
-              startIcon={<IconLinkOutline16 />}
-              searchable
-              onChange={(value) => {
+          <Tooltip content={t('thinkingModeTooltip')}>
+            <ModelThinkingMenu
+              currentModelValue={currentModelValue}
+              modelOptions={modelOptions}
+              thinkingMode={thinkingMode}
+              thinkingOptions={thinkingOptions}
+              onModelChange={(value) => {
                 const [providerId, modelId] = value.split('\u0000')
                 if (providerId && modelId) {
                   setDefaultModel({ providerId, modelId })
                 }
               }}
-            />
-          </Tooltip>
-          <Tooltip content={t('thinkingModeTooltip')}>
-            <Select<ThinkingMode>
-              value={thinkingMode}
-              options={thinkingOptions.map((mode) => ({
-                value: mode,
-                label: t(
-                  mode === 'disabled'
-                    ? 'thinkingModeDisabled'
-                    : mode === 'low'
-                      ? 'thinkingModeLow'
-                      : mode === 'high'
-                        ? 'thinkingModeHigh'
-                        : 'thinkingModeMax'
-                ),
-              })) satisfies SelectOption<ThinkingMode>[]}
-              ariaLabel={t('thinkingMode')}
-              className={clsx(
-                styles.thinkingSelect,
-                thinkingMode !== 'disabled' && styles.selected
-              )}
-              startIcon={<IconThinkOutline14 />}
-              onChange={setThinkingMode}
+              onThinkingChange={setThinkingMode}
             />
           </Tooltip>
           <Tooltip content={deepSeek ? t('deactivatedSearchTooltip') : t('providerFeatureUnavailable')}>

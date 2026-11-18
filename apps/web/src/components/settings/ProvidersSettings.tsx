@@ -206,9 +206,16 @@ const AddProviderDialog = ({
   const [busy, setBusy] = useState(false)
   const template = templates.find((candidate) => candidate.id === templateId)
   const custom = template?.kind === 'custom'
+  const supportsApiKey = template?.authModes.includes('api_key') ?? false
+
+  useEffect(() => {
+    if (!templateId && templates[0]) {
+      setTemplateId(templates[0].id)
+    }
+  }, [templateId, templates])
 
   const save = async () => {
-    if (!template || !apiKey.trim() || busy) {
+    if (!template || !supportsApiKey || !apiKey.trim() || busy) {
       return
     }
     let parsedModels: ProviderModelInput[] | undefined
@@ -248,7 +255,11 @@ const AddProviderDialog = ({
           <Button variant="outlined" disabled={busy} onClick={onClose}>
             {t('cancel')}
           </Button>
-          <Button variant="primary" disabled={busy || !template} onClick={() => void save()}>
+          <Button
+            variant="primary"
+            disabled={busy || !template || !supportsApiKey}
+            onClick={() => void save()}
+          >
             {busy ? t('providerSaving') : t('save')}
           </Button>
         </>
@@ -264,7 +275,7 @@ const AddProviderDialog = ({
               label:
                 item.kind === 'custom'
                   ? `${item.name} · ${item.api ?? ''}`
-                  : item.name,
+                  : `${item.name}${item.authModes.includes('api_key') ? '' : ' · OAuth'}`,
             }))}
             onChange={setTemplateId}
             variant="field"
@@ -284,10 +295,12 @@ const AddProviderDialog = ({
           <input
             type="password"
             value={apiKey}
+            disabled={!supportsApiKey}
             autoComplete="new-password"
             onChange={(event) => setApiKey(event.target.value)}
           />
         </label>
+        {!supportsApiKey ? <div className={styles.warning}>{t('providerOauthOnly')}</div> : null}
         <label>
           <span>{t('providerBaseUrl')}</span>
           <input

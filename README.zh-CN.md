@@ -12,7 +12,7 @@
 
 - **多会话管理**：自动生成标题，支持重命名、删除、消息分支与重新生成。
 - **安全代理**：GitHub OAuth 登录；API Key 由服务端 AES-256-GCM 加密保存，所有请求经同源后端转发。
-- **多模型提供商**：复用 Pi 的提供商目录和协议实现，支持 OpenAI、Anthropic、OpenRouter、Groq、Moonshot AI、Gemini、xAI，以及自定义 OpenAI/Anthropic 兼容端点。DeepSeek 仍是默认提供商。
+- **多模型提供商**：复用 Pi 的完整提供商目录和协议实现，并支持自定义 OpenAI/Anthropic/Responses 兼容端点。DeepSeek 仍是默认提供商。
 - **云端同步与缓存**：会话与设置同步云端，IndexedDB 按账号隔离缓存，离线改动写入 outbox，冲突保留副本。
 - **可安装 PWA**：可添加到主屏幕并从应用壳启动；断网时仍可查看本地缓存会话，联网请求会等待恢复连接。
 - **多模态与富文本**：流式输出、深度思考、联网搜索、链接阅读与来源引用；Markdown、代码高亮、KaTeX、Mermaid 完整渲染，表格可复制、下载、全屏。

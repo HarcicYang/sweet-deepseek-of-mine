@@ -331,6 +331,8 @@ export const en = {
   providerDeleteTitle: 'Delete provider?',
   providerDeleteDescription: 'You will need to enter the API key again after deleting "{name}".',
   providerInvalidCustom: 'A custom provider needs a base URL and at least one valid model',
+  providerOauthOnly:
+    'This provider currently requires OAuth sign-in. API keys are not supported in the web UI yet.',
   avatarMenuSettingsDialogThemeItemLabel: 'Theme',
   avatarMenuSettingsDialogThemeSelectLightOption: 'Light',
   avatarMenuSettingsDialogThemeSelectDarkOption: 'Dark',
@@ -387,6 +389,9 @@ export const en = {
   chatInputPlaceholderChat: 'Enter a message',
   modelProvider: 'Model & provider',
   modelProviderSelect: 'Select model',
+  modelThinkingMenu: 'Model and thinking settings',
+  modelSearchPlaceholder: 'Search providers or models',
+  modelSearchEmpty: 'No matching models',
   providerFeatureUnavailable: 'This provider does not support this feature',
   thinkingMode: 'Thinking mode',
   thinkingModeDisabled: 'Off',

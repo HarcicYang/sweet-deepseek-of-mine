@@ -12,71 +12,66 @@ import {
   type Tool as PiTool,
 } from '@earendil-works/pi-ai'
 import * as anthropicMessages from '@earendil-works/pi-ai/api/anthropic-messages'
-import * as googleGenerativeAi from '@earendil-works/pi-ai/api/google-generative-ai'
 import * as openAICompletions from '@earendil-works/pi-ai/api/openai-completions'
 import * as openAIResponses from '@earendil-works/pi-ai/api/openai-responses'
-import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic'
-import { googleProvider } from '@earendil-works/pi-ai/providers/google'
-import { groqProvider } from '@earendil-works/pi-ai/providers/groq'
-import { moonshotaiProvider } from '@earendil-works/pi-ai/providers/moonshotai'
-import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
-import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter'
-import { xaiProvider } from '@earendil-works/pi-ai/providers/xai'
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ChatProxyRequest } from '@sweet-deepseek/contracts/api'
-import type {
-  ProviderApi,
-  ProviderModel,
-  ProviderModelInput,
-  ProviderSummary,
-  ProviderTemplate,
+import {
+  ProviderApiSchema,
+  type ProviderApi,
+  type ProviderModel,
+  type ProviderModelInput,
+  type ProviderSummary,
+  type ProviderTemplate,
 } from '@sweet-deepseek/contracts/providers'
 import type { ProviderRecord } from './provider-store.js'
 
 type PiBuiltinFactory = () => Provider
 
-const BUILTIN_PROVIDERS: Record<string, PiBuiltinFactory> = {
-  anthropic: anthropicProvider,
-  openai: openaiProvider,
-  openrouter: openrouterProvider,
-  groq: groqProvider,
-  moonshotai: moonshotaiProvider,
-  google: googleProvider,
-  xai: xaiProvider,
-}
+const BUILTIN_PROVIDER_LIST = builtinProviders()
+const BUILTIN_PROVIDERS: Record<string, PiBuiltinFactory> = Object.fromEntries(
+  BUILTIN_PROVIDER_LIST.map((provider) => [provider.id, () => provider])
+)
 
 const BUILTIN_TEMPLATES: ProviderTemplate[] = [
-  { id: 'anthropic', name: 'Anthropic', kind: 'builtin' },
-  { id: 'openai', name: 'OpenAI', kind: 'builtin' },
-  { id: 'openrouter', name: 'OpenRouter', kind: 'builtin' },
-  { id: 'groq', name: 'Groq', kind: 'builtin' },
-  { id: 'moonshotai', name: 'Moonshot AI', kind: 'builtin' },
-  { id: 'google', name: 'Google Gemini', kind: 'builtin' },
-  { id: 'xai', name: 'xAI', kind: 'builtin' },
+  ...BUILTIN_PROVIDER_LIST.filter(
+    (provider) => provider.id !== 'deepseek' && provider.getModels().length > 0
+  ).map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    kind: 'builtin' as const,
+    authModes: [
+      ...(provider.auth.apiKey ? (['api_key'] as const) : []),
+      ...(provider.auth.oauth ? (['oauth'] as const) : []),
+    ],
+  })),
   {
     id: 'custom-openai-completions',
     name: 'OpenAI-compatible',
     kind: 'custom',
+    authModes: ['api_key'],
     api: 'openai-completions',
   },
   {
     id: 'custom-anthropic-messages',
     name: 'Anthropic-compatible',
     kind: 'custom',
+    authModes: ['api_key'],
     api: 'anthropic-messages',
   },
   {
     id: 'custom-openai-responses',
     name: 'OpenAI Responses-compatible',
     kind: 'custom',
+    authModes: ['api_key'],
     api: 'openai-responses',
   },
 ]
 
-const API_IMPLEMENTATIONS: Record<ProviderApi, ProviderStreams> = {
+const CUSTOM_API_IMPLEMENTATIONS: Partial<Record<ProviderApi, ProviderStreams>> = {
   'openai-completions': openAICompletions,
   'anthropic-messages': anthropicMessages,
   'openai-responses': openAIResponses,
-  'google-generative-ai': googleGenerativeAi,
 }
 
 const ZERO_COST = {
@@ -99,15 +94,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
 const readApi = (value: string | null): ProviderApi | null => {
-  switch (value) {
-    case 'openai-completions':
-    case 'anthropic-messages':
-    case 'openai-responses':
-    case 'google-generative-ai':
-      return value
-    default:
-      return null
-  }
+  const parsed = ProviderApiSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
 }
 
 const modelToSummary = (model: Model<string>): ProviderModel => ({
@@ -148,7 +136,10 @@ const createCustomProvider = (
     throw new Error('Custom provider is missing its API or base URL')
   }
   const baseUrl = record.baseUrl
-  const implementation = API_IMPLEMENTATIONS[api]
+  const implementation = CUSTOM_API_IMPLEMENTATIONS[api]
+  if (!implementation) {
+    throw new Error(`Custom provider API ${api} is not supported`)
+  }
   const models = record.models.map((model) =>
     inputToModel(record.id, baseUrl, api, model)
   )
@@ -354,6 +345,13 @@ export const providerSummary = (
   configured: boolean
 ): ProviderSummary => {
   const factory = record.kind === 'builtin' ? BUILTIN_PROVIDERS[record.id] : undefined
+  const authModes =
+    factory !== undefined
+      ? [
+          ...(factory().auth.apiKey ? (['api_key'] as const) : []),
+          ...(factory().auth.oauth ? (['oauth'] as const) : []),
+        ]
+      : (['api_key'] as const)
   const models =
     record.kind === 'builtin'
       ? (factory?.().getModels() ?? []).map((model) => modelToSummary(model))
@@ -367,6 +365,7 @@ export const providerSummary = (
     id: record.id,
     name: record.name,
     kind: record.kind,
+    authModes: authModes.length > 0 ? [...authModes] : ['api_key'],
     configured,
     ...(record.api ? { api: record.api } : {}),
     ...(record.baseUrl ? { baseUrl: record.baseUrl } : {}),

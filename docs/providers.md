@@ -9,17 +9,13 @@
 
 ## 内置 Provider
 
-首期内置：
+内置目录直接由 Pi 的 `builtinProviders()` 生成，包含其当前全部聊天 Provider，
+包括 Amazon Bedrock、Anthropic、OpenAI、OpenRouter、Groq、Moonshot、Google、
+Google Vertex、Mistral、Cloudflare、Hugging Face、NVIDIA、Together、xAI、
+Z.AI、OpenCode 等。内置目录和模型能力来自 Pi，内置 Provider 也可以填写代理 Base URL。
 
-- Anthropic
-- OpenAI
-- OpenRouter
-- Groq
-- Moonshot AI
-- Google Gemini
-- xAI
-
-内置目录和模型能力来自 Pi。内置 Provider 也可以填写代理 Base URL。
+Pi 中只提供 OAuth 的 Provider 会保留在目录中并标注 OAuth；当前网页设置页先开放
+API Key 认证，OAuth 登录入口后续接入。
 
 ## 自定义 Provider
 

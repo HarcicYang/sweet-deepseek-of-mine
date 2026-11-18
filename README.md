@@ -12,7 +12,7 @@ An independent, community-built chat client built on DeepSeek's official `chat-d
 
 - **Multiple conversations**: auto-generated titles, plus rename, delete, message branching and regeneration.
 - **Secure proxy**: GitHub OAuth sign-in; API keys encrypted server-side with AES-256-GCM, all requests forwarded by a same-origin backend.
-- **Multiple model providers**: use Pi's provider catalogs and protocol implementations for OpenAI, Anthropic, OpenRouter, Groq, Moonshot AI, Gemini, xAI, and custom OpenAI/Anthropic-compatible endpoints. DeepSeek remains the default provider.
+- **Multiple model providers**: use Pi's complete provider catalogs and protocol implementations, plus custom OpenAI/Anthropic/Responses-compatible endpoints. DeepSeek remains the default provider.
 - **Cloud sync and caching**: conversations and settings sync to the cloud; per-account IndexedDB cache, offline outbox, conflict copies.
 - **Installable PWA**: install to the home screen and start from a cached app shell; cached chats remain readable offline while network-only actions wait for a connection.
 - **Multimodal and rich text**: streaming, deep thinking, web search, link reading and citations; full Markdown, syntax highlighting, KaTeX and Mermaid rendering; tables can be copied, downloaded or viewed fullscreen.

@@ -120,6 +120,15 @@
   line-height: 18px !important;
 }
 
+.warning {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 @media (max-width: 720px) {
   .header,
   .provider {

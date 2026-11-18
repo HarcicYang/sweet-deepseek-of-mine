@@ -1353,6 +1353,8 @@ test('provider profiles are account-scoped and never return API keys', async () 
   const listedText = await listed.text()
   assert.match(listedText, /Test gateway/)
   assert.doesNotMatch(listedText, /provider-secret/)
+  const listedBody = JSON.parse(listedText) as { templates: unknown[] }
+  assert.ok(listedBody.templates.length >= 40)
 
   const deleted = await app.request(
     `${APP_ORIGIN}${apiRoutes.provider.replace(':providerId', provider.id)}`,

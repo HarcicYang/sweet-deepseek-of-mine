@@ -145,6 +145,7 @@ const DEEPSEEK_PROVIDER: ProviderSummary = {
   id: 'deepseek',
   name: 'DeepSeek',
   kind: 'deepseek',
+  authModes: ['api_key'],
   configured: false,
   api: 'anthropic-messages',
   models: [
@@ -1714,6 +1715,14 @@ if(data.ok)setTimeout(()=>window.close(),250);
     )
     if (!template) {
       return apiError(context, 400, 'invalid_request', 'Unknown provider template')
+    }
+    if (!template.authModes.includes('api_key')) {
+      return apiError(
+        context,
+        400,
+        'invalid_request',
+        'This provider currently requires OAuth authentication'
+      )
     }
     const user = context.get('auth').user
     const providerId =
