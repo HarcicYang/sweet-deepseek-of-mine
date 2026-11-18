@@ -300,7 +300,6 @@ export const zh = {
   providerAdd: '添加提供商',
   providerCurrent: '当前',
   providerModels: '个模型',
-  providerUse: '使用',
   providerConfigure: '配置 Key',
   providerLoading: '正在加载提供商...',
   providerAddTitle: '添加提供商',

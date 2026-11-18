@@ -314,7 +314,6 @@ export const en = {
   providerAdd: 'Add provider',
   providerCurrent: 'Current',
   providerModels: 'models',
-  providerUse: 'Use',
   providerConfigure: 'Configure key',
   providerLoading: 'Loading providers...',
   providerAddTitle: 'Add provider',

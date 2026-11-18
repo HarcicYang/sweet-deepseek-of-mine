@@ -10,7 +10,7 @@ import {
   refreshProviders,
   useProviders,
 } from '../../services/providers.js'
-import { setDefaultModel, useSettings } from '../../services/settings.js'
+import { useSettings } from '../../services/settings.js'
 import { useTranslate } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -112,20 +112,7 @@ export const ProvidersSettings = () => {
               {provider.baseUrl ? <div className={styles.url}>{provider.baseUrl}</div> : null}
             </div>
             <div className={styles.actions}>
-              {provider.configured ? (
-                <Button
-                  variant="outlined"
-                  size="s"
-                  onClick={() => {
-                    const model = provider.models[0]
-                    if (model) {
-                      setDefaultModel({ providerId: provider.id, modelId: model.id })
-                    }
-                  }}
-                >
-                  {t('providerUse')}
-                </Button>
-              ) : (
+              {!provider.configured ? (
                 <Button
                   variant="outlined"
                   size="s"
@@ -137,7 +124,7 @@ export const ProvidersSettings = () => {
                 >
                   {t('providerConfigure')}
                 </Button>
-              )}
+              ) : null}
               {provider.kind !== 'deepseek' ? (
                 <Button
                   variant="dangerOutlined"
@@ -157,12 +144,8 @@ export const ProvidersSettings = () => {
         <AddProviderDialog
           templates={templates}
           onClose={() => setAddOpen(false)}
-          onCreated={(provider) => {
+          onCreated={() => {
             setAddOpen(false)
-            const model = provider.models[0]
-            if (model) {
-              setDefaultModel({ providerId: provider.id, modelId: model.id })
-            }
           }}
         />
       ) : null}
@@ -195,7 +178,7 @@ const AddProviderDialog = ({
 }: {
   templates: ProviderTemplate[]
   onClose: () => void
-  onCreated: (provider: ProviderSummary) => void
+  onCreated: () => void
 }) => {
   const t = useTranslate()
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? '')
@@ -235,10 +218,10 @@ const AddProviderDialog = ({
     }
     setBusy(true)
     try {
-      const provider = await createProvider(input)
+      await createProvider(input)
       await refreshProviders()
       showToast({ key: 'providerAdded' })
-      onCreated(provider)
+      onCreated()
     } catch {
       showToast({ key: 'providerAddFailed', type: 'error' })
     } finally {
