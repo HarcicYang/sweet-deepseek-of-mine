@@ -106,10 +106,8 @@ export const ensureSelectedModelConfigured = (): boolean => {
 
 export const canUseDeepSeekFeatures = (): boolean => selectedModel().providerId === 'deepseek'
 
-export const hasConfiguredDeepSeekProvider = (
-  providers = useProviders.getState().providers
-): boolean =>
-  providers.some((provider) => provider.id === 'deepseek' && provider.configured) ||
+/** 官方 DeepSeek 能力由账号级 Key 决定，与当前选择的模型或 Provider 无关。 */
+export const hasConfiguredDeepSeekProvider = (): boolean =>
   Boolean(useAuth.getState().user?.hasApiKey)
 
 export const findProviderTemplate = (id: string): ProviderTemplate | undefined =>

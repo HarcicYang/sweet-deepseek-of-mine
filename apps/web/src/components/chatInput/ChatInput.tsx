@@ -76,9 +76,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   )
   const deepSeek = canUseDeepSeekFeatures()
   const hasDeepSeekKey = useAuth((state) => state.user?.hasApiKey ?? false)
-  const deepSeekToolsAvailable = useProviders((state) =>
-    state.providers.some((provider) => provider.id === 'deepseek' && provider.configured)
-  ) || hasDeepSeekKey
+  const deepSeekToolsAvailable = hasDeepSeekKey
   const modelOptions = providers.flatMap((provider) =>
     provider.configured
       ? provider.models.map((model) => ({
