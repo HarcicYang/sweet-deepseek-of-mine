@@ -186,6 +186,7 @@ const ChatCustomFunctionToolSchema = z
   .strict()
 
 const ChatToolSchema = z.union([ChatNativeToolSchema, ChatCustomFunctionToolSchema])
+const DEEPSEEK_NATIVE_TOOL_NAMES = new Set(['deepseek_web_search', 'deepseek_read_url'])
 
 export const ChatProxyRequestSchema = z
   .object({
@@ -223,6 +224,30 @@ export const ChatProxyRequestSchema = z
         message: 'Thinking effort must be omitted when thinking is disabled',
       })
     }
+    request.tools.forEach((tool, index) => {
+      if ('type' in tool) {
+        if (request.providerId !== 'deepseek') {
+          context.addIssue({
+            code: 'custom',
+            path: ['tools', index, 'type'],
+            message: 'Native DeepSeek tools require providerId deepseek',
+          })
+        }
+        if (tool.type !== tool.name) {
+          context.addIssue({
+            code: 'custom',
+            path: ['tools', index, 'name'],
+            message: 'Native DeepSeek tool type and name must match',
+          })
+        }
+      } else if (request.providerId === 'deepseek' && DEEPSEEK_NATIVE_TOOL_NAMES.has(tool.name)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['tools', index, 'name'],
+          message: `Tool name ${tool.name} is reserved in DeepSeek extension mode`,
+        })
+      }
+    })
   })
 
 export type ChatProxyRequest = z.infer<typeof ChatProxyRequestSchema>

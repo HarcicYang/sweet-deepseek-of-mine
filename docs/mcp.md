@@ -82,8 +82,9 @@
 
 ## 模型工具循环
 
-MCP 工具不是单独页面或单独聊天模式，而是和 `deepseek_web_search`、
-`deepseek_read_url` 一起进入同一个回复循环：
+MCP 工具不是单独页面或单独聊天模式。DeepSeek Provider 的原生
+`deepseek_web_search` / `deepseek_read_url` 由上游执行；其他 Provider 的同名函数工具
+和 MCP 工具一起进入客户端回复循环：
 
 1. 请求前读取当前账号启用的 MCP 工具，并和内置工具合并。
 2. 模型返回 `tool_use` 后，客户端查找工具目录并执行服务端 MCP 调用。

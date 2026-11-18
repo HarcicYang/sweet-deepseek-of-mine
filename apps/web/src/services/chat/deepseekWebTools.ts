@@ -9,7 +9,8 @@ import type { ToolResultPart, ToolResultSource } from './types.js'
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
-export const deepSeekWebTools = (search: boolean): CreateMessageRequest['tools'] => [
+/** 非 DeepSeek Provider 通过客户端函数调用，并由后端代理到 DeepSeek Search / Fetch API。 */
+export const deepSeekWebFunctionTools = (search: boolean): CreateMessageRequest['tools'] => [
   {
     name: DEEPSEEK_READ_URL_TOOL_NAME,
     description:

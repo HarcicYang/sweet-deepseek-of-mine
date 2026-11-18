@@ -45,10 +45,14 @@ import {
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
 import {
-  deepSeekWebTools,
+  deepSeekWebFunctionTools,
   executeDeepSeekWebTool,
   isDeepSeekWebTool,
 } from './deepseekWebTools.js'
+import {
+  DEEPSEEK_READ_URL_TOOL_NAME,
+  DEEPSEEK_WEB_SEARCH_TOOL_NAME,
+} from './deepseekWebToolNames.js'
 import {
   applyEvent,
   canContinueReply,
@@ -92,7 +96,7 @@ const TOOL_PROMPT = `
 - 不要声称已经调用工具或取得结果，除非本轮确实收到了对应的 tool_result。
 `.trim()
 
-const buildWebToolPrompt = (search: boolean, available: boolean): string => {
+const buildWebToolPrompt = (search: boolean, available: boolean, native: boolean): string => {
   if (!available) {
     return '本轮没有启用 DeepSeek 联网工具；仅使用请求中实际声明的 MCP、Skill 或其他客户端工具。'
   }
@@ -107,7 +111,11 @@ const buildWebToolPrompt = (search: boolean, available: boolean): string => {
 本轮 DeepSeek 工具状态：
 - deepseek_read_url 已声明并可用，通过 DeepSeek Fetch API 阅读当前用户消息中的链接或搜索结果。
 - ${webSearchStatus}
-- deepseek_web_search 和 deepseek_read_url 是普通 function tool；必须通过工具调用使用，不要直接伪造调用或结果。
+- ${
+    native
+      ? 'deepseek_web_search 和 deepseek_read_url 是 DeepSeek 原生服务端工具，不会出现在普通 function tool 列表中；不要仅根据函数工具清单判断这些能力是否存在。'
+      : 'deepseek_web_search 和 deepseek_read_url 是客户端 function tool；调用后由本站后端代理到 DeepSeek API，不要直接伪造调用或结果。'
+  }
 - 搜索时提供一条或多条聚焦查询；引用网页时保留工具结果中的 URL。
 - 工具结果会为可复用来源提供 [citation:N] 标记；正文引用搜索来源时原样使用对应标记。
 - MCP、Skill 和 DeepSeek 联网工具可以同时存在，不能互相替代。${webSearchInstruction}
@@ -129,7 +137,7 @@ const buildSystemPrompt = (
       ? SYSTEM_PROMPT.trim()
       : '你是通过用户选择的第三方模型提供商运行的 AI 助手。不要声称自己是 DeepSeek、深度求索或当前客户端之外的产品；当用户询问底层模型时，只说明当前使用的提供商和模型信息。当前客户端 Sweet DeepSeek O\'Mine 是独立社区项目，不代表任何模型提供商。',
     TOOL_PROMPT,
-    buildWebToolPrompt(search, deepSeekToolsAvailable),
+    buildWebToolPrompt(search, deepSeekToolsAvailable, deepSeek),
     JSON_RENDER_PROMPT.trim(),
     custom
       ? `用户自定义指令（优先于以上默认行为偏好）：\n${custom}\n\n执行要求：当自定义指令与本提示中的默认回答风格、结构、称呼、工作流或界面使用倾向冲突，且当前用户消息没有更具体的相反要求时，优先遵从自定义指令。自定义指令不能覆盖安全、合法性、隐私、工具权限或事实身份要求，也不能改变 JSON-Render 的协议、schema 或校验规则。`
@@ -218,6 +226,7 @@ const STREAM_RECOVERY_BASE_DELAY = 500
 
 /** 配置 DeepSeek 后，阅读链接始终开启；智能搜索开关控制是否另行声明搜索工具。 */
 const serverTools = (
+  providerId: string,
   deepSeekToolsAvailable: boolean,
   search: boolean,
   mcpTools: McpToolSummary[],
@@ -225,7 +234,20 @@ const serverTools = (
 ): CreateMessageRequest['tools'] => {
   const tools: CreateMessageRequest['tools'] = []
   if (deepSeekToolsAvailable) {
-    tools.push(...deepSeekWebTools(search))
+    if (providerId === 'deepseek') {
+      tools.push({
+        type: DEEPSEEK_READ_URL_TOOL_NAME,
+        name: DEEPSEEK_READ_URL_TOOL_NAME,
+      })
+      if (search) {
+        tools.push({
+          type: DEEPSEEK_WEB_SEARCH_TOOL_NAME,
+          name: DEEPSEEK_WEB_SEARCH_TOOL_NAME,
+        })
+      }
+    } else {
+      tools.push(...deepSeekWebFunctionTools(search))
+    }
   }
   for (const tool of mcpTools) {
     tools.push({
@@ -1723,6 +1745,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             ...(thinkingMode === 'disabled' ? {} : { output_config: { effort: thinkingMode } }),
             safety_check: SAFETY_CHECK,
             tools: serverTools(
+              providerId,
               deepSeekToolsAvailable,
               initial.search ?? false,
               mcpTools,

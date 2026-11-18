@@ -36,10 +36,11 @@ DeepSeek 官方 Provider 继续使用现有专用聊天代理，以保留：
 - `latest_reminder`
 - 标题生成和安全参数
 
-只要账号配置了 DeepSeek API Key，所有 Provider 都会声明自定义
-`deepseek_web_search` 与 `deepseek_read_url` 工具。工具调用由服务端代理到
-DeepSeek Search API 和 Fetch API，浏览器不接触 DeepSeek Key；搜索结果继续复用现有
-搜索时间线、来源列表与 `[citation:N]` 渲染。
+只要账号配置了 DeepSeek API Key，所有 Provider 都能使用联网搜索与网页读取。
+DeepSeek Provider 声明 `deepseek_web_search` 与 `deepseek_read_url` 原生服务端工具；
+其他 Provider 使用同名客户端 function tool，由服务端代理到 DeepSeek Search API 和
+Fetch API。浏览器不接触 DeepSeek Key；搜索结果继续复用现有搜索时间线、来源列表与
+`[citation:N]` 渲染。
 
 文件上传和语音转写由账号级 DeepSeek Key 提供，因此对非 DeepSeek Provider 也可用。
 图片能否随消息发送由当前模型是否声明 `image` 输入能力决定；非 DeepSeek 模型会读取
