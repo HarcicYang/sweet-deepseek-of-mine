@@ -52,10 +52,8 @@ export const ModelThinkingMenu = ({
           `${option.label} ${option.value}`.toLocaleLowerCase().includes(normalized)
         )
       : modelOptions
-    const current = matched.find((option) => option.value === currentModelValue)
-    const rest = matched.filter((option) => option.value !== currentModelValue)
-    return [...(current ? [current] : []), ...rest].slice(0, MAX_VISIBLE_MODELS)
-  }, [currentModelValue, deferredQuery, modelOptions])
+    return matched.slice(0, MAX_VISIBLE_MODELS)
+  }, [deferredQuery, modelOptions])
 
   const currentModel = modelOptions.find((option) => option.value === currentModelValue)
 
