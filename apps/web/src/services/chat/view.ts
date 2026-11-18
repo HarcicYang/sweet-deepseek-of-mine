@@ -520,7 +520,9 @@ export const getAreaTitle = (
   view: ReplyView,
   streaming: boolean,
   now: number,
-  hasResponse = view.answer !== null
+  hasResponse = view.answer !== null,
+  status?: 'pending' | 'streaming' | 'done' | 'stopped' | 'error',
+  stopReason?: 'end_turn' | 'max_tokens' | 'tool_use' | 'refusal'
 ) => {
   if (hasResponse) {
     const count = getTotalThinkingSeconds(view.steps, now)
@@ -530,6 +532,12 @@ export const getAreaTitle = (
     return translate(count === 1 ? 'messageThinkDuration' : 'messageThinkDurationPlural', { count })
   }
   if (!streaming) {
+    if (status === 'error') {
+      return translate('messageThinkInterrupted')
+    }
+    if (stopReason === 'max_tokens') {
+      return translate('messageThinkTruncated')
+    }
     return translate('messageThinkStopped')
   }
   const last = view.steps.at(-1)

@@ -77,7 +77,9 @@ export const ReplyArea = memo(function ReplyArea({
   }
   // 未记录请求开关时，按是否有思考内容显示标题。
   const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
-  const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
+  const title = thinking
+    ? getAreaTitle(view, streaming, Date.now(), hasResponse, message.status, message.stopReason)
+    : null
   const thinkingPreview = thinking ? getThinkingPreview(view.steps, streaming) : null
   const titleText = open ? title : (thinkingPreview ?? title)
   const stopped = !streaming && !hasResponse

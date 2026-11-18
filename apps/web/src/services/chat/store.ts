@@ -212,6 +212,9 @@ const SAFETY_CHECK = { level: 'high' } as const
 const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
+/** SSE 在正常结束帧前断开时，自动恢复的次数与起始退避。 */
+const STREAM_RECOVERY_LIMIT = 5
+const STREAM_RECOVERY_BASE_DELAY = 500
 
 /** 配置 DeepSeek 后，阅读链接始终开启；智能搜索开关控制是否另行声明搜索工具。 */
 const serverTools = (
@@ -1254,8 +1257,8 @@ const blobToBase64 = async (blob: Blob): Promise<string> => {
   return btoa(binary)
 }
 
-/** 重传前的退避等待；停止生成时立即返回，由调用方按已停止收尾 */
-const waitForRetry = (attempt: number, signal: AbortSignal) =>
+/** 重试前的退避等待；停止生成时立即返回，由调用方按已停止收尾 */
+const waitForRetry = (attempt: number, signal: AbortSignal, baseDelay = FILE_RETRY_BASE_DELAY) =>
   new Promise<void>((resolve) => {
     function onAbort() {
       clearTimeout(timer)
@@ -1266,10 +1269,33 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
         signal.removeEventListener('abort', onAbort)
         resolve()
       },
-      FILE_RETRY_BASE_DELAY * 2 ** attempt
+      baseDelay * 2 ** attempt
     )
     signal.addEventListener('abort', onAbort, { once: true })
   })
+
+/** 网络错误、网关错误和缺少 message_stop 的正常断流可以自动恢复。 */
+const isRecoverableStreamError = (error: unknown) =>
+  error instanceof ApiError &&
+  (error.kind === 'interrupted' ||
+    error.kind === 'network' ||
+    (error.kind === 'http' && (error.status === 429 || (error.status ?? 0) >= 500)))
+
+/**
+ * 只有文本或带签名的思考能安全作为续写前缀。
+ * 思考流在中途断开时通常还没有签名，此时保留展示内容，但请求从头重试。
+ */
+const getStreamRecoveryPrefix = (reply: AssistantMessage): AssistantMessage | null => {
+  if (!reply.blocks.every((block) => block.type === 'text' || block.type === 'thinking')) {
+    return null
+  }
+  const blocks = reply.blocks.filter(
+    (block) =>
+      (block.type === 'text' && block.text.trim() !== '') ||
+      (block.type === 'thinking' && Boolean(block.signature?.trim()))
+  )
+  return blocks.length > 0 ? { ...reply, blocks } : null
+}
 
 const loadSkillDetail = async (
   skill: SkillSummary,
@@ -1536,6 +1562,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
   let reply = initial
+  let resumePrefix = request.prefix
+  let streamRecoveryCount = 0
   let frame = 0
   const flush = () => {
     cancelAnimationFrame(frame)
@@ -1632,8 +1660,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           images: promptImages,
         }
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-        const latestReminder = prepared.prefix
-          ? prepared.prefix.latestReminder
+        const latestReminder = resumePrefix
+          ? resumePrefix.latestReminder
           : createLatestReminder(useSettings.getState())
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
@@ -1656,7 +1684,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             ? toRequestMessages(
                 prepared.history,
                 modelQuestion,
-                prepared.prefix,
+                resumePrefix,
                 initial.thinking ?? false,
                 latestReminder,
                 fileOptions
@@ -1778,6 +1806,39 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
           // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
           reply = settleReply(reply, 'done', Date.now())
+        } else if (
+          isRecoverableStreamError(error) &&
+          streamRecoveryCount < STREAM_RECOVERY_LIMIT &&
+          reply.blocks.every((block) => block.type === 'text' || block.type === 'thinking') &&
+          (typeof navigator === 'undefined' || navigator.onLine !== false)
+        ) {
+          const recoveryPrefix = getStreamRecoveryPrefix(reply)
+          streamRecoveryCount += 1
+          // 先收尾当前块；下一条请求从安全前缀继续，或从头重试未签名的思考。
+          reply = {
+            ...settleReply(reply, 'stopped', Date.now()),
+            status: 'streaming',
+            stopReason: undefined,
+            stopDetails: undefined,
+            error: undefined,
+          }
+          if (recoveryPrefix) {
+            resumePrefix = recoveryPrefix
+          }
+          updateReply(sessionId, reply)
+          persist(sessionId)
+          await waitForRetry(
+            streamRecoveryCount - 1,
+            controller.signal,
+            STREAM_RECOVERY_BASE_DELAY
+          )
+          if (controller.signal.aborted) {
+            reply = settleReply(reply, 'stopped', Date.now())
+            break
+          }
+          // 自动恢复不消耗附件失效重传的额度。
+          attempt -= 1
+          continue
         } else if (error instanceof ApiError) {
           reply = settleReply(reply, 'error', Date.now(), {
             kind: error.kind,

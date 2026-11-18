@@ -617,6 +617,5 @@ export async function* streamMessage(
       return
     }
   }
-  // 服务端没有提供错误内容时保持为空，不推测断流原因。
-  throw new ApiError('interrupted', '')
+  throw new ApiError('interrupted', { key: 'replyStreamInterrupted' })
 }
