@@ -12,8 +12,6 @@ type ModelChoice = {
   label: string
 }
 
-const MAX_VISIBLE_MODELS = 120
-
 export const ModelThinkingMenu = ({
   currentModelValue,
   modelOptions,
@@ -52,7 +50,7 @@ export const ModelThinkingMenu = ({
           `${option.label} ${option.value}`.toLocaleLowerCase().includes(normalized)
         )
       : modelOptions
-    return matched.slice(0, MAX_VISIBLE_MODELS)
+    return matched
   }, [deferredQuery, modelOptions])
 
   const currentModel = modelOptions.find((option) => option.value === currentModelValue)
