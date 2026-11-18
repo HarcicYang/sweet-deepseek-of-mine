@@ -12,6 +12,7 @@ import { createSecurityService } from './security.js'
 import { MemoryShareStore } from './share-store.js'
 import { MemorySkillStore } from './skill-store.js'
 import { MemorySyncStore } from './sync-store.js'
+import { MemoryProviderStore } from './provider-store.js'
 
 const APP_ORIGIN = 'http://localhost:8090'
 const MASTER_KEY = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
@@ -36,6 +37,7 @@ const createTestApp = async (
 ) => {
   const security = await createSecurityService(MASTER_KEY)
   const store = new MemoryAccountStore()
+  const providerStore = new MemoryProviderStore()
   const syncStore = new MemorySyncStore()
   const mcpStore = new MemoryMcpStore()
   const mcpOAuthStore = new MemoryMcpOAuthStore()
@@ -126,6 +128,7 @@ const createTestApp = async (
   }
   const app = createApp({
     store,
+    providerStore,
     syncStore,
     shareStore: new MemoryShareStore(),
     mcpStore,
@@ -159,6 +162,7 @@ const createTestApp = async (
   })
   return {
     app,
+    providerStore,
     calls,
     syncStore,
     mcpStore,
@@ -1266,9 +1270,10 @@ test('settings sync advances one revision per account', async () => {
   assert.deepEqual(await initial.json(), { settings: null })
 
   const payload = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     thinkingMode: 'high',
     customInstructions: 'Prefer concise answers.',
+    defaultModel: null,
     search: false,
     ttsVoice: 'tide',
     location: { region: 'CN', province: '440000', city: '440300' },
@@ -1306,4 +1311,52 @@ test('settings sync advances one revision per account', async () => {
   }
   assert.equal(updatedBody.settings.revision, 2)
   assert.deepEqual(updatedBody.settings.payload, updatedPayload)
+})
+
+test('provider profiles are account-scoped and never return API keys', async () => {
+  const { app } = await createTestApp()
+  const sessionToken = await authenticate(app)
+  const headers = {
+    Cookie: `sdom_session=${sessionToken}`,
+    Origin: APP_ORIGIN,
+    'Content-Type': 'application/json',
+  }
+  const created = await app.request(`${APP_ORIGIN}${apiRoutes.providers}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      templateId: 'custom-openai-completions',
+      name: 'Test gateway',
+      apiKey: 'provider-secret',
+      baseUrl: 'https://gateway.example.test/v1',
+      models: [
+        {
+          id: 'test-model',
+          contextWindow: 64_000,
+          maxTokens: 8_000,
+          input: ['text'],
+          reasoning: false,
+          thinkingLevels: [],
+        },
+      ],
+    }),
+  })
+  assert.equal(created.status, 200)
+  const createdText = await created.text()
+  assert.doesNotMatch(createdText, /provider-secret/)
+  const provider = (JSON.parse(createdText) as { provider: { id: string } }).provider
+
+  const listed = await app.request(`${APP_ORIGIN}${apiRoutes.providers}`, {
+    headers: { Cookie: `sdom_session=${sessionToken}` },
+  })
+  assert.equal(listed.status, 200)
+  const listedText = await listed.text()
+  assert.match(listedText, /Test gateway/)
+  assert.doesNotMatch(listedText, /provider-secret/)
+
+  const deleted = await app.request(
+    `${APP_ORIGIN}${apiRoutes.provider.replace(':providerId', provider.id)}`,
+    { method: 'DELETE', headers }
+  )
+  assert.equal(deleted.status, 204)
 })

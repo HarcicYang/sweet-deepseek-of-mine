@@ -57,6 +57,14 @@ import {
   type SkillUpdate,
 } from '@sweet-deepseek/contracts/skills'
 import {
+  ProviderResponseSchema,
+  ProvidersResponseSchema,
+  type ProviderCreateRequest,
+  type ProviderSummary,
+  type ProviderTemplate,
+  type ProviderUpdateRequest,
+} from '@sweet-deepseek/contracts/providers'
+import {
   JsonRenderValidationResponseSchema,
   type JsonRenderDocument,
 } from '@sweet-deepseek/json-render'
@@ -387,6 +395,46 @@ export const saveDeepSeekKey = async (apiKey: string): Promise<ApiKeyStatusRespo
 export const deleteDeepSeekKey = async (): Promise<ApiKeyStatusResponse> => {
   const response = await request(apiRoutes.deepseekKey, { method: 'DELETE' })
   return parseResponse(ApiKeyStatusResponseSchema, await response.json())
+}
+
+export const listProviders = async (): Promise<{
+  providers: ProviderSummary[]
+  templates: ProviderTemplate[]
+}> => {
+  const response = await request(apiRoutes.providers)
+  return parseResponse(ProvidersResponseSchema, await response.json())
+}
+
+export const createProvider = async (
+  input: ProviderCreateRequest
+): Promise<ProviderSummary> => {
+  const response = await request(apiRoutes.providers, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseResponse(ProviderResponseSchema, await response.json()).provider
+}
+
+export const updateProvider = async (
+  providerId: string,
+  input: ProviderUpdateRequest
+): Promise<ProviderSummary> => {
+  const response = await request(
+    apiRoutes.provider.replace(':providerId', encodeURIComponent(providerId)),
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }
+  )
+  return parseResponse(ProviderResponseSchema, await response.json()).provider
+}
+
+export const deleteProvider = async (providerId: string): Promise<void> => {
+  await request(apiRoutes.provider.replace(':providerId', encodeURIComponent(providerId)), {
+    method: 'DELETE',
+  })
 }
 
 export const listCloudSessions = async (): Promise<SyncSessionSummary[]> => {

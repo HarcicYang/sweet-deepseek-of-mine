@@ -32,11 +32,13 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 
 - `apps/web` 是 React 18、TypeScript、Rspack、Zustand、`idb`、`fflate` 客户端。
 - `apps/server` 是 TypeScript + Hono 服务端，包含 GitHub OAuth 会话、加密 Key 存储、聊天 / 附件 / 语音代理，以及 Node / Cloudflare Workers adapter。
+- 通用模型提供商运行时直接复用 `@earendil-works/pi-ai`：Provider 目录、模型元数据、协议实现、工具调用和 reasoning 映射由 Pi 负责；项目只保留多租户配置、加密凭据和现有 SSE/UI 边界转换。
 - `packages/contracts` 保存前后端共享协议、上游 SSE 事件类型和运行时校验。
 - `packages/json-render` 保存版本化 JSON UI schema、围栏提取和结构限制校验。
 - Web 默认通过同源 `/api` 接口访问服务端，也可通过 `SDOM_API_BASE_URL` 指向独立后端，不再直接请求 DeepSeek API。
 - Web 生产构建同时生成可安装的 PWA：manifest、PNG 图标、Workbox Service Worker 和应用壳预缓存；`/api/*` 不进入缓存。
 - DeepSeek API Key 只加密保存在服务端，浏览器不持久化明文。
+- 非 DeepSeek Provider 的 API Key 也按账号加密保存在服务端；Provider 配置使用稳定 ID，聊天请求使用 `providerId + modelId`。
 - 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。
 - 离线启动只使用最近登录用户的本地 IndexedDB 缓存；网络请求、附件上传、语音、分享、MCP 和 Skill 调用必须重新联网。
 - 同步使用 IndexedDB outbox、会话 revision、删除墓碑和冲突副本，支持离线恢复。
@@ -44,6 +46,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - 自定义指令是账号级同步设置，最多 16,000 字符；在回答风格、结构、称呼、工作流和界面使用倾向上优先于默认行为，但不能突破安全、隐私和工具权限边界，也不能改写实际模型身份。
 - 附件元数据随会话同步，附件原件和对象存储尚未进入云端同步。
 - 附件和 ASR multipart 以限长流转发，不在服务端整体缓冲。
+- DeepSeek 原生搜索、文件、语音和 `latest_reminder` 继续走 DeepSeek 专用路径；其他提供商通过 Pi 的标准协议适配器运行。附件原件和语音当前仍只支持 DeepSeek 路径。
 - 聊天状态集中在 `apps/web/src/services/chat/store.ts`。
 - 前端 API 和 SSE 传输位于 `apps/web/src/services/api/`。
 - 主回答已支持受约束的 JSON-Render、服务端二次校验和 Markdown 回退；当前 action 仅限复制和发起 prompt。

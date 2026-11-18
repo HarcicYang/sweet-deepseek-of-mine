@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { ThinkingEffortSchema, ThinkingModeSchema } from './deepseek.js'
+import { ModelRefSchema } from './providers.js'
 
 export const SYNC_SCHEMA_VERSION = 1
-export const SYNC_SETTINGS_SCHEMA_VERSION = 3
+export const SYNC_SETTINGS_SCHEMA_VERSION = 4
 export const CUSTOM_INSTRUCTIONS_MAX_LENGTH = 16_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
@@ -140,7 +141,8 @@ const AssistantMessageSchema = z
     id: z.string().min(1).max(200),
     role: z.literal('assistant'),
     createdAt: z.number().int().nonnegative(),
-    model: z.enum(['deepseek-flash', 'deepseek-v4-pro']).nullable(),
+    model: z.string().min(1).max(256).nullable(),
+    providerId: z.string().min(1).max(128).optional(),
     thinking: z.boolean().optional(),
     thinkingEffort: ThinkingEffortSchema.optional(),
     search: z.boolean().optional(),
@@ -268,11 +270,21 @@ const SyncedSettingsPayloadV2Schema = z
   })
   .strict()
 
+const SyncedSettingsPayloadV3Schema = z
+  .object({
+    schemaVersion: z.literal(3),
+    thinkingMode: ThinkingModeSchema,
+    customInstructions: z.string().max(CUSTOM_INSTRUCTIONS_MAX_LENGTH),
+    ...SyncedSettingsFields,
+  })
+  .strict()
+
 export const SyncedSettingsPayloadSchema = z
   .object({
     schemaVersion: z.literal(SYNC_SETTINGS_SCHEMA_VERSION),
     thinkingMode: ThinkingModeSchema,
     customInstructions: z.string().max(CUSTOM_INSTRUCTIONS_MAX_LENGTH),
+    defaultModel: ModelRefSchema.nullable(),
     ...SyncedSettingsFields,
   })
   .strict()
@@ -286,6 +298,7 @@ export const SyncedSettingsPayloadReadSchema = z.union([
       schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
       thinkingMode: payload.thinking ? ('high' as const) : ('disabled' as const),
       customInstructions: '',
+      defaultModel: null,
       search: payload.search,
       ttsVoice: payload.ttsVoice,
       location: payload.location,
@@ -297,6 +310,14 @@ export const SyncedSettingsPayloadReadSchema = z.union([
       ...payload,
       schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
       customInstructions: '',
+      defaultModel: null,
+    })
+  ),
+  SyncedSettingsPayloadV3Schema.transform(
+    (payload): SyncedSettingsPayload => ({
+      ...payload,
+      schemaVersion: SYNC_SETTINGS_SCHEMA_VERSION,
+      defaultModel: null,
     })
   ),
 ])

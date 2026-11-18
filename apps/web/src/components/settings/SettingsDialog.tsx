@@ -9,6 +9,7 @@ import {
   IconLinkOutline16,
   IconSettingsOutline16,
   IconSkillOutline16,
+  IconThinkOutline16,
   IconUploadOutline14,
 } from '../base/icons.js'
 import { CUSTOM_INSTRUCTIONS_MAX_LENGTH } from '@sweet-deepseek/contracts/sync'
@@ -40,6 +41,7 @@ import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { AccountField } from './AccountField.js'
 import { McpServersSettings } from './McpServersSettings.js'
 import { SkillsSettings } from './SkillsSettings.js'
+import { ProvidersSettings } from './ProvidersSettings.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import { canShowInstallHelp, requestPwaInstall, usePwa } from '../../services/pwa.js'
 import styles from './Settings.module.css'
@@ -58,6 +60,11 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     value: 'general',
     label: 'settingDialogAsideGeneralOptionLabel',
     icon: <IconSettingsOutline16 />,
+  },
+  {
+    value: 'models',
+    label: 'settingDialogAsideModelsOptionLabel',
+    icon: <IconThinkOutline16 />,
   },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
   { value: 'skills', label: 'settingDialogAsideSkillsOptionLabel', icon: <IconSkillOutline16 /> },
@@ -113,6 +120,8 @@ const SettingsContent = () => {
               <LocationSetting />
               <CustomInstructionsSetting />
             </>
+          ) : section === 'models' ? (
+            <ProvidersSettings />
           ) : section === 'data' ? (
             <>
               <AccountField />

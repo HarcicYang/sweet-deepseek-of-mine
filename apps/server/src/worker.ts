@@ -3,6 +3,7 @@ import { createApp, DEFAULT_REQUEST_BODY_LIMITS } from './app.js'
 import { D1AccountStore } from './d1-account-store.js'
 import { D1McpStore } from './d1-mcp-store.js'
 import { D1McpOAuthStore } from './d1-mcp-oauth-store.js'
+import { D1ProviderStore } from './d1-provider-store.js'
 import { D1ShareStore } from './d1-share-store.js'
 import { D1SkillStore } from './d1-skill-store.js'
 import { D1SyncStore } from './d1-sync-store.js'
@@ -58,6 +59,7 @@ const getApp = (env: WorkerEnv): Promise<ReturnType<typeof createApp>> => {
     allowedOrigins.push(apiOrigin)
     return createApp({
       store: new D1AccountStore(env.DB),
+      providerStore: new D1ProviderStore(env.DB),
       syncStore: new D1SyncStore(env.DB),
       shareStore: new D1ShareStore(env.DB),
       mcpStore: new D1McpStore(env.DB),

@@ -14,9 +14,10 @@ test('file-backed sync settings migrate version 1 storage and persist revisions'
     assert.equal(await firstStore.getSettings('user-1'), null)
 
     const payload = {
-      schemaVersion: 3 as const,
+      schemaVersion: 4 as const,
       thinkingMode: 'high' as const,
       customInstructions: 'Prefer concise answers.',
+      defaultModel: null,
       search: false,
       ttsVoice: 'tide' as const,
       location: { region: 'CN', province: '440000', city: '440300' },
@@ -72,9 +73,10 @@ test('file-backed sync settings migrate legacy boolean thinking on read', async 
     )
     const store = new FileSyncStore(filePath)
     assert.deepEqual((await store.getSettings('user-1'))?.payload, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       thinkingMode: 'high',
       customInstructions: '',
+      defaultModel: null,
       search: false,
       ttsVoice: 'tide',
       location: null,
@@ -114,9 +116,10 @@ test('file-backed sync settings migrate version 2 settings without custom instru
     )
     const store = new FileSyncStore(filePath)
     assert.deepEqual((await store.getSettings('user-1'))?.payload, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       thinkingMode: 'low',
       customInstructions: '',
+      defaultModel: null,
       search: true,
       ttsVoice: 'stella',
       location: null,

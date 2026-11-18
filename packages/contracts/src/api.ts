@@ -8,6 +8,8 @@ export const apiRoutes = {
   session: '/api/auth/session',
   logout: '/api/auth/logout',
   deepseekKey: '/api/account/deepseek-key',
+  providers: '/api/providers',
+  provider: '/api/providers/:providerId',
   chat: '/api/chat',
   files: '/api/files',
   file: '/api/files/:fileId',
@@ -142,7 +144,8 @@ const ChatToolSchema = z.union([ChatNativeToolSchema, ChatCustomFunctionToolSche
 
 export const ChatProxyRequestSchema = z
   .object({
-    model: z.enum(['deepseek-flash', 'deepseek-v4-pro']),
+    providerId: z.string().min(1).max(128).default('deepseek'),
+    model: z.string().min(1).max(256),
     system: z.string().max(200_000),
     messages: z.array(ChatMessageSchema).min(1).max(500),
     thinking: z.object({ type: z.enum(['enabled', 'disabled']) }).strict(),

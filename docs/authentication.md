@@ -17,15 +17,18 @@ OAuth scope 目前只有 `read:user`。代码不依赖 GitHub OAuth Apps 的 PKC
 ## API Key
 
 - `PUT /api/account/deepseek-key` 接收用户提交的 DeepSeek API Key。
+- `POST /api/providers`、`PUT /api/providers/:providerId` 接收其他 Provider 的 API Key。
 - Key 使用 AES-256-GCM 加密，`APP_MASTER_KEY` 是部署环境提供的 32 字节主密钥。
-- 附加认证数据绑定账户 ID，复制到其他账户的密文无法解密。
+- 附加认证数据绑定账户 ID 和 Provider ID，复制到其他账户或 Provider 的密文无法解密。
 - `GET /api/account/deepseek-key` 只返回是否已配置，不返回 Key 明文或掩码。
+- `GET /api/providers` 只返回 Provider 配置和模型摘要，不返回 Key 明文或掩码。
 - 聊天代理在请求时临时解密 Key，服务端不记录 Key、鉴权头或完整请求内容。
 
 ## 聊天代理
 
-`POST /api/chat` 需要有效登录会话和已配置的 API Key。服务端校验共享请求 schema 后，
-以 `stream: true` 请求 DeepSeek Anthropic 兼容接口，并把 SSE 响应直接流式转发给客户端。
+`POST /api/chat` 需要有效登录会话。请求中的 `providerId` 为 `deepseek` 时，服务端校验共享请求 schema 后，
+以 `stream: true` 请求 DeepSeek Anthropic 兼容接口；其他 Provider 通过 Pi 的协议适配器调用，
+并把统一的 SSE 事件流式返回客户端。
 客户端断开时上游请求随之中止；默认超时为 15 分钟，可通过
 `DEEPSEEK_REQUEST_TIMEOUT_MS` 调整。
 

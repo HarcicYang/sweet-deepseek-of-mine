@@ -278,6 +278,27 @@
   }
 }
 
+.modelSelect {
+  max-width: 230px;
+  height: 34px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background-color: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+
+  &:hover:not(:disabled) {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+@media not all and (min-width: 768px) {
+  .modelSelect {
+    max-width: 150px;
+  }
+}
+
 .collapsedToggles .toggleLabel {
   display: none;
 }

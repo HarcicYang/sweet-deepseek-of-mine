@@ -12,6 +12,7 @@ import { createSecurityService } from './security.js'
 import { FileShareStore } from './share-store.js'
 import { FileSkillStore } from './skill-store.js'
 import { FileSyncStore } from './sync-store.js'
+import { FileProviderStore } from './provider-store.js'
 
 const readPositiveInt = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -53,6 +54,9 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const store = new FileAccountStore(
   path.resolve(repositoryRoot, process.env.AUTH_DB_PATH ?? '.data/accounts.json')
 )
+const providerStore = new FileProviderStore(
+  path.resolve(repositoryRoot, process.env.PROVIDER_DB_PATH ?? '.data/providers.json')
+)
 const syncStore = new FileSyncStore(
   path.resolve(repositoryRoot, process.env.SYNC_DB_PATH ?? '.data/sync.json')
 )
@@ -70,6 +74,7 @@ const skillStore = new FileSkillStore(
 )
 const app = createApp({
   store,
+  providerStore,
   syncStore,
   shareStore,
   mcpStore,

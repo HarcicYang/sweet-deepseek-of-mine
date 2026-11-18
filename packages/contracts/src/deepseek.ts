@@ -204,7 +204,8 @@ export type DeepseekReadUrlTool = {
 }
 
 export type CreateMessageRequest = {
-  model: ChatModel
+  providerId: string
+  model: string
   system: string
   messages: MessageParam[]
   thinking: ThinkingConfig

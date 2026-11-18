@@ -52,6 +52,7 @@ Node adapter 使用 `.data/` 下的文件存储，适合单实例自托管。复
 - `MCP_ALLOW_PRIVATE_NETWORK`：默认 `false`；单用户本地部署需要访问局域网 MCP 时才设为 `true`。
 - `MCP_OAUTH_DB_PATH`：Node 自托管时 OAuth 状态与 token 的加密存储文件路径。
 - `SKILL_DB_PATH`：Node 自托管时账号级 Skill 的存储文件路径，默认 `.data/skills.json`。
+- `PROVIDER_DB_PATH`：Node 自托管时账号级 Provider 配置和加密 Key 的存储文件路径，默认 `.data/providers.json`。
 - `MCP_OAUTH_CLIENTS`：可选 JSON 数组，用于给不支持动态客户端注册的 MCP 提供方配置部署级
   Client ID / Secret。普通用户无需接触该配置。
 - `REQUEST_BODY_LIMIT_CHAT_BYTES`：聊天 JSON 请求上限，默认 20 MiB。
@@ -82,10 +83,11 @@ Workers 配置位于 `apps/server/wrangler.jsonc`，使用免费 D1 保存账号
    pnpm worker:migrate:remote
    ```
 
-   该命令会应用 `0001`–`0008`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
+该命令会应用 `0001`–`0009`：`0003` 创建账号级 MCP 服务表，`0004` 增加认证方式和
    加密 OAuth 状态/token 存储，`0005` 清除旧版本中用户级 OAuth Client 配置的残留，
-   `0006` 创建账号级 Skill 表，`0007` 增加 Skill Bundle 文本资源并将旧单文件 Skill
-   迁移为包含 `SKILL.md` 的单文件 Bundle，`0008` 增加 MCP 工具审批模式。
+    `0006` 创建账号级 Skill 表，`0007` 增加 Skill Bundle 文本资源并将旧单文件 Skill
+   迁移为包含 `SKILL.md` 的单文件 Bundle，`0008` 增加 MCP 工具审批模式，`0009`
+   增加账号级模型 Provider 配置和加密凭据表。
 
 3. 创建生产环境使用的 GitHub OAuth App：
    - 打开 GitHub 的 `Settings → Developer settings → OAuth Apps → New OAuth App`。
@@ -151,6 +153,7 @@ Worker 默认同时提供 `apps/web/dist` 和 `/api`，这是最简单的单服�
 ## 数据边界
 
 - 账号、设置、会话元数据和会话快照位于后端存储。
+- Provider 配置、模型元数据和非 DeepSeek Provider 的加密 API Key 位于账号级后端存储。
 - MCP 服务地址按账号保存，请求头使用服务端主密钥加密；浏览器只读取请求头名称。
 - MCP OAuth 的 client information、PKCE verifier、discovery state 和 token 同样由服务端加密保存。
 - 附件元数据随会话同步，附件原件目前只保存在设备本地。

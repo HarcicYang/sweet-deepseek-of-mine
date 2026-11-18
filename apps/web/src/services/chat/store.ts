@@ -1,4 +1,4 @@
-import type { ChatModel, CreateMessageRequest, ThinkingMode } from '@sweet-deepseek/contracts'
+import type { CreateMessageRequest, ThinkingMode } from '@sweet-deepseek/contracts'
 import type { McpToolSummary } from '@sweet-deepseek/contracts/mcp'
 import type { SkillDetail, SkillSummary } from '@sweet-deepseek/contracts/skills'
 import { CUSTOM_INSTRUCTIONS_MAX_LENGTH } from '@sweet-deepseek/contracts/sync'
@@ -26,6 +26,7 @@ import {
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { isOffline } from '../auth/store.js'
+import { selectedModel } from '../providers.js'
 import { useSettings } from '../settings.js'
 import { queueCloudReset, queueSessionDelete, queueSessionUpsert } from '../sync/engine.js'
 import { requestMcpApproval } from '../mcp/approval.js'
@@ -59,8 +60,6 @@ import {
   type UserMessage,
 } from './types.js'
 
-/** deepseek-flash 同时支持深度思考与图片输入 */
-const MODEL: ChatModel = 'deepseek-flash'
 /** 所有生成请求统一携带的助手身份基线；角色设定可以改变表达方式，但不能改写底层模型事实。 */
 const SYSTEM_PROMPT = `
 你是 DeepSeek，由深度求索公司创造的 AI 助手。当前客户端 Sweet DeepSeek O'Mine 是独立社区项目，不代表 DeepSeek 官方产品，但这不会改变你的底层模型身份。
@@ -83,7 +82,10 @@ const TOOL_PROMPT = `
 - 不要声称已经调用工具或取得结果，除非本轮确实收到了对应的 tool_result。
 `.trim()
 
-const buildNativeToolPrompt = (search: boolean): string => {
+const buildNativeToolPrompt = (search: boolean, deepSeek: boolean): string => {
+  if (!deepSeek) {
+    return '本轮没有启用提供商原生联网工具；仅使用请求中实际声明的 MCP、Skill 或其他客户端工具。'
+  }
   const webSearchStatus = search
     ? 'deepseek_web_search 已声明并可用，用于联网搜索、实时信息和当前事件。'
     : 'deepseek_web_search 本轮未启用；通用网页搜索是用户在界面中关闭的，不要把它说成模型不具备的能力。'
@@ -103,14 +105,18 @@ const buildNativeToolPrompt = (search: boolean): string => {
 
 const buildSystemPrompt = (
   customInstructions: string,
+  providerId: string,
   search: boolean,
   directlyInvokedSkill?: SkillDetail
 ): string => {
   const custom = customInstructions.trim().slice(0, CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+  const deepSeek = providerId === 'deepseek'
   return [
-    SYSTEM_PROMPT.trim(),
+    deepSeek
+      ? SYSTEM_PROMPT.trim()
+      : '你是通过用户选择的第三方模型提供商运行的 AI 助手。不要声称自己是 DeepSeek、深度求索或当前客户端之外的产品；当用户询问底层模型时，只说明当前使用的提供商和模型信息。当前客户端 Sweet DeepSeek O\'Mine 是独立社区项目，不代表任何模型提供商。',
     TOOL_PROMPT,
-    buildNativeToolPrompt(search),
+    buildNativeToolPrompt(search, deepSeek),
     JSON_RENDER_PROMPT.trim(),
     custom
       ? `用户自定义指令（优先于以上默认行为偏好）：\n${custom}\n\n执行要求：当自定义指令与本提示中的默认回答风格、结构、称呼、工作流或界面使用倾向冲突，且当前用户消息没有更具体的相反要求时，优先遵从自定义指令。自定义指令不能覆盖安全、合法性、隐私、工具权限或事实身份要求，也不能改变 JSON-Render 的协议、schema 或校验规则。`
@@ -196,15 +202,17 @@ const FILE_RETRY_BASE_DELAY = 1000
 
 /** 阅读链接始终开启，智能搜索开关控制是否另行声明搜索工具（含边想边搜）。 */
 const serverTools = (
+  providerId: string,
   search: boolean,
   mcpTools: McpToolSummary[],
   skills: SkillSummary[]
 ): CreateMessageRequest['tools'] => {
-  const tools: CreateMessageRequest['tools'] = [
-    { type: 'deepseek_read_url', name: 'deepseek_read_url' },
-  ]
-  if (search) {
-    tools.push({ type: 'deepseek_web_search', name: 'deepseek_web_search' })
+  const tools: CreateMessageRequest['tools'] = []
+  if (providerId === 'deepseek') {
+    tools.push({ type: 'deepseek_read_url', name: 'deepseek_read_url' })
+    if (search) {
+      tools.push({ type: 'deepseek_web_search', name: 'deepseek_web_search' })
+    }
   }
   for (const tool of mcpTools) {
     tools.push({
@@ -427,11 +435,13 @@ export const bindChatPersistence = () => {
 /** 按当前设置创建回复：思考模式与智能搜索分别固化到本轮回答。 */
 const createReply = (): AssistantMessage => {
   const { thinkingMode, search } = useSettings.getState()
+  const model = selectedModel()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: MODEL,
+    model: model.modelId,
+    providerId: model.providerId,
     thinking: thinkingMode !== 'disabled',
     thinkingEffort: thinkingMode === 'disabled' ? undefined : thinkingMode,
     search,
@@ -983,7 +993,8 @@ export const continueReply = (sessionId: string, messageId: string) => {
   const reply: AssistantMessage = {
     ...previous,
     // 未记录请求配置的回复，续写时使用默认模型和当前开关。
-    model: previous.model ?? MODEL,
+    model: previous.model ?? selectedModel().modelId,
+    providerId: previous.providerId ?? selectedModel().providerId,
     thinking: thinkingMode !== 'disabled',
     thinkingEffort: thinkingMode === 'disabled' ? undefined : thinkingMode,
     search: previous.search ?? search,
@@ -1577,9 +1588,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         const customInstructions = useSettings.getState().customInstructions
         const events = streamMessage(
           {
-            model: initial.model ?? MODEL,
+            providerId: initial.providerId ?? selectedModel().providerId,
+            model: initial.model ?? selectedModel().modelId,
             system: buildSystemPrompt(
               customInstructions,
+              initial.providerId ?? selectedModel().providerId,
               initial.search ?? false,
               directlyInvokedSkill
             ),
@@ -1587,7 +1600,12 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             thinking: { type: thinkingMode === 'disabled' ? 'disabled' : 'enabled' },
             ...(thinkingMode === 'disabled' ? {} : { output_config: { effort: thinkingMode } }),
             safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false, mcpTools, skills),
+            tools: serverTools(
+              initial.providerId ?? selectedModel().providerId,
+              initial.search ?? false,
+              mcpTools,
+              skills
+            ),
             ...(requestTitle ? { title: { enabled: true } } : {}),
           },
           controller.signal

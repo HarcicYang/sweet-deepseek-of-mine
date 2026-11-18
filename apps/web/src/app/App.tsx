@@ -20,7 +20,7 @@ import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
-import { closeSettings, ensureApiKey } from '../components/settings/settingsDialogState.js'
+import { closeSettings, openSettings } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { McpApprovalDialog } from '../components/mcp/McpApprovalDialog.js'
 import { Toast } from '../components/base/Toast.js'
@@ -34,6 +34,7 @@ import { MobileSider, Sider } from '../components/sider/Sider.js'
 import { SharedSessionPage } from '../components/share/SharedSessionPage.js'
 import { readShareToken } from '../services/share.js'
 import { PwaUpdateBanner } from '../components/pwa/PwaUpdateBanner.js'
+import { refreshProviders, resetProviders, useProviders } from '../services/providers.js'
 import styles from './App.module.css'
 
 export const App = () => {
@@ -119,7 +120,10 @@ export const App = () => {
           }
           await initChat()
           if (!isOffline()) {
-            ensureApiKey()
+            await refreshProviders()
+            if (!useProviders.getState().providers.some((provider) => provider.configured)) {
+              openSettings('models')
+            }
           }
           await initSync(authUserId)
         } catch {
@@ -127,6 +131,7 @@ export const App = () => {
         }
       })()
     } else {
+      resetProviders()
       stopSyncScheduler()
       stopAllReplies()
       stopReadAloud()

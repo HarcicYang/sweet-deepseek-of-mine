@@ -1,14 +1,20 @@
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ThinkingMode } from '@sweet-deepseek/contracts'
 import {
   IconGlobeLanguageOutline14,
+  IconLinkOutline16,
   IconPaperclipOutline16,
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline14,
 } from '../base/icons.js'
-import { setSearch, setThinkingMode, useSettings } from '../../services/settings.js'
+import {
+  setDefaultModel,
+  setSearch,
+  setThinkingMode,
+  useSettings,
+} from '../../services/settings.js'
 import { useAuth } from '../../services/auth/store.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
@@ -28,6 +34,11 @@ import { IconButton } from '../base/IconButton.js'
 import { Select, type SelectOption } from '../base/Select.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
+import {
+  canUseDeepSeekFeatures,
+  ensureSelectedModelConfigured,
+  useProviders,
+} from '../../services/providers.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
@@ -54,14 +65,60 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
   const thinkingMode = useSettings((state) => state.thinkingMode)
+  const defaultModel = useSettings((state) => state.defaultModel)
+  const providers = useProviders((state) => state.providers)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const currentProvider = defaultModel
+    ? providers.find((provider) => provider.id === defaultModel.providerId)
+    : undefined
+  const currentModel = currentProvider?.models.find(
+    (model) => model.id === defaultModel?.modelId
+  )
+  const deepSeek = canUseDeepSeekFeatures()
+  const modelOptions = providers.flatMap((provider) =>
+    provider.configured
+      ? provider.models.map((model) => ({
+          value: `${provider.id}\u0000${model.id}`,
+          label: `${provider.name} · ${model.name}`,
+        }))
+      : []
+  )
+  const currentModelValue = currentProvider && currentModel
+    ? `${currentProvider.id}\u0000${currentModel.id}`
+    : ''
+  const thinkingOptions = useMemo<ThinkingMode[]>(() => {
+    if (!currentModel) {
+      return deepSeek ? ['disabled', 'low', 'high', 'max'] : ['disabled']
+    }
+    if (currentModel.thinkingLevels.length === 0) {
+      return ['disabled']
+    }
+    return currentModel.thinkingLevels
+      .map((level) => (level === 'off' ? 'disabled' : level))
+      .filter(
+        (level): level is ThinkingMode =>
+          level === 'disabled' || level === 'low' || level === 'high' || level === 'max'
+      )
+  }, [currentModel, deepSeek])
   const offline =
     useAuth((state) => state.offline) || useSync((state) => state.status === 'offline')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!deepSeek && search) {
+      setSearch(false)
+    }
+  }, [deepSeek, search])
+
+  useEffect(() => {
+    if (!thinkingOptions.includes(thinkingMode)) {
+      setThinkingMode(thinkingOptions[0] ?? 'disabled')
+    }
+  }, [thinkingMode, thinkingOptions])
 
   useLayoutEffect(() => {
     const toggles = togglesRef.current
@@ -81,7 +138,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }, [t])
 
   const acceptFiles = (files: File[]) => {
-    if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
+    if (
+      files.length === 0 ||
+      !deepSeek ||
+      useChatStore.getState().importingHistory ||
+      !ensureApiKey()
+    ) {
       return
     }
     const error = addDraftFiles(sessionId, files)
@@ -148,7 +210,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       return
     }
     // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
-    if (!ensureApiKey() || !sendMessage(sessionId)) {
+    if (!ensureSelectedModelConfigured() || !sendMessage(sessionId)) {
       return
     }
     stopReadAloud()
@@ -209,17 +271,38 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       <div className={styles.functionRow}>
         {/* 思考模式 / 智能搜索，tooltip 在控件上方 */}
         <div ref={togglesRef} className={styles.toggles}>
+          <Tooltip content={t('modelProvider')}>
+            <Select<string>
+              value={currentModelValue}
+              options={modelOptions}
+              placeholder={t('modelProviderSelect')}
+              ariaLabel={t('modelProvider')}
+              className={styles.modelSelect}
+              startIcon={<IconLinkOutline16 />}
+              searchable
+              onChange={(value) => {
+                const [providerId, modelId] = value.split('\u0000')
+                if (providerId && modelId) {
+                  setDefaultModel({ providerId, modelId })
+                }
+              }}
+            />
+          </Tooltip>
           <Tooltip content={t('thinkingModeTooltip')}>
             <Select<ThinkingMode>
               value={thinkingMode}
-              options={
-                [
-                  { value: 'disabled', label: t('thinkingModeDisabled') },
-                  { value: 'low', label: t('thinkingModeLow') },
-                  { value: 'high', label: t('thinkingModeHigh') },
-                  { value: 'max', label: t('thinkingModeMax') },
-                ] satisfies SelectOption<ThinkingMode>[]
-              }
+              options={thinkingOptions.map((mode) => ({
+                value: mode,
+                label: t(
+                  mode === 'disabled'
+                    ? 'thinkingModeDisabled'
+                    : mode === 'low'
+                      ? 'thinkingModeLow'
+                      : mode === 'high'
+                        ? 'thinkingModeHigh'
+                        : 'thinkingModeMax'
+                ),
+              })) satisfies SelectOption<ThinkingMode>[]}
               ariaLabel={t('thinkingMode')}
               className={clsx(
                 styles.thinkingSelect,
@@ -229,12 +312,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               onChange={setThinkingMode}
             />
           </Tooltip>
-          <Tooltip content={t('deactivatedSearchTooltip')}>
+          <Tooltip content={deepSeek ? t('deactivatedSearchTooltip') : t('providerFeatureUnavailable')}>
             <button
               type="button"
               className={clsx(styles.toggle, search && styles.selected)}
               aria-label={t('search')}
               aria-pressed={search}
+              disabled={!deepSeek}
               onClick={() => setSearch(!search)}
             >
               <IconGlobeLanguageOutline14 />
@@ -245,12 +329,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         <div className={styles.right}>
           <VoiceButton
             status={voice.status}
-            disabled={!voice.available || offline}
+            disabled={!voice.available || offline || !deepSeek}
             seconds={voice.seconds}
             onClick={() => {
               if (
                 voice.status !== 'idle' ||
-                (!useChatStore.getState().importingHistory && ensureApiKey())
+                (deepSeek && !useChatStore.getState().importingHistory && ensureApiKey())
               ) {
                 void voice.toggle()
               }
@@ -261,7 +345,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             tone="primary"
             icon={<IconPaperclipOutline16 />}
             tooltip={t('uploadFile')}
-            disabled={importingHistory || offline}
+            disabled={importingHistory || offline || !deepSeek}
             onClick={() => ensureApiKey() && fileInputRef.current?.click()}
           />
           <input

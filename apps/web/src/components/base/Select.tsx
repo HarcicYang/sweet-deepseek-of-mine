@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPosition, useDismiss } from './anchored.js'
 import { IconCheckOutline16, IconChevronDownOutline14 } from './icons.js'
@@ -26,6 +26,7 @@ export const Select = <T extends string>({
   block = false,
   variant = 'pill',
   startIcon,
+  searchable = false,
 }: {
   value: T
   options: SelectOption<T>[]
@@ -40,10 +41,19 @@ export const Select = <T extends string>({
   block?: boolean
   variant?: 'pill' | 'field'
   startIcon?: ReactNode
+  searchable?: boolean
 }) => {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const current = options.find((option) => option.value === value)
-  const selectedIndex = options.findIndex((option) => option.value === value)
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const visibleOptions = searchable && normalizedQuery
+    ? options.filter((option) =>
+        `${option.label} ${option.value}`.toLocaleLowerCase().includes(normalizedQuery)
+      )
+    : options
+  const selectedIndex = visibleOptions.findIndex((option) => option.value === value)
   const [activeIndex, setActiveIndex] = useState(Math.max(0, selectedIndex))
   const listboxId = useId()
   const field = variant === 'field'
@@ -56,11 +66,12 @@ export const Select = <T extends string>({
   useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), { captureEscape: true })
 
   const openMenu = () => {
+    setQuery('')
     setActiveIndex(Math.max(0, selectedIndex))
     setOpen(true)
   }
   const selectOption = (index: number) => {
-    const option = options[index]
+    const option = visibleOptions[index]
     if (!option) {
       return
     }
@@ -74,7 +85,7 @@ export const Select = <T extends string>({
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      if (options.length === 0) {
+      if (visibleOptions.length === 0) {
         return
       }
       if (!open) {
@@ -82,7 +93,7 @@ export const Select = <T extends string>({
         return
       }
       const delta = event.key === 'ArrowDown' ? 1 : -1
-      setActiveIndex((index) => (index + delta + options.length) % options.length)
+      setActiveIndex((index) => (index + delta + visibleOptions.length) % visibleOptions.length)
       return
     }
     if (!open) {
@@ -90,7 +101,7 @@ export const Select = <T extends string>({
     }
     if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault()
-      setActiveIndex(event.key === 'Home' ? 0 : Math.max(0, options.length - 1))
+      setActiveIndex(event.key === 'Home' ? 0 : Math.max(0, visibleOptions.length - 1))
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -98,6 +109,12 @@ export const Select = <T extends string>({
       selectOption(activeIndex)
     }
   }
+
+  useEffect(() => {
+    if (open && searchable) {
+      searchRef.current?.focus()
+    }
+  }, [open, searchable])
 
   useEffect(() => {
     if (!open) {
@@ -128,7 +145,7 @@ export const Select = <T extends string>({
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={
-          open && options.length > 0 ? `${listboxId}-option-${activeIndex}` : undefined
+          open && visibleOptions.length > 0 ? `${listboxId}-option-${activeIndex}` : undefined
         }
         disabled={disabled}
         onClick={() => (open ? setOpen(false) : openMenu())}
@@ -156,7 +173,38 @@ export const Select = <T extends string>({
               role="listbox"
               aria-label={ariaLabel}
             >
-              {options.map((option, index) => (
+              {searchable ? (
+                <input
+                  ref={searchRef}
+                  className={styles.search}
+                  value={query}
+                  placeholder={placeholder}
+                  aria-label={ariaLabel}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    setActiveIndex(0)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                      event.preventDefault()
+                      if (visibleOptions.length === 0) {
+                        return
+                      }
+                      const delta = event.key === 'ArrowDown' ? 1 : -1
+                      setActiveIndex((index) =>
+                        (index + delta + visibleOptions.length) % visibleOptions.length
+                      )
+                    } else if (event.key === 'Enter') {
+                      event.preventDefault()
+                      selectOption(activeIndex)
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault()
+                      setOpen(false)
+                    }
+                  }}
+                />
+              ) : null}
+              {visibleOptions.map((option, index) => (
                 <div
                   key={option.value}
                   id={`${listboxId}-option-${index}`}

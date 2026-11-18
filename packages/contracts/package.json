@@ -26,6 +26,10 @@
       "types": "./src/mcp.ts",
       "default": "./src/mcp.ts"
     },
+    "./providers": {
+      "types": "./src/providers.ts",
+      "default": "./src/providers.ts"
+    },
     "./skills": {
       "types": "./src/skills.ts",
       "default": "./src/skills.ts"

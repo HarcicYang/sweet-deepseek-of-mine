@@ -15,6 +15,7 @@ packages/
 
 - `apps/web` 负责界面、本地缓存、流式渲染和用户交互；迁移完成后不持久化 DeepSeek API Key。
 - `apps/server` 负责登录会话、服务端密钥、DeepSeek 代理和按账号隔离的 MCP 网关。
+- `apps/server` 的通用 Provider 运行时复用 `@earendil-works/pi-ai`；Pi 负责 Provider 目录、模型元数据、API 协议、工具调用和 reasoning 映射，项目负责账号隔离、加密凭据和 SSE 边界。
 - `packages/contracts` 同时被客户端和服务端引用，保存可序列化协议、共享常量和不可信输入的校验函数。
 - `packages/json-render` 只保存可序列化 UI 协议和纯校验逻辑；React 组件仍在 Web 端静态注册。
 - 静态注册的 UI 组件和 MCP 执行逻辑不进入共享协议包；共享包只定义可序列化配置、摘要和校验 schema。
@@ -30,6 +31,7 @@ JSON-Render 的协议、校验、回退和分阶段计划见[JSON-Render 引入�
 不再直接请求 DeepSeek API，也不在浏览器持久化 API Key。会话、删除墓碑和账号常用设置
 已接入云端同步；同步协议见[云端会话同步](sync.md)。
 MCP 工具使用同一回复循环，配置和加密请求头保存在账号级服务端存储中。
+模型 Provider 配置也按账号隔离保存；DeepSeek 继续走其原生代理，其他 Provider 通过 Pi 适配器调用。
 
 ## 边缘运行时边界
 

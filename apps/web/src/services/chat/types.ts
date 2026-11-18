@@ -1,5 +1,4 @@
 import type {
-  ChatModel,
   MessageUsage,
   ServerToolBlock,
   StopDetails,
@@ -99,7 +98,8 @@ export type AssistantMessage = MessageBranch & {
   role: 'assistant'
   createdAt: number
   /** 未记录模型时为 null，续写使用当前默认模型。 */
-  model: ChatModel | null
+  model: string | null
+  providerId?: string
   /** 请求时是否开启深度思考 */
   thinking?: boolean
   /** 开启思考时请求的强度；旧消息缺省时按 API 默认 high 处理 */

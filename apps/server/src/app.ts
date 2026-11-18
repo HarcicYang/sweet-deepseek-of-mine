@@ -1,4 +1,11 @@
 import type { HealthResponse } from '@sweet-deepseek/contracts'
+import {
+  ProviderCreateRequestSchema,
+  ProviderResponseSchema,
+  ProviderUpdateRequestSchema,
+  ProvidersResponseSchema,
+  type ProviderSummary,
+} from '@sweet-deepseek/contracts/providers'
 import type { StoredOAuthClientInformation } from '@modelcontextprotocol/client'
 import {
   ApiKeyRequestSchema,
@@ -91,6 +98,12 @@ import type { SecurityService } from './security.js'
 import type { ShareStore } from './share-store.js'
 import type { SkillRecord, SkillStore, SkillWrite } from './skill-store.js'
 import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
+import type { ProviderStore } from './provider-store.js'
+import {
+  createPiSseResponse,
+  providerSummary,
+  providerTemplates,
+} from './pi-provider-runtime.js'
 
 const SESSION_COOKIE = 'sdom_session'
 const OAUTH_STATE_COOKIE = 'sdom_oauth_state'
@@ -128,6 +141,39 @@ export const DEFAULT_REQUEST_BODY_LIMITS: RequestBodyLimits = {
   speech: 1024 * 1024,
 }
 
+const DEEPSEEK_PROVIDER: ProviderSummary = {
+  id: 'deepseek',
+  name: 'DeepSeek',
+  kind: 'deepseek',
+  configured: false,
+  api: 'anthropic-messages',
+  models: [
+    {
+      id: 'deepseek-flash',
+      name: 'DeepSeek Flash',
+      api: 'anthropic-messages',
+      contextWindow: 1_000_000,
+      maxTokens: 384_000,
+      input: ['text', 'image'],
+      reasoning: true,
+      thinkingLevels: ['off', 'low', 'high', 'max'],
+    },
+    {
+      id: 'deepseek-v4-pro',
+      name: 'DeepSeek V4 Pro',
+      api: 'anthropic-messages',
+      contextWindow: 1_000_000,
+      maxTokens: 384_000,
+      input: ['text'],
+      reasoning: true,
+      thinkingLevels: ['off', 'low', 'high', 'max'],
+    },
+  ],
+}
+
+const providerCredentialAad = (userId: string, providerId: string) =>
+  `provider-api-key:v1:${userId}:${providerId}`
+
 class RequestBodyTooLargeError extends Error {
   constructor() {
     super('Request body exceeds the configured limit')
@@ -148,6 +194,7 @@ type AppEnv = {
 
 export type AppOptions = {
   store: AccountStore
+  providerStore: ProviderStore
   syncStore: SyncStore
   shareStore: ShareStore
   mcpStore: McpStore
@@ -487,6 +534,7 @@ const readGitHubProfile = (value: unknown): GitHubProfile | null => {
 
 export const createApp = ({
   store,
+  providerStore,
   syncStore,
   shareStore,
   mcpStore,
@@ -1635,6 +1683,153 @@ if(data.ok)setTimeout(()=>window.close(),250);
     return context.json(body)
   })
 
+  app.get(apiRoutes.providers, requireAuth, async (context) => {
+    const user = context.get('auth').user
+    const stored = await providerStore.listProviders(user.id)
+    const providers = [
+      { ...DEEPSEEK_PROVIDER, configured: Boolean(user.apiKey) },
+      ...stored.map((record) =>
+        providerSummary(record, record.encryptedApiKey !== null)
+      ),
+    ]
+    return context.json(
+      ProvidersResponseSchema.parse({
+        providers,
+        templates: providerTemplates(),
+      })
+    )
+  })
+
+  app.post(apiRoutes.providers, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, bodyLimits.settings)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Provider payload is too large')
+    }
+    const parsed = json.ok ? ProviderCreateRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid provider payload')
+    }
+    const template = providerTemplates().find(
+      (candidate) => candidate.id === parsed.data.templateId
+    )
+    if (!template) {
+      return apiError(context, 400, 'invalid_request', 'Unknown provider template')
+    }
+    const user = context.get('auth').user
+    const providerId =
+      template.kind === 'builtin'
+        ? template.id
+        : `custom-${crypto.randomUUID()}`
+    if (await providerStore.findProvider(user.id, providerId)) {
+      return apiError(context, 409, 'conflict', 'Provider is already configured')
+    }
+    if (template.kind === 'custom' && !parsed.data.baseUrl) {
+      return apiError(context, 400, 'invalid_request', 'Custom provider requires a base URL')
+    }
+    if (template.kind === 'custom' && !parsed.data.models?.length) {
+      return apiError(context, 400, 'invalid_request', 'Custom provider requires models')
+    }
+    if (parsed.data.baseUrl) {
+      try {
+        assertAllowedMcpUrl(parsed.data.baseUrl, mcpAllowPrivateNetwork)
+      } catch {
+        return apiError(context, 400, 'invalid_request', 'Invalid provider base URL')
+      }
+    }
+    const api = template.kind === 'custom' ? template.api : null
+    if (template.kind === 'custom' && !api) {
+      return apiError(context, 400, 'invalid_request', 'Custom provider requires an API')
+    }
+    const encryptedApiKey = await security.encryptValue(
+      providerCredentialAad(user.id, providerId),
+      parsed.data.apiKey
+    )
+    const record = await providerStore.createProvider(user.id, {
+      id: providerId,
+      kind: template.kind,
+      name: parsed.data.name ?? template.name,
+      api: api ?? null,
+      baseUrl: parsed.data.baseUrl ?? null,
+      models: template.kind === 'custom' ? (parsed.data.models ?? []) : [],
+      encryptedApiKey,
+    })
+    return context.json(
+      ProviderResponseSchema.parse({
+        provider: providerSummary(record, true),
+      })
+    )
+  })
+
+  app.put(apiRoutes.provider, requireAuth, async (context) => {
+    const providerId = context.req.param('providerId')
+    const user = context.get('auth').user
+    const current = await providerStore.findProvider(user.id, providerId)
+    if (!current) {
+      return apiError(context, 404, 'invalid_request', 'Provider not found')
+    }
+    const json = await readLimitedJson(context, bodyLimits.settings)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Provider payload is too large')
+    }
+    const parsed = json.ok ? ProviderUpdateRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid provider payload')
+    }
+    if (current.kind === 'custom' && parsed.data.baseUrl === null) {
+      return apiError(context, 400, 'invalid_request', 'Custom provider requires a base URL')
+    }
+    if (parsed.data.baseUrl) {
+      try {
+        assertAllowedMcpUrl(parsed.data.baseUrl, mcpAllowPrivateNetwork)
+      } catch {
+        return apiError(context, 400, 'invalid_request', 'Invalid provider base URL')
+      }
+    }
+    const encryptedApiKey =
+      parsed.data.apiKey === undefined
+        ? current.encryptedApiKey
+        : parsed.data.apiKey === null
+          ? null
+          : await security.encryptValue(
+              providerCredentialAad(user.id, providerId),
+              parsed.data.apiKey
+            )
+    const record = await providerStore.updateProvider(user.id, providerId, {
+      id: current.id,
+      kind: current.kind,
+      name: parsed.data.name ?? current.name,
+      api: current.api,
+      baseUrl:
+        parsed.data.baseUrl === undefined
+          ? current.baseUrl
+          : parsed.data.baseUrl,
+      models:
+        current.kind === 'custom' && parsed.data.models
+          ? parsed.data.models
+          : current.models,
+      encryptedApiKey,
+    })
+    if (!record) {
+      return apiError(context, 404, 'invalid_request', 'Provider not found')
+    }
+    return context.json(
+      ProviderResponseSchema.parse({
+        provider: providerSummary(record, record.encryptedApiKey !== null),
+      })
+    )
+  })
+
+  app.delete(apiRoutes.provider, requireAuth, async (context) => {
+    const deleted = await providerStore.deleteProvider(
+      context.get('auth').user.id,
+      context.req.param('providerId')
+    )
+    if (!deleted) {
+      return apiError(context, 404, 'invalid_request', 'Provider not found')
+    }
+    return context.body(null, 204)
+  })
+
   app.get(apiRoutes.syncSessions, requireAuth, async (context) => {
     const userId = context.get('auth').user.id
     const body = SyncSessionsResponseSchema.parse({
@@ -1916,10 +2111,6 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.post(apiRoutes.chat, requireAuth, async (context) => {
-    const credential = await requireApiKey(context)
-    if (!credential.ok) {
-      return credential.response
-    }
     const json = await readLimitedJson(context, bodyLimits.chat)
     if (json === 'too-large') {
       return apiError(context, 413, 'invalid_request', 'Chat request is too large')
@@ -1940,9 +2131,58 @@ if(data.ok)setTimeout(()=>window.close(),250);
       )
     }
 
+    const user = context.get('auth').user
+    const providerId = parsed.data.providerId
+    if (providerId !== 'deepseek') {
+      const record = await providerStore.findProvider(user.id, providerId)
+      if (!record || !record.encryptedApiKey) {
+        return apiError(context, 409, 'api_key_missing', 'A provider API key is required')
+      }
+      const apiKey = await security
+        .decryptValue(
+          providerCredentialAad(user.id, providerId),
+          record.encryptedApiKey
+        )
+        .catch(() => null)
+      if (!apiKey) {
+        return apiError(
+          context,
+          500,
+          'credential_error',
+          'Stored provider API key could not be decrypted'
+        )
+      }
+      try {
+        return await createPiSseResponse(
+          parsed.data,
+          record,
+          apiKey,
+          createProxySignal(context)
+        )
+      } catch (error) {
+        logger.warn('Provider chat request failed', {
+          providerId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return apiError(
+          context,
+          400,
+          'invalid_request',
+          error instanceof Error ? error.message : 'Provider request failed'
+        )
+      }
+    }
+
+    if (parsed.data.model !== 'deepseek-flash' && parsed.data.model !== 'deepseek-v4-pro') {
+      return apiError(context, 400, 'invalid_request', 'Invalid DeepSeek model')
+    }
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
     const clientSignal = context.req.raw.signal
     const signal = createProxySignal(context)
-    const requestBody = { ...parsed.data, stream: true }
+    const requestBody = { ...parsed.data, providerId: undefined, stream: true }
     const headers: Record<string, string> = {
       'x-api-key': credential.apiKey,
       'Content-Type': 'application/json',
