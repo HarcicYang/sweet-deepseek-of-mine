@@ -79,7 +79,7 @@ export const ModelThinkingMenu = ({
               role="dialog"
               aria-label={t('modelThinkingMenu')}
             >
-              <div className={styles.modelSection}>
+              <div className={styles.headerSection}>
                 <div className={styles.sectionTitle}>{t('modelProvider')}</div>
                 <div className={styles.currentModel}>
                   {currentModel?.label ?? t('modelProviderSelect')}
@@ -91,6 +91,8 @@ export const ModelThinkingMenu = ({
                   aria-label={t('modelSearchPlaceholder')}
                   onChange={(event) => setQuery(event.target.value)}
                 />
+              </div>
+              <div className={styles.content}>
                 <div className={styles.modelList} role="listbox" aria-label={t('modelProvider')}>
                   {visibleModels.map((option) => (
                     <button
@@ -112,29 +114,33 @@ export const ModelThinkingMenu = ({
                     <div className={styles.empty}>{t('modelSearchEmpty')}</div>
                   ) : null}
                 </div>
-              </div>
-              <div className={styles.thinkingSection}>
-                <div className={styles.sectionTitle}>{t('thinkingMode')}</div>
-                <div className={styles.thinkingOptions} role="radiogroup" aria-label={t('thinkingMode')}>
-                  {thinkingOptions.map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      role="radio"
-                      aria-checked={thinkingMode === mode}
-                      className={clsx(
-                        styles.thinkingOption,
-                        thinkingMode === mode && styles.selected
-                      )}
-                      onClick={() => {
-                        onThinkingChange(mode)
-                        setOpen(false)
-                      }}
-                    >
-                      <span>{t(thinkingLabel(mode))}</span>
-                      {thinkingMode === mode ? <IconCheckOutline16 /> : null}
-                    </button>
-                  ))}
+                <div className={styles.thinkingSection}>
+                  <div className={styles.sectionTitle}>{t('thinkingMode')}</div>
+                  <div
+                    className={styles.thinkingOptions}
+                    role="radiogroup"
+                    aria-label={t('thinkingMode')}
+                  >
+                    {thinkingOptions.map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="radio"
+                        aria-checked={thinkingMode === mode}
+                        className={clsx(
+                          styles.thinkingOption,
+                          thinkingMode === mode && styles.selected
+                        )}
+                        onClick={() => {
+                          onThinkingChange(mode)
+                          setOpen(false)
+                        }}
+                      >
+                        <span>{t(thinkingLabel(mode))}</span>
+                        {thinkingMode === mode ? <IconCheckOutline16 /> : null}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>,
