@@ -408,6 +408,8 @@ export const zh = {
   voiceInputEmpty: '未识别到语音内容',
   voiceInputLimitReached: '已达到单次录音时长上限',
   voiceInputRequiresHttps: '非 HTTPS 页面无法使用语音输入',
+  modelImageInputUnsupported: '当前模型不支持图片输入',
+  historyImportInProgress: '正在导入历史对话',
   apiKeyInvalidRetry: 'API Key 无效，请更换后重试',
   insufficientBalance: '账户余额不足',
   rateLimited: '操作过于频繁，请稍后再试',

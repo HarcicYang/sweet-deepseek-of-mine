@@ -38,7 +38,12 @@ import {
 } from '../../services/providers.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
-import { ACCEPT, useUploads } from '../../services/attachments.js'
+import {
+  ACCEPT,
+  isImage,
+  resolveMimeType,
+  useUploads,
+} from '../../services/attachments.js'
 import { DraftAttachments } from './DraftAttachments.js'
 import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
@@ -77,6 +82,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const deepSeek = canUseDeepSeekFeatures()
   const hasDeepSeekKey = useAuth((state) => state.user?.hasApiKey ?? false)
   const deepSeekToolsAvailable = hasDeepSeekKey
+  const supportsImageInput = currentModel?.input.includes('image') ?? false
   const modelOptions = providers.flatMap((provider) =>
     provider.configured
       ? provider.models.map((model) => ({
@@ -104,6 +110,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }, [currentModel, deepSeek])
   const offline =
     useAuth((state) => state.offline) || useSync((state) => state.status === 'offline')
+  const uploadDisabledReason = offline
+    ? t('offlineActionUnavailable')
+    : !hasDeepSeekKey
+      ? t('providerFeatureUnavailable')
+      : importingHistory
+        ? t('historyImportInProgress')
+        : undefined
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
@@ -140,10 +153,17 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const acceptFiles = (files: File[]) => {
     if (
       files.length === 0 ||
-      !deepSeek ||
+      !hasDeepSeekKey ||
       useChatStore.getState().importingHistory ||
       !ensureApiKey()
     ) {
+      return
+    }
+    if (
+      !supportsImageInput &&
+      files.some((file) => isImage(resolveMimeType(file)))
+    ) {
+      showToast({ key: 'modelImageInputUnsupported', type: 'error' })
       return
     }
     const error = addDraftFiles(sessionId, files)
@@ -154,10 +174,15 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const retryFile = useCallback(
     (id: string) => {
       if (!useChatStore.getState().importingHistory && ensureApiKey()) {
+        const attachment = getDraft(sessionId).attachments.find((item) => item.id === id)
+        if (attachment?.isImage && !supportsImageInput) {
+          showToast({ key: 'modelImageInputUnsupported', type: 'error' })
+          return
+        }
         retryDraftAttachment(sessionId, id)
       }
     },
-    [sessionId]
+    [sessionId, supportsImageInput]
   )
   const removeFile = useCallback(
     (id: string) => {
@@ -181,6 +206,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       textarea?.setSelectionRange(start + transcript.length, start + transcript.length)
     })
   })
+  const voiceDisabledReason = !voice.available
+    ? t('voiceInputRequiresHttps')
+    : offline
+      ? t('offlineActionUnavailable')
+      : !hasDeepSeekKey
+        ? t('providerFeatureUnavailable')
+        : undefined
 
   // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   const cancelVoice = voice.cancel
@@ -207,6 +239,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       voice.status !== 'idle' ||
       !prepareDraftMessage(getDraft(sessionId), useUploads.getState().tasks)
     ) {
+      return
+    }
+    if (
+      !supportsImageInput &&
+      attachments.some((attachment) => attachment.isImage)
+    ) {
+      showToast({ key: 'modelImageInputUnsupported', type: 'error' })
       return
     }
     // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
@@ -309,12 +348,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         <div className={styles.right}>
           <VoiceButton
             status={voice.status}
-            disabled={!voice.available || offline || !deepSeek}
+            disabled={voiceDisabledReason !== undefined}
+            disabledReason={voiceDisabledReason}
             seconds={voice.seconds}
             onClick={() => {
               if (
                 voice.status !== 'idle' ||
-                (deepSeek && !useChatStore.getState().importingHistory && ensureApiKey())
+                (!useChatStore.getState().importingHistory && ensureApiKey())
               ) {
                 void voice.toggle()
               }
@@ -324,8 +364,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             size="m"
             tone="primary"
             icon={<IconPaperclipOutline16 />}
-            tooltip={t('uploadFile')}
-            disabled={importingHistory || offline || !deepSeek}
+            tooltip={uploadDisabledReason ?? t('uploadFile')}
+            disabled={uploadDisabledReason !== undefined}
             onClick={() => ensureApiKey() && fileInputRef.current?.click()}
           />
           <input

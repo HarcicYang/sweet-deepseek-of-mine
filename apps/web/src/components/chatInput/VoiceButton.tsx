@@ -14,12 +14,15 @@ import styles from './VoiceButton.module.css'
 export const VoiceButton = ({
   status,
   disabled = false,
+  disabledReason,
   seconds,
   onClick,
 }: {
   status: VoiceInputStatus
-  /** 非安全上下文中按钮置灰，tooltip 提示录音需要 HTTPS */
+  /** 是否禁用；具体原因由 disabledReason 提供 */
   disabled?: boolean
+  /** 禁用原因；依次可能是 HTTPS、离线和当前模型不支持 */
+  disabledReason?: string
   /** 本次录音已录秒数，录音中显示在按钮左侧 */
   seconds: number
   onClick: () => void
@@ -28,7 +31,7 @@ export const VoiceButton = ({
   const recording = status === 'recording'
 
   const label = disabled
-    ? t('voiceInputRequiresHttps')
+    ? (disabledReason ?? t('voiceInputRequiresHttps'))
     : recording
       ? t('voiceInputStop')
       : status === 'transcribing'
