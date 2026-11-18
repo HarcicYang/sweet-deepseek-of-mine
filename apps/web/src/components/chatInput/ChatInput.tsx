@@ -128,10 +128,10 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }, [deepSeekToolsAvailable, search])
 
   useEffect(() => {
-    if (!thinkingOptions.includes(thinkingMode)) {
+    if (currentModel && !thinkingOptions.includes(thinkingMode)) {
       setThinkingMode(thinkingOptions[0] ?? 'disabled')
     }
-  }, [thinkingMode, thinkingOptions])
+  }, [currentModel, thinkingMode, thinkingOptions])
 
   useLayoutEffect(() => {
     const toggles = togglesRef.current
