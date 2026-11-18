@@ -68,17 +68,6 @@
   line-height: 18px;
 }
 
-.currentModel {
-  flex: none;
-  overflow: hidden;
-  color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .search {
   box-sizing: border-box;
   flex: none;

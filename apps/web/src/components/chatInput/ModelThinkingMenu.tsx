@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ThinkingMode } from '@sweet-deepseek/contracts'
 import { IconCheckOutline16, IconChevronDownOutline14, IconThinkOutline14 } from '../base/icons.js'
@@ -30,6 +30,7 @@ export const ModelThinkingMenu = ({
   const t = useTranslate()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const contentRef = useRef<HTMLDivElement>(null)
   const deferredQuery = useDeferredValue(query)
   const { anchorRef, floatingRef, position } = useAnchoredPosition<
     HTMLButtonElement,
@@ -43,6 +44,12 @@ export const ModelThinkingMenu = ({
   })
   useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), { captureEscape: true })
 
+  useLayoutEffect(() => {
+    if (open) {
+      contentRef.current?.scrollTo({ top: 0 })
+    }
+  }, [open, query])
+
   const visibleModels = useMemo(() => {
     const normalized = deferredQuery.trim().toLocaleLowerCase()
     const matched = normalized
@@ -52,8 +59,6 @@ export const ModelThinkingMenu = ({
       : modelOptions
     return matched
   }, [deferredQuery, modelOptions])
-
-  const currentModel = modelOptions.find((option) => option.value === currentModelValue)
 
   return (
     <>
@@ -81,9 +86,6 @@ export const ModelThinkingMenu = ({
             >
               <div className={styles.headerSection}>
                 <div className={styles.sectionTitle}>{t('modelProvider')}</div>
-                <div className={styles.currentModel}>
-                  {currentModel?.label ?? t('modelProviderSelect')}
-                </div>
                 <input
                   className={styles.search}
                   value={query}
@@ -92,7 +94,7 @@ export const ModelThinkingMenu = ({
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
-              <div className={styles.content}>
+              <div ref={contentRef} className={styles.content}>
                 <div className={styles.modelList} role="listbox" aria-label={t('modelProvider')}>
                   {visibleModels.map((option) => (
                     <button
