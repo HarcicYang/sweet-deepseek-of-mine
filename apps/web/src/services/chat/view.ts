@@ -7,6 +7,10 @@ import type {
 } from '@sweet-deepseek/contracts'
 import { READ_SKILL_RESOURCE_TOOL_NAME, SKILL_TOOL_NAME } from '@sweet-deepseek/skills'
 import { translate } from '../../i18n/index.js'
+import {
+  DEEPSEEK_READ_URL_TOOL_NAME,
+  DEEPSEEK_WEB_SEARCH_TOOL_NAME,
+} from './deepseekWebToolNames.js'
 import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
 
 /**
@@ -298,11 +302,69 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     if (block.type === 'tool_use') {
       flushPreamble()
       const result = toolResults.get(block.id)
+      const input =
+        block.input !== null && typeof block.input === 'object' && !Array.isArray(block.input)
+          ? (block.input as Record<string, unknown>)
+          : {}
+      if (block.name === DEEPSEEK_WEB_SEARCH_TOOL_NAME) {
+        const queries = Array.isArray(input.queries)
+          ? input.queries.filter((query): query is string => typeof query === 'string')
+          : typeof input.query === 'string'
+            ? [input.query]
+            : []
+        const status = result ? (result.isError ? 'failed' : 'done') : streaming ? 'wip' : 'failed'
+        const found = (result?.sources ?? []).map((source) =>
+          registry.add(source.url, source.title, source.publishedAt, {
+            snippet: source.snippet ?? '',
+            site_name: source.siteName,
+            site_icon: source.siteIcon,
+          })
+        )
+        for (const source of found) {
+          if (!searchResults.includes(source)) {
+            searchResults.push(source)
+          }
+        }
+        const target = mergedSearch.get('search')
+        if (target) {
+          target.queries.push(...queries)
+          target.results.push(...found.filter((source) => !target.results.includes(source)))
+          target.status = mergeStatus([target.status, status])
+        } else {
+          const step: SearchStep = {
+            type: 'search',
+            key: block.id,
+            kind: 'search',
+            queries,
+            results: found,
+            status,
+          }
+          steps.push(step)
+          mergedSearch.set('search', step)
+        }
+        return
+      }
+      if (block.name === DEEPSEEK_READ_URL_TOOL_NAME) {
+        const url = typeof input.url === 'string' ? input.url : ''
+        const status = result ? (result.isError ? 'failed' : 'done') : streaming ? 'wip' : 'failed'
+        if (status !== 'wip') {
+          return
+        }
+        const page: PageItem = {
+          id: block.id,
+          url: result?.page?.url || url,
+          title: result?.page?.title || url,
+          status,
+        }
+        const last = steps.at(-1)
+        if (last?.type === 'read_link') {
+          last.links.push(page)
+        } else {
+          steps.push({ type: 'read_link', links: [page] })
+        }
+        return
+      }
       if (block.name === SKILL_TOOL_NAME) {
-        const input =
-          block.input !== null && typeof block.input === 'object' && !Array.isArray(block.input)
-            ? (block.input as Record<string, unknown>)
-            : {}
         steps.push({
           type: 'skill',
           key: block.id,
@@ -312,10 +374,6 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         return
       }
       if (block.name === READ_SKILL_RESOURCE_TOOL_NAME) {
-        const input =
-          block.input !== null && typeof block.input === 'object' && !Array.isArray(block.input)
-            ? (block.input as Record<string, unknown>)
-            : {}
         steps.push({
           type: 'skill_resource',
           key: block.id,

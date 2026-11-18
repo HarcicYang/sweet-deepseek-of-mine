@@ -8,6 +8,8 @@ export const apiRoutes = {
   session: '/api/auth/session',
   logout: '/api/auth/logout',
   deepseekKey: '/api/account/deepseek-key',
+  deepseekSearch: '/api/deepseek/tools/search',
+  deepseekFetch: '/api/deepseek/tools/fetch',
   providers: '/api/providers',
   provider: '/api/providers/:providerId',
   chat: '/api/chat',
@@ -89,6 +91,49 @@ export type ApiKeyRequest = z.infer<typeof ApiKeyRequestSchema>
 export const ApiKeyStatusResponseSchema = z.object({ configured: z.boolean() }).strict()
 
 export type ApiKeyStatusResponse = z.infer<typeof ApiKeyStatusResponseSchema>
+
+export const DeepSeekSearchRequestSchema = z
+  .object({
+    query: z.string().trim().min(1).max(128),
+    count: z.number().int().min(1).max(50).optional(),
+    ori_question: z.string().trim().min(1).max(128).nullable().optional(),
+    localization: z.string().max(64).optional(),
+    need_content: z.boolean().optional(),
+  })
+  .strict()
+
+export const DeepSeekSearchResultSchema = z.object({
+  rerank_score: z.number(),
+  title: z.string(),
+  url: z.string().min(1).max(8192),
+  snippet: z.string(),
+  summary: z.string(),
+  content: z.string(),
+  site_name: z.string().nullable(),
+  site_icon: z.string().nullable(),
+  date: z.string().nullable(),
+  authority: z.number().int().min(-1).max(4),
+})
+
+export const DeepSeekSearchResponseSchema = z.object({
+  results: z.array(DeepSeekSearchResultSchema),
+})
+
+export const DeepSeekFetchRequestSchema = z
+  .object({
+    url: z.string().trim().min(1).max(8192).url(),
+  })
+  .strict()
+
+export const DeepSeekFetchResponseSchema = z.object({
+  title: z.string(),
+  content: z.string(),
+})
+
+export type DeepSeekSearchRequest = z.infer<typeof DeepSeekSearchRequestSchema>
+export type DeepSeekSearchResponse = z.infer<typeof DeepSeekSearchResponseSchema>
+export type DeepSeekFetchRequest = z.infer<typeof DeepSeekFetchRequestSchema>
+export type DeepSeekFetchResponse = z.infer<typeof DeepSeekFetchResponseSchema>
 
 export const FilePurposeSchema = z.enum(['rich_layout_recognition', 'user_data'])
 

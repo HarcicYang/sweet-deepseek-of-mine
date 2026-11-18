@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ModelRef, ProviderModel, ProviderSummary, ProviderTemplate } from '@sweet-deepseek/contracts/providers'
 import { listProviders } from './api/client.js'
 import { setDefaultModel, useSettings } from './settings.js'
-import { isOffline } from './auth/store.js'
+import { isOffline, useAuth } from './auth/store.js'
 import { showToast } from '../components/base/toastState.js'
 import { openSettings } from '../components/settings/settingsDialogState.js'
 
@@ -105,6 +105,12 @@ export const ensureSelectedModelConfigured = (): boolean => {
 }
 
 export const canUseDeepSeekFeatures = (): boolean => selectedModel().providerId === 'deepseek'
+
+export const hasConfiguredDeepSeekProvider = (
+  providers = useProviders.getState().providers
+): boolean =>
+  providers.some((provider) => provider.id === 'deepseek' && provider.configured) ||
+  Boolean(useAuth.getState().user?.hasApiKey)
 
 export const findProviderTemplate = (id: string): ProviderTemplate | undefined =>
   useProviders.getState().templates.find((template) => template.id === id)

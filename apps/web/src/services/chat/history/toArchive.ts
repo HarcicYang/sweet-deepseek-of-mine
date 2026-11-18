@@ -1,6 +1,7 @@
 import type { ServerToolUseBlock } from '@sweet-deepseek/contracts'
 import { getVisibleMessages, normalizeSession } from '../branches.js'
 import { describeReply } from '../describe.js'
+import { DEEPSEEK_WEB_SEARCH_TOOL_NAME } from '../deepseekWebToolNames.js'
 import type { AssistantMessage, Message, ReplyBlock, Session, UserMessage } from '../types.js'
 import { fail } from './errors.js'
 import type {
@@ -116,6 +117,41 @@ const toolFragment = (tool: ServerToolUseBlock, result: ReplyBlock | undefined):
   ]
 }
 
+const clientToolFragment = (
+  name: string,
+  input: unknown,
+  result: ReplyBlock | undefined
+): Fragment[] => {
+  if (name !== DEEPSEEK_WEB_SEARCH_TOOL_NAME) {
+    return []
+  }
+  const args =
+    input !== null && typeof input === 'object' && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {}
+  const queries = Array.isArray(args.queries)
+    ? args.queries.filter((query): query is string => typeof query === 'string')
+    : typeof args.query === 'string'
+      ? [args.query]
+      : []
+  const toolResult = result?.type === 'tool_result' ? result : undefined
+  return [
+    {
+      type: 'TOOL_SEARCH',
+      queries,
+      status: !toolResult ? 'WIP' : toolResult.isError ? 'FAILED' : 'FINISHED',
+      results: (toolResult?.sources ?? []).map((source) => ({
+        url: source.url,
+        title: source.title,
+        snippet: source.snippet ?? '',
+        published_at: isoOrNull(source.publishedAt),
+        site_name: source.siteName,
+        site_icon: source.siteIcon,
+      })),
+    },
+  ]
+}
+
 /**
  * 内容块按顺序转换为片段：相邻同类正文合并，服务端模板保留 TEMPLATE_RESPONSE；
  * 引用改由正文外的来源表示，不写入标记；
@@ -124,12 +160,19 @@ const toolFragment = (tool: ServerToolUseBlock, result: ReplyBlock | undefined):
 const assistantFragments = (message: AssistantMessage): Fragment[] => {
   const { blocks } = message
   const results = new Map<string, ReplyBlock>()
+  const clientResults = new Map<string, ReplyBlock>()
   for (const block of blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
+    } else if (block.type === 'tool_result') {
+      clientResults.set(block.tool_use_id, block)
     }
   }
-  const usedWeb = blocks.some((block) => block.type === 'server_tool_use')
+  const usedWeb = blocks.some(
+    (block) =>
+      block.type === 'server_tool_use' ||
+      (block.type === 'tool_use' && block.name === DEEPSEEK_WEB_SEARCH_TOOL_NAME)
+  )
   const fragments: Fragment[] = []
   let response: { type: 'RESPONSE' | 'TEMPLATE_RESPONSE'; content: string } | undefined
   for (const block of blocks) {
@@ -159,7 +202,9 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
           : []
         : block.type === 'server_tool_use'
           ? toolFragment(block, results.get(block.id))
-          : []
+          : block.type === 'tool_use'
+            ? clientToolFragment(block.name, block.input, clientResults.get(block.id))
+            : []
     if (converted.length > 0) {
       fragments.push(...converted)
       response = undefined

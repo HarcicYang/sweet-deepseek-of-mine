@@ -75,6 +75,10 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     (model) => model.id === defaultModel?.modelId
   )
   const deepSeek = canUseDeepSeekFeatures()
+  const hasDeepSeekKey = useAuth((state) => state.user?.hasApiKey ?? false)
+  const deepSeekToolsAvailable = useProviders((state) =>
+    state.providers.some((provider) => provider.id === 'deepseek' && provider.configured)
+  ) || hasDeepSeekKey
   const modelOptions = providers.flatMap((provider) =>
     provider.configured
       ? provider.models.map((model) => ({
@@ -107,10 +111,10 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const togglesRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!deepSeek && search) {
+    if (!deepSeekToolsAvailable && search) {
       setSearch(false)
     }
-  }, [deepSeek, search])
+  }, [deepSeekToolsAvailable, search])
 
   useEffect(() => {
     if (!thinkingOptions.includes(thinkingMode)) {
@@ -284,13 +288,19 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               onThinkingChange={setThinkingMode}
             />
           </Tooltip>
-          <Tooltip content={deepSeek ? t('deactivatedSearchTooltip') : t('providerFeatureUnavailable')}>
+          <Tooltip
+            content={
+              deepSeekToolsAvailable
+                ? t('deactivatedSearchTooltip')
+                : t('providerFeatureUnavailable')
+            }
+          >
             <button
               type="button"
               className={clsx(styles.toggle, search && styles.selected)}
               aria-label={t('search')}
               aria-pressed={search}
-              disabled={!deepSeek}
+              disabled={!deepSeekToolsAvailable}
               onClick={() => setSearch(!search)}
             >
               <IconGlobeLanguageOutline14 />

@@ -75,13 +75,26 @@ export type ToolUsePart = {
   endedAt?: number
 }
 
-/** 客户端工具结果，只保存文本以避免把 MCP 二进制内容写入会话数据库。 */
+export type ToolResultSource = {
+  url: string
+  title: string
+  snippet: string | null
+  siteName: string | null
+  siteIcon: string | null
+  publishedAt: string | null
+}
+
+/** 客户端工具结果；MCP 仅保存文本，DeepSeek 搜索会保留来源元数据用于恢复时间线。 */
 export type ToolResultPart = {
   type: 'tool_result'
   tool_use_id: string
   content: { type: 'text'; text: string }[]
   isError: boolean
   durationMs?: number
+  /** DeepSeek 搜索的结构化来源，仅用于恢复与搜索结果相同的展示。 */
+  sources?: ToolResultSource[]
+  /** DeepSeek Fetch 的页面元数据。 */
+  page?: { url: string; title: string | null }
 }
 
 /** 服务端工具调用与结果块按协议原样保存；历史请求只回传 read_link 调用与结果 */

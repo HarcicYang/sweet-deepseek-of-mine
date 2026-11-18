@@ -11,6 +11,10 @@ import {
   ApiKeyRequestSchema,
   ApiKeyStatusResponseSchema,
   ChatProxyRequestSchema,
+  DeepSeekFetchRequestSchema,
+  DeepSeekFetchResponseSchema,
+  DeepSeekSearchRequestSchema,
+  DeepSeekSearchResponseSchema,
   FileObjectResponseSchema,
   SessionResponseSchema,
   SpeechSynthesisRequestSchema,
@@ -1682,6 +1686,127 @@ if(data.ok)setTimeout(()=>window.close(),250);
     await store.clearApiKey(user.id)
     const body: ApiKeyStatusResponse = { configured: false }
     return context.json(body)
+  })
+
+  const deepSeekToolRequest = async (
+    context: Context<AppEnv>,
+    path: string,
+    body: unknown,
+    credential: string
+  ): Promise<Response> =>
+    await fetchImpl(`${deepSeekBaseUrl.replace(/\/+$/u, '')}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${credential}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.any([
+        context.req.raw.signal,
+        AbortSignal.timeout(60_000),
+      ]),
+      redirect: UPSTREAM_REDIRECT_MODE,
+    })
+
+  const deepSeekToolFailure = async (
+    context: Context<AppEnv>,
+    response: Response,
+    action: string
+  ): Promise<Response> => {
+    if (response.status === 401) {
+      return apiError(context, 400, 'invalid_api_key', 'DeepSeek rejected the API key')
+    }
+    const sanitizedMessage = await response
+      .json()
+      .then((value) =>
+        isRecord(value) &&
+        isRecord(value.error) &&
+        typeof value.error.message === 'string'
+          ? value.error.message.slice(0, 500)
+          : null
+      )
+      .catch(() => null)
+    const status = [402, 403, 404, 408, 413, 429].includes(response.status)
+      ? (response.status as ContentfulStatusCode)
+      : 502
+    return apiError(
+      context,
+      status,
+      'upstream_error',
+      sanitizedMessage ?? `DeepSeek ${action} request failed`
+    )
+  }
+
+  app.post(apiRoutes.deepseekSearch, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, bodyLimits.settings)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Search payload is too large')
+    }
+    const parsed = json.ok ? DeepSeekSearchRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid search request')
+    }
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
+    let response: Response
+    try {
+      response = await deepSeekToolRequest(
+        context,
+        '/v1/tools/search',
+        parsed.data,
+        credential.apiKey
+      )
+    } catch {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek search request failed')
+    }
+    if (!response.ok) {
+      return await deepSeekToolFailure(context, response, 'search')
+    }
+    const payload = DeepSeekSearchResponseSchema.safeParse(
+      await response.json().catch(() => null)
+    )
+    if (!payload.success) {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek returned an invalid search result')
+    }
+    return context.json(payload.data)
+  })
+
+  app.post(apiRoutes.deepseekFetch, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, bodyLimits.settings)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Fetch payload is too large')
+    }
+    const parsed = json.ok ? DeepSeekFetchRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid fetch request')
+    }
+    const credential = await requireApiKey(context)
+    if (!credential.ok) {
+      return credential.response
+    }
+    let response: Response
+    try {
+      response = await deepSeekToolRequest(
+        context,
+        '/v1/tools/fetch',
+        parsed.data,
+        credential.apiKey
+      )
+    } catch {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek fetch request failed')
+    }
+    if (!response.ok) {
+      return await deepSeekToolFailure(context, response, 'fetch')
+    }
+    const payload = DeepSeekFetchResponseSchema.safeParse(
+      await response.json().catch(() => null)
+    )
+    if (!payload.success) {
+      return apiError(context, 502, 'upstream_error', 'DeepSeek returned an invalid fetch result')
+    }
+    return context.json(payload.data)
   })
 
   app.get(apiRoutes.providers, requireAuth, async (context) => {

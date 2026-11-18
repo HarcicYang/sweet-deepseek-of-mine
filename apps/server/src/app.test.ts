@@ -119,6 +119,30 @@ const createTestApp = async (
     if (url === 'https://api.deepseek.test/v1/tools/asr') {
       return Response.json({ text: 'hello from audio' })
     }
+    if (url === 'https://api.deepseek.test/v1/tools/search') {
+      return Response.json({
+        results: [
+          {
+            rerank_score: 2.5,
+            title: 'DeepSeek Search result',
+            url: 'https://example.com/search-result',
+            snippet: 'A concise result.',
+            summary: 'A longer result summary.',
+            content: '',
+            site_name: 'Example',
+            site_icon: 'https://example.com/favicon.ico',
+            date: '2026-11-18T00:00:00.000Z',
+            authority: 3,
+          },
+        ],
+      })
+    }
+    if (url === 'https://api.deepseek.test/v1/tools/fetch') {
+      return Response.json({
+        title: 'Fetched page',
+        content: '# Fetched page\n\nPage body.',
+      })
+    }
     if (url === 'https://api.deepseek.test/v1/tools/tts') {
       return new Response(new Uint8Array([1, 2, 3, 4]), {
         headers: { 'Content-Type': 'application/octet-stream' },
@@ -886,6 +910,49 @@ test('API key storage and DeepSeek proxies keep credentials on the server', asyn
       },
     },
   ])
+
+  const search = await app.request(`${APP_ORIGIN}${apiRoutes.deepseekSearch}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query: 'DeepSeek release', count: 5, need_content: false }),
+  })
+  assert.equal(search.status, 200)
+  assert.equal(
+    ((await search.json()) as { results: Array<{ title: string }> }).results[0]?.title,
+    'DeepSeek Search result'
+  )
+  const searchUpstream = calls.find(
+    (call) => call.url === 'https://api.deepseek.test/v1/tools/search'
+  )
+  assert.ok(searchUpstream)
+  assert.equal(
+    new Headers(searchUpstream.init?.headers).get('authorization'),
+    'Bearer sk-test-key'
+  )
+  assert.deepEqual(JSON.parse(String(searchUpstream.init?.body)), {
+    query: 'DeepSeek release',
+    count: 5,
+    need_content: false,
+  })
+
+  const fetched = await app.request(`${APP_ORIGIN}${apiRoutes.deepseekFetch}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ url: 'https://example.com/page' }),
+  })
+  assert.equal(fetched.status, 200)
+  assert.deepEqual(await fetched.json(), {
+    title: 'Fetched page',
+    content: '# Fetched page\n\nPage body.',
+  })
+  const fetchUpstream = calls.find(
+    (call) => call.url === 'https://api.deepseek.test/v1/tools/fetch'
+  )
+  assert.ok(fetchUpstream)
+  assert.equal(
+    new Headers(fetchUpstream.init?.headers).get('authorization'),
+    'Bearer sk-test-key'
+  )
 
   const invalidThinking = await app.request(`${APP_ORIGIN}${apiRoutes.chat}`, {
     method: 'POST',

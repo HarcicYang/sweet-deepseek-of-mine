@@ -98,6 +98,27 @@ const ToolResultPartSchema = z
     ),
     isError: z.boolean(),
     durationMs: z.number().nonnegative().optional(),
+    sources: z
+      .array(
+        z
+          .object({
+            url: z.string(),
+            title: z.string(),
+            snippet: z.string().nullable(),
+            siteName: z.string().nullable(),
+            siteIcon: z.string().nullable(),
+            publishedAt: z.string().nullable(),
+          })
+          .strict()
+      )
+      .optional(),
+    page: z
+      .object({
+        url: z.string(),
+        title: z.string().nullable(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
 

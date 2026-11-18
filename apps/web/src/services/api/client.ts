@@ -9,10 +9,15 @@ import {
 } from '@sweet-deepseek/contracts'
 import {
   ApiKeyStatusResponseSchema,
+  DeepSeekFetchResponseSchema,
+  DeepSeekSearchResponseSchema,
   FileObjectResponseSchema,
   SessionResponseSchema,
   apiRoutes,
   type ApiKeyStatusResponse,
+  type DeepSeekFetchResponse,
+  type DeepSeekSearchRequest,
+  type DeepSeekSearchResponse,
   type SessionResponse,
 } from '@sweet-deepseek/contracts/api'
 import {
@@ -395,6 +400,32 @@ export const saveDeepSeekKey = async (apiKey: string): Promise<ApiKeyStatusRespo
 export const deleteDeepSeekKey = async (): Promise<ApiKeyStatusResponse> => {
   const response = await request(apiRoutes.deepseekKey, { method: 'DELETE' })
   return parseResponse(ApiKeyStatusResponseSchema, await response.json())
+}
+
+export const searchDeepSeekWeb = async (
+  input: DeepSeekSearchRequest,
+  signal?: AbortSignal
+): Promise<DeepSeekSearchResponse> => {
+  const response = await request(apiRoutes.deepseekSearch, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    signal,
+  })
+  return parseResponse(DeepSeekSearchResponseSchema, await response.json())
+}
+
+export const fetchDeepSeekWebPage = async (
+  url: string,
+  signal?: AbortSignal
+): Promise<DeepSeekFetchResponse> => {
+  const response = await request(apiRoutes.deepseekFetch, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+    signal,
+  })
+  return parseResponse(DeepSeekFetchResponseSchema, await response.json())
 }
 
 export const listProviders = async (): Promise<{

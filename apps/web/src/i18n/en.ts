@@ -393,7 +393,7 @@ export const en = {
   modelThinkingMenu: 'Model and thinking settings',
   modelSearchPlaceholder: 'Search providers or models',
   modelSearchEmpty: 'No matching models',
-  providerFeatureUnavailable: 'This provider does not support this feature',
+  providerFeatureUnavailable: 'Configure a DeepSeek API key under Models & providers first',
   thinkingMode: 'Thinking mode',
   thinkingModeDisabled: 'Off',
   thinkingModeLow: 'Low',

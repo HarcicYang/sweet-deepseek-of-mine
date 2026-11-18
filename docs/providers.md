@@ -29,16 +29,20 @@ API Key 认证，OAuth 登录入口后续接入。
 
 ## DeepSeek 专用路径
 
-DeepSeek 官方 Provider 继续使用现有专用代理，以保留：
+DeepSeek 官方 Provider 继续使用现有专用聊天代理，以保留：
 
-- `deepseek_web_search`
-- `deepseek_read_url`
 - Files API 附件
 - ASR / TTS
 - `latest_reminder`
 - 标题生成和安全参数
 
-非 DeepSeek Provider 当前只开放文本、图片输入能力声明、工具调用和 reasoning；附件原件、语音、原生搜索仍只支持 DeepSeek。
+只要账号配置了 DeepSeek API Key，所有 Provider 都会声明自定义
+`deepseek_web_search` 与 `deepseek_read_url` 工具。工具调用由服务端代理到
+DeepSeek Search API 和 Fetch API，浏览器不接触 DeepSeek Key；搜索结果继续复用现有
+搜索时间线、来源列表与 `[citation:N]` 渲染。
+
+非 DeepSeek Provider 当前仍只支持文本、图片输入能力声明、工具调用和 reasoning；
+附件原件、语音、`latest_reminder`、标题生成和安全参数继续只支持 DeepSeek。
 
 ## 凭据与数据
 

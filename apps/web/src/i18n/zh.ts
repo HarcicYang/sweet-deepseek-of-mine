@@ -375,7 +375,7 @@ export const zh = {
   modelThinkingMenu: '模型与思考设置',
   modelSearchPlaceholder: '搜索提供商或模型',
   modelSearchEmpty: '没有匹配的模型',
-  providerFeatureUnavailable: '当前提供商不支持此功能',
+  providerFeatureUnavailable: '请先在“模型与提供商”中配置 DeepSeek API Key',
   thinkingMode: '思考模式',
   thinkingModeDisabled: '关闭',
   thinkingModeLow: '低',

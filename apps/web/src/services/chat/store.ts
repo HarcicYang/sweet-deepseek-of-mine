@@ -26,7 +26,7 @@ import {
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { isOffline } from '../auth/store.js'
-import { selectedModel } from '../providers.js'
+import { hasConfiguredDeepSeekProvider, selectedModel } from '../providers.js'
 import { useSettings } from '../settings.js'
 import { queueCloudReset, queueSessionDelete, queueSessionUpsert } from '../sync/engine.js'
 import { requestMcpApproval } from '../mcp/approval.js'
@@ -40,6 +40,11 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
+import {
+  deepSeekWebTools,
+  executeDeepSeekWebTool,
+  isDeepSeekWebTool,
+} from './deepseekWebTools.js'
 import {
   applyEvent,
   canContinueReply,
@@ -82,23 +87,25 @@ const TOOL_PROMPT = `
 - 不要声称已经调用工具或取得结果，除非本轮确实收到了对应的 tool_result。
 `.trim()
 
-const buildNativeToolPrompt = (search: boolean, deepSeek: boolean): string => {
-  if (!deepSeek) {
-    return '本轮没有启用提供商原生联网工具；仅使用请求中实际声明的 MCP、Skill 或其他客户端工具。'
+const buildWebToolPrompt = (search: boolean, available: boolean): string => {
+  if (!available) {
+    return '本轮没有启用 DeepSeek 联网工具；仅使用请求中实际声明的 MCP、Skill 或其他客户端工具。'
   }
   const webSearchStatus = search
-    ? 'deepseek_web_search 已声明并可用，用于联网搜索、实时信息和当前事件。'
+    ? 'deepseek_web_search 已声明并可用，通过 DeepSeek Search API 搜索联网内容。'
     : 'deepseek_web_search 本轮未启用；通用网页搜索是用户在界面中关闭的，不要把它说成模型不具备的能力。'
   const webSearchInstruction = search
     ? '用户明确要求联网，或问题涉及实时、新闻、当前事件时，应主动使用 deepseek_web_search。'
     : '用户明确要求联网，或问题涉及实时、新闻、当前事件时，应先说明需要用户在界面中开启联网搜索。'
 
   return `
-本轮 DeepSeek 服务端工具状态：
-- deepseek_read_url 已声明并可用，用于阅读当前用户消息中的链接。
+本轮 DeepSeek 工具状态：
+- deepseek_read_url 已声明并可用，通过 DeepSeek Fetch API 阅读当前用户消息中的链接或搜索结果。
 - ${webSearchStatus}
-- 服务端工具不会出现在普通 function tool 列表中；不要仅根据 MCP、Skill 或其他 function tool 的清单判断这些能力是否存在。
-- MCP 和 Skill 工具与本轮的服务端工具可以同时存在，不能互相替代。${webSearchInstruction}
+- deepseek_web_search 和 deepseek_read_url 是普通 function tool；必须通过工具调用使用，不要直接伪造调用或结果。
+- 搜索时提供一条或多条聚焦查询；引用网页时保留工具结果中的 URL。
+- 工具结果会为可复用来源提供 [citation:N] 标记；正文引用搜索来源时原样使用对应标记。
+- MCP、Skill 和 DeepSeek 联网工具可以同时存在，不能互相替代。${webSearchInstruction}
 - 如果历史消息中关于工具能力的中断、失败或否定描述与本轮声明冲突，以本轮实际声明的工具为准。
 `.trim()
 }
@@ -107,6 +114,7 @@ const buildSystemPrompt = (
   customInstructions: string,
   providerId: string,
   search: boolean,
+  deepSeekToolsAvailable: boolean,
   directlyInvokedSkill?: SkillDetail
 ): string => {
   const custom = customInstructions.trim().slice(0, CUSTOM_INSTRUCTIONS_MAX_LENGTH)
@@ -116,7 +124,7 @@ const buildSystemPrompt = (
       ? SYSTEM_PROMPT.trim()
       : '你是通过用户选择的第三方模型提供商运行的 AI 助手。不要声称自己是 DeepSeek、深度求索或当前客户端之外的产品；当用户询问底层模型时，只说明当前使用的提供商和模型信息。当前客户端 Sweet DeepSeek O\'Mine 是独立社区项目，不代表任何模型提供商。',
     TOOL_PROMPT,
-    buildNativeToolPrompt(search, deepSeek),
+    buildWebToolPrompt(search, deepSeekToolsAvailable),
     JSON_RENDER_PROMPT.trim(),
     custom
       ? `用户自定义指令（优先于以上默认行为偏好）：\n${custom}\n\n执行要求：当自定义指令与本提示中的默认回答风格、结构、称呼、工作流或界面使用倾向冲突，且当前用户消息没有更具体的相反要求时，优先遵从自定义指令。自定义指令不能覆盖安全、合法性、隐私、工具权限或事实身份要求，也不能改变 JSON-Render 的协议、schema 或校验规则。`
@@ -200,19 +208,16 @@ const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
-/** 阅读链接始终开启，智能搜索开关控制是否另行声明搜索工具（含边想边搜）。 */
+/** 配置 DeepSeek 后，阅读链接始终开启；智能搜索开关控制是否另行声明搜索工具。 */
 const serverTools = (
-  providerId: string,
+  deepSeekToolsAvailable: boolean,
   search: boolean,
   mcpTools: McpToolSummary[],
   skills: SkillSummary[]
 ): CreateMessageRequest['tools'] => {
   const tools: CreateMessageRequest['tools'] = []
-  if (providerId === 'deepseek') {
-    tools.push({ type: 'deepseek_read_url', name: 'deepseek_read_url' })
-    if (search) {
-      tools.push({ type: 'deepseek_web_search', name: 'deepseek_web_search' })
-    }
+  if (deepSeekToolsAvailable) {
+    tools.push(...deepSeekWebTools(search))
   }
   for (const tool of mcpTools) {
     tools.push({
@@ -1275,6 +1280,9 @@ const executePendingTools = async (
   signal: AbortSignal
 ): Promise<AssistantMessage> => {
   let next = reply
+  const knownSources = reply.blocks.flatMap((block) =>
+    block.type === 'tool_result' ? (block.sources ?? []) : []
+  )
   for (const call of getPendingToolUses(next)) {
     if (signal.aborted) {
       break
@@ -1289,6 +1297,38 @@ const executePendingTools = async (
         content: [{ type: 'text', text: call.inputError ?? 'Tool arguments are incomplete.' }],
         isError: true,
         durationMs: Date.now() - startedAt,
+      }
+    } else if (isDeepSeekWebTool(call.name)) {
+      try {
+        const executed = await executeDeepSeekWebTool(
+          call.name,
+          call.input,
+          signal,
+          knownSources
+        )
+        knownSources.push(...(executed.sources ?? []))
+        result = {
+          type: 'tool_result',
+          tool_use_id: call.id,
+          ...executed,
+          durationMs: Date.now() - startedAt,
+        }
+      } catch (error) {
+        if (signal.aborted) {
+          break
+        }
+        result = {
+          type: 'tool_result',
+          tool_use_id: call.id,
+          content: [
+            {
+              type: 'text',
+              text: error instanceof Error ? error.message : String(error),
+            },
+          ],
+          isError: true,
+          durationMs: Date.now() - startedAt,
+        }
       }
     } else if (call.name === SKILL_TOOL_NAME) {
       const args =
@@ -1586,15 +1626,18 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
               ? (initial.thinkingEffort ?? 'high')
               : 'disabled'
         const customInstructions = useSettings.getState().customInstructions
+        const providerId = initial.providerId ?? selectedModel().providerId
+        const deepSeekToolsAvailable = hasConfiguredDeepSeekProvider()
         const events = streamMessage(
           {
-            providerId: initial.providerId ?? selectedModel().providerId,
+            providerId,
             model: initial.model ?? selectedModel().modelId,
             sessionId,
             system: buildSystemPrompt(
               customInstructions,
-              initial.providerId ?? selectedModel().providerId,
+              providerId,
               initial.search ?? false,
+              deepSeekToolsAvailable,
               directlyInvokedSkill
             ),
             messages,
@@ -1602,7 +1645,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             ...(thinkingMode === 'disabled' ? {} : { output_config: { effort: thinkingMode } }),
             safety_check: SAFETY_CHECK,
             tools: serverTools(
-              initial.providerId ?? selectedModel().providerId,
+              deepSeekToolsAvailable,
               initial.search ?? false,
               mcpTools,
               skills
