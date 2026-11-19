@@ -43,6 +43,8 @@ import {
   SyncSessionsResponseSchema,
   SyncUpsertRequestSchema,
   type SyncSessionPayload,
+  type SyncSessionRecord,
+  type SyncSessionResponse,
 } from '@sweet-deepseek/contracts/sync'
 import {
   SHARE_TOKEN_PATTERN,
@@ -1990,7 +1992,8 @@ if(data.ok)setTimeout(()=>window.close(),250);
     if (!record || record.deletedAt !== null) {
       return apiError(context, 404, 'invalid_request', 'Session not found')
     }
-    return context.json(SyncSessionResponseSchema.parse({ session: record }))
+    const body: SyncSessionResponse = { session: record }
+    return context.json(body)
   })
 
   app.put(apiRoutes.syncSession, requireAuth, async (context) => {
@@ -2013,7 +2016,10 @@ if(data.ok)setTimeout(()=>window.close(),250);
         parsed.data.baseRevision,
         parsed.data.payload
       )
-      return context.json(SyncSessionResponseSchema.parse({ session: record }))
+      const body: SyncSessionResponse = {
+        session: { ...record, payload: null } satisfies SyncSessionRecord,
+      }
+      return context.json(body)
     } catch (error) {
       if (error instanceof SyncConflictError) {
         return apiError(context, 409, 'sync_conflict', 'Session changed on another device')

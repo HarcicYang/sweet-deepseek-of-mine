@@ -1151,10 +1151,20 @@ test('session sync enforces revisions and deletion tombstones', async () => {
   })
   assert.equal(first.status, 200)
   const firstBody = (await first.json()) as {
-    session: { revision: number; payload: { title: string } }
+    session: { revision: number; payload: null }
   }
   assert.equal(firstBody.session.revision, 1)
-  assert.equal(firstBody.session.payload.title, 'Sync test')
+  assert.equal(firstBody.session.payload, null)
+
+  const loaded = await app.request(path, {
+    headers: { Cookie: `sdom_session=${sessionToken}` },
+  })
+  assert.equal(loaded.status, 200)
+  const loadedBody = (await loaded.json()) as {
+    session: { revision: number; payload: { title: string } }
+  }
+  assert.equal(loadedBody.session.revision, 1)
+  assert.equal(loadedBody.session.payload.title, 'Sync test')
 
   const stale = await app.request(path, {
     method: 'PUT',
