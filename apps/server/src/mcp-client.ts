@@ -6,6 +6,9 @@ import {
   type FetchLike,
   type OAuthClientProvider,
 } from '@modelcontextprotocol/client'
+import { McpApprovalRequiredError, McpToolNotFoundError } from './mcp-errors.js'
+
+export { McpApprovalRequiredError, McpToolNotFoundError } from './mcp-errors.js'
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 15_000
 const DEFAULT_CALL_TIMEOUT_MS = 60_000
@@ -47,20 +50,6 @@ export type McpProbeResult = McpProbeSuccess | McpProbeFailure
 export type McpToolCallResult = {
   content: { type: 'text'; text: string }[]
   isError: boolean
-}
-
-export class McpToolNotFoundError extends Error {
-  constructor() {
-    super('MCP tool not found')
-    this.name = 'McpToolNotFoundError'
-  }
-}
-
-export class McpApprovalRequiredError extends Error {
-  constructor() {
-    super('MCP tool requires explicit approval')
-    this.name = 'McpApprovalRequiredError'
-  }
 }
 
 export type McpClient = {

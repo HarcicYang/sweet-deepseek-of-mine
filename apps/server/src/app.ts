@@ -80,12 +80,8 @@ import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccountStore, GitHubProfile, UserRecord } from './account-store.js'
-import {
-  McpApprovalRequiredError,
-  McpToolNotFoundError,
-  type McpClient,
-  type McpConnectionConfig,
-} from './mcp-client.js'
+import { type McpClient, type McpConnectionConfig } from './mcp-client.js'
+import { McpApprovalRequiredError, McpToolNotFoundError } from './mcp-errors.js'
 import { assertAllowedMcpUrl, mcpHeadersAdditionalData } from './mcp-policy.js'
 import {
   fetchOfficialMcpRegistryServers,
@@ -108,12 +104,13 @@ import type { ShareStore } from './share-store.js'
 import type { SkillRecord, SkillStore, SkillWrite } from './skill-store.js'
 import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
 import type { ProviderStore } from './provider-store.js'
-import {
-  createPiTitle,
-  createPiSseResponse,
-  providerSummary,
-  providerTemplates,
-} from './pi-provider-runtime.js'
+
+type PiProviderRuntime = typeof import('./pi-provider-runtime.js')
+
+let piProviderRuntime: Promise<PiProviderRuntime> | null = null
+
+const loadPiProviderRuntime = (): Promise<PiProviderRuntime> =>
+  (piProviderRuntime ??= import('./pi-provider-runtime.js'))
 
 const SESSION_COOKIE = 'sdom_session'
 const OAUTH_STATE_COOKIE = 'sdom_oauth_state'
@@ -1816,6 +1813,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.get(apiRoutes.providers, requireAuth, async (context) => {
+    const { providerSummary, providerTemplates } = await loadPiProviderRuntime()
     const user = context.get('auth').user
     const stored = await providerStore.listProviders(user.id)
     const providers = [
@@ -1833,6 +1831,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.post(apiRoutes.providers, requireAuth, async (context) => {
+    const { providerSummary, providerTemplates } = await loadPiProviderRuntime()
     const json = await readLimitedJson(context, bodyLimits.settings)
     if (json === 'too-large') {
       return apiError(context, 413, 'invalid_request', 'Provider payload is too large')
@@ -1901,6 +1900,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
   })
 
   app.put(apiRoutes.provider, requireAuth, async (context) => {
+    const { providerSummary } = await loadPiProviderRuntime()
     const providerId = context.req.param('providerId')
     const user = context.get('auth').user
     const current = await providerStore.findProvider(user.id, providerId)
@@ -2297,6 +2297,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
         )
       }
       try {
+        const { createPiSseResponse } = await loadPiProviderRuntime()
         return await createPiSseResponse(
           parsed.data,
           record,
@@ -2403,6 +2404,7 @@ if(data.ok)setTimeout(()=>window.close(),250);
     }
 
     try {
+      const { createPiTitle } = await loadPiProviderRuntime()
       const title = await createPiTitle(
         parsed.data,
         record,
