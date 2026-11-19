@@ -272,7 +272,6 @@ const generateTitle = async (
       {
         apiKey,
         signal,
-        maxTokens: 64,
         disableContinuation: true,
       }
     )
