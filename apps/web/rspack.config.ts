@@ -88,6 +88,7 @@ export const createConfig = ({ devServer }: ConfigOptions = {}): Configuration =
         { from: path.resolve(root, 'public/site.webmanifest'), to: 'site.webmanifest' },
         { from: path.resolve(root, 'public/icons'), to: 'icons' },
         { from: path.resolve(root, 'public/fonts'), to: 'fonts' },
+        { from: path.resolve(root, 'public/third-party'), to: 'third-party' },
         { from: path.resolve(root, 'public/_headers'), to: '_headers', toType: 'file' },
       ],
     }),

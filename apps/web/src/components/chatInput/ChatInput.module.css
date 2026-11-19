@@ -14,6 +14,12 @@
   overflow: hidden;
 }
 
+:global([data-sdom-liquid-glass]) .wrapper {
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 80%, transparent);
+  border-radius: 22px;
+}
+
 .session {
   box-shadow:
     0 4px 10px rgba(0, 0, 0, 0.02),
@@ -227,6 +233,16 @@
 
   .textareaWrapper {
     min-height: 0;
+  }
+
+  :global([data-sdom-liquid-glass]) .textarea,
+  :global([data-sdom-liquid-glass]) .mirror {
+    min-height: 38px;
+  }
+
+  :global([data-sdom-liquid-glass]) .functionRow {
+    margin-top: 0;
+    padding: 9px 12px;
   }
 
   .attachments,

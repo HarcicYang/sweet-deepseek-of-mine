@@ -37,6 +37,7 @@ Sweet DeepSeek O'Mine 是一个基于 DeepSeek 官方开源 `chat-demo` 和 Deep
 - `packages/json-render` 保存版本化 JSON UI schema、围栏提取和结构限制校验。
 - Web 默认通过同源 `/api` 接口访问服务端，也可通过 `SDOM_API_BASE_URL` 指向独立后端，不再直接请求 DeepSeek API。
 - Web 生产构建同时生成可安装的 PWA：manifest、PNG 图标、Workbox Service Worker 和应用壳预缓存；`/api/*` 不进入缓存。
+- iOS 26+ Safari 主屏幕 Web App 通过 `@samasante/liquid-glass` 启用系统风格玻璃，仅用于移动顶栏、输入区和菜单；历史抽屉、设置主体和消息内容保持实心。
 - DeepSeek API Key 只加密保存在服务端，浏览器不持久化明文。
 - 非 DeepSeek Provider 的 API Key 也按账号加密保存在服务端；Provider 配置使用稳定 ID，聊天请求使用 `providerId + modelId`。
 - 会话文本已支持云端同步；IndexedDB 按账号使用 `chat-demo:<userId>` 作为离线缓存。

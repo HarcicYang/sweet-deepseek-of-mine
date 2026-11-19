@@ -12,6 +12,7 @@
     "lint": "oxlint src rspack.config.ts"
   },
   "dependencies": {
+    "@samasante/liquid-glass": "0.1.1",
     "@sweet-deepseek/contracts": "workspace:*",
     "@sweet-deepseek/json-render": "workspace:*",
     "@sweet-deepseek/skills": "workspace:*",

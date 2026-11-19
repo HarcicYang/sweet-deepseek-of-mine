@@ -65,6 +65,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@samasante/liquid-glass':
+        specifier: 0.1.1
+        version: 0.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@sweet-deepseek/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -1843,6 +1846,12 @@ packages:
     peerDependenciesMeta:
       selfsigned:
         optional: true
+
+  '@samasante/liquid-glass@0.1.1':
+    resolution: {integrity: sha512-i4cQzlwmpYnVl9eBDuBFyPsOsuBMMYDp1ijxul5Z/H+ns5aQ1qiVV5pTEBbO4EQo8ct+eVlS9bVZW8YUfX6nXg==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
 
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
@@ -5356,6 +5365,11 @@ snapshots:
     dependencies:
       '@rspack/core': 2.0.2(@swc/helpers@0.5.23)
       '@rspack/dev-middleware': 2.0.6(@rspack/core@2.0.2(@swc/helpers@0.5.23))
+
+  '@samasante/liquid-glass@0.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   '@sindresorhus/is@7.2.0': {}
 

@@ -2,9 +2,12 @@
   display: inline-flex;
 }
 
-.menu {
+.menuRoot {
   position: fixed;
   z-index: 900;
+}
+
+.menu {
   box-sizing: border-box;
   min-width: 124px;
   padding: 4px;
@@ -14,6 +17,11 @@
     0 0 1px rgba(0, 0, 0, 0.2),
     0 0 4px rgba(0, 0, 0, 0.02),
     0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+:global([data-sdom-liquid-glass]) .menu {
+  background-color: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 80%, transparent);
+  border-radius: 18px;
 }
 
 .option {

@@ -22,7 +22,7 @@ An independent, community-built chat client built on DeepSeek's official `chat-d
 - **Temporary sharing**: read-only snapshot links valid for 1–30 days; visitors can't send messages or get original attachments.
 - **Custom instructions**: account-level system prompt supplement, synced across devices.
 - **Multimedia**: drag-and-drop attachments, voice input and read-aloud.
-- **Personalization**: bilingual UI, light and dark themes, mobile layout, history import/export.
+- **Personalization**: bilingual UI, light and dark themes, an iOS 26 Home Screen liquid-glass treatment, mobile layout, history import/export.
 
 ## Getting started
 

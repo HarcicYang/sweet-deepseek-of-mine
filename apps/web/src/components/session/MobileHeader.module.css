@@ -4,13 +4,30 @@
   flex-shrink: 0;
   box-sizing: border-box;
   height: 60px;
-  padding: 12px 10px 4px;
+  padding: 12px 16px 4px;
+}
+
+.glassControl,
+.glassActions {
+  flex-shrink: 0;
+  border-radius: 22px;
+}
+
+.actionGroup {
+  display: flex;
+  align-items: center;
+}
+
+:global([data-sdom-liquid-glass]) .glassControl,
+:global([data-sdom-liquid-glass]) .glassActions {
+  background-color: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 80%, transparent);
+  box-shadow: var(--dsw-shadow-lv3);
 }
 
 .title {
   flex: 1;
   min-width: 0;
-  margin: 0 12px;
+  margin: 0 16px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

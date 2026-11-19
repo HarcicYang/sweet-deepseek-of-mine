@@ -29,6 +29,7 @@ import {
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
+import { LiquidGlassSurface } from '../base/LiquidGlassSurface.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import {
@@ -38,17 +39,13 @@ import {
 } from '../../services/providers.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
-import {
-  ACCEPT,
-  isImage,
-  resolveMimeType,
-  useUploads,
-} from '../../services/attachments.js'
+import { ACCEPT, isImage, resolveMimeType, useUploads } from '../../services/attachments.js'
 import { DraftAttachments } from './DraftAttachments.js'
 import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
 import { Spectrum } from './Spectrum.js'
 import { ModelThinkingMenu } from './ModelThinkingMenu.js'
+import { useLiquidGlass } from '../../app/liquidGlass.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
 
@@ -72,13 +69,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const providers = useProviders((state) => state.providers)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
+  const liquidGlass = useLiquidGlass()
   const search = useSettings((state) => state.search)
   const currentProvider = defaultModel
     ? providers.find((provider) => provider.id === defaultModel.providerId)
     : undefined
-  const currentModel = currentProvider?.models.find(
-    (model) => model.id === defaultModel?.modelId
-  )
+  const currentModel = currentProvider?.models.find((model) => model.id === defaultModel?.modelId)
   const deepSeek = canUseDeepSeekFeatures()
   const hasDeepSeekKey = useAuth((state) => state.user?.hasApiKey ?? false)
   const deepSeekToolsAvailable = hasDeepSeekKey
@@ -91,9 +87,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         }))
       : []
   )
-  const currentModelValue = currentProvider && currentModel
-    ? `${currentProvider.id}\u0000${currentModel.id}`
-    : ''
+  const currentModelValue =
+    currentProvider && currentModel ? `${currentProvider.id}\u0000${currentModel.id}` : ''
   const thinkingOptions = useMemo<ThinkingMode[]>(() => {
     if (!currentModel) {
       return deepSeek ? ['disabled', 'low', 'high', 'max'] : ['disabled']
@@ -159,10 +154,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     ) {
       return
     }
-    if (
-      !supportsImageInput &&
-      files.some((file) => isImage(resolveMimeType(file)))
-    ) {
+    if (!supportsImageInput && files.some((file) => isImage(resolveMimeType(file)))) {
       showToast({ key: 'modelImageInputUnsupported', type: 'error' })
       return
     }
@@ -241,10 +233,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     ) {
       return
     }
-    if (
-      !supportsImageInput &&
-      attachments.some((attachment) => attachment.isImage)
-    ) {
+    if (!supportsImageInput && attachments.some((attachment) => attachment.isImage)) {
       showToast({ key: 'modelImageInputUnsupported', type: 'error' })
       return
     }
@@ -261,8 +250,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }
 
   return (
-    <div
+    <LiquidGlassSurface
       className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
+      enabled={liquidGlass}
+      radius={22}
+      style={{ display: 'flex' }}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           textareaRef.current?.focus({ preventScroll: true })
@@ -405,6 +397,6 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         </div>
       </div>
       {dragging ? <DragMask /> : null}
-    </div>
+    </LiquidGlassSurface>
   )
 }
