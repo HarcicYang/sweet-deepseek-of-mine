@@ -20,7 +20,7 @@
 
 :global([data-sdom-liquid-glass]) .glassControl,
 :global([data-sdom-liquid-glass]) .glassActions {
-  background-color: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 80%, transparent);
+  background-color: var(--sdom-liquid-fill);
   box-shadow: var(--dsw-shadow-lv3);
 }
 

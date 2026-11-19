@@ -2,7 +2,10 @@ import type { HTMLAttributes, ReactNode } from 'react'
 import { Glass, type GlassOptics } from '@samasante/liquid-glass'
 
 /** Keep the upstream material and only match its documented frost to the iOS reference. */
-const NATIVE_MATCH_OPTICS: Partial<GlassOptics> = { frost: 18 }
+const NATIVE_MATCH_OPTICS: Partial<GlassOptics> = {
+  frost: 18,
+  specular: 0.55,
+}
 
 type LiquidGlassSurfaceProps = HTMLAttributes<HTMLDivElement> & {
   children: ReactNode

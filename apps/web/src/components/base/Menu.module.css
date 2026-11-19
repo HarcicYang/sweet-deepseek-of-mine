@@ -20,7 +20,7 @@
 }
 
 :global([data-sdom-liquid-glass]) .menu {
-  background-color: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 80%, transparent);
+  background-color: var(--sdom-liquid-fill);
   border-radius: 18px;
 }
 

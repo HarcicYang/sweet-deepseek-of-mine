@@ -16,7 +16,7 @@
 
 :global([data-sdom-liquid-glass]) .wrapper {
   border-color: transparent;
-  background-color: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 80%, transparent);
+  background-color: var(--sdom-liquid-fill);
   border-radius: 22px;
 }
 

@@ -229,6 +229,11 @@ body[data-ds-dark-theme] {
 html[data-sdom-liquid-glass] body[data-ds-dark-theme] {
   --dsw-alias-bg-base: rgb(15, 15, 15);
   --dsw-specific-sidebar-fill: rgb(15, 15, 15);
+  --sdom-liquid-fill: rgba(255, 255, 255, 0.12);
+}
+
+html[data-sdom-liquid-glass] {
+  --sdom-liquid-fill: rgba(255, 255, 255, 0.62);
 }
 
 body {
