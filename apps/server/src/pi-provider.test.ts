@@ -154,6 +154,7 @@ test('Pi title generation uses the selected provider model', async () => {
       {
         providerId: 'custom-test',
         model: 'mock-model',
+        sessionId: 'session-test',
         prompt: '请解释这个版本号为什么合法',
       },
       {
@@ -423,6 +424,18 @@ test('OpenCode requests include session and client attribution headers', async (
   })
   try {
     const port = await listen(upstream)
+    const record: ProviderRecord = {
+      id: 'opencode-go',
+      userId: 'user-test',
+      kind: 'builtin',
+      name: 'OpenCode Go',
+      api: null,
+      baseUrl: `http://127.0.0.1:${port}`,
+      models: [],
+      encryptedApiKey: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
     const response = await createPiSseResponse(
       {
         providerId: 'opencode-go',
@@ -434,24 +447,26 @@ test('OpenCode requests include session and client attribution headers', async (
         tools: [],
         safety_check: { level: 'high' },
       },
-      {
-        id: 'opencode-go',
-        userId: 'user-test',
-        kind: 'builtin',
-        name: 'OpenCode Go',
-        api: null,
-        baseUrl: `http://127.0.0.1:${port}`,
-        models: [],
-        encryptedApiKey: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
+      record,
       'test-key',
       new AbortController().signal
     )
     await response.text()
     assert.equal(requestHeaders?.get('x-opencode-session'), 'conversation-test')
     assert.equal(requestHeaders?.get('x-opencode-client'), "Sweet DeepSeek O'Mine")
+
+    await createPiTitle(
+      {
+        providerId: 'opencode-go',
+        model: 'claude-haiku-5-5',
+        sessionId: 'conversation-test',
+        prompt: '给这段对话生成标题',
+      },
+      record,
+      'test-key',
+      new AbortController().signal
+    )
+    assert.equal(requestHeaders?.get('x-opencode-session'), 'conversation-test:title')
   } finally {
     await close(upstream)
   }

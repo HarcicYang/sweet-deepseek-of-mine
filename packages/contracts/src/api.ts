@@ -257,6 +257,7 @@ export const ChatTitleRequestSchema = z
   .object({
     providerId: z.string().min(1).max(128),
     model: z.string().min(1).max(256),
+    sessionId: z.string().min(1).max(256),
     prompt: z.string().trim().min(1),
   })
   .strict()

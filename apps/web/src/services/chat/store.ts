@@ -1899,6 +1899,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       void generateChatTitle({
         providerId: initial.providerId ?? selectedModel().providerId,
         model: initial.model ?? selectedModel().modelId,
+        sessionId,
         prompt: request.question.content,
       })
         .then((title) => {

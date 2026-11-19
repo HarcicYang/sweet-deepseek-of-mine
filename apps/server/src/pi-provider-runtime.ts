@@ -567,7 +567,7 @@ export const createPiTitle = async (
       systemPrompt: TITLE_PROMPT,
       messages: [{ role: 'user', content: request.prompt, timestamp: Date.now() }],
     },
-    { apiKey, signal }
+    { apiKey, signal, sessionId: `${request.sessionId}:title` }
   )
   const title = message.content
     .flatMap((block) => (block.type === 'text' ? [block.text] : []))
