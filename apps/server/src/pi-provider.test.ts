@@ -4,7 +4,7 @@ import test from 'node:test'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ChatProxyRequest } from '@sweet-deepseek/contracts/api'
 import type { ProviderRecord } from './provider-store.js'
-import { createPiSseResponse } from './pi-provider-runtime.js'
+import { createPiSseResponse, createPiTitle } from './pi-provider-runtime.js'
 
 const listen = async (server: http.Server): Promise<number> =>
   await new Promise<number>((resolve, reject) => {
@@ -42,15 +42,8 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
   const upstream = http.createServer((request, response) => {
     assert.equal(request.method, 'POST')
     assert.equal(request.url, '/v1/chat/completions')
-    let body = ''
-    request.setEncoding('utf8')
-    request.on('data', (chunk: string) => {
-      body += chunk
-    })
+    request.resume()
     request.on('end', () => {
-      const content = body.includes('为这段对话生成一个简短、具体的标题')
-        ? '“测试标题”'
-        : 'OK'
       response.writeHead(200, { 'Content-Type': 'text/event-stream' })
       response.write(
         `data: ${JSON.stringify({
@@ -61,7 +54,7 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
           choices: [
             {
               index: 0,
-              delta: { role: 'assistant', content },
+              delta: { role: 'assistant', content: 'OK' },
               finish_reason: null,
             },
           ],
@@ -91,7 +84,6 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
       thinking: { type: 'disabled' },
       tools: [],
       safety_check: { level: 'high' },
-      title: { enabled: true },
     }
     const record: ProviderRecord = {
       id: 'custom-test',
@@ -125,8 +117,70 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
     assert.match(body, /event: message_start/)
     assert.match(body, /"type":"text_delta","text":"OK"/)
     assert.match(body, /"stop_reason":"end_turn"/)
-    assert.match(body, /"title":"测试标题"/)
     assert.match(body, /event: message_stop/)
+  } finally {
+    await close(upstream)
+  }
+})
+
+test('Pi title generation uses the selected provider model', async () => {
+  const upstream = http.createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      response.end(
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-title',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: 'mock-model',
+          choices: [{ index: 0, delta: { role: 'assistant', content: '模型生成标题' }, finish_reason: null }],
+        })}\n\n` +
+          `data: ${JSON.stringify({
+            id: 'chatcmpl-title',
+            object: 'chat.completion.chunk',
+            created: 1,
+            model: 'mock-model',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          })}\n\n` +
+          'data: [DONE]\n\n'
+      )
+    })
+  })
+
+  try {
+    const port = await listen(upstream)
+    const title = await createPiTitle(
+      {
+        providerId: 'custom-test',
+        model: 'mock-model',
+        prompt: '请解释这个版本号为什么合法',
+      },
+      {
+        id: 'custom-test',
+        userId: 'user-test',
+        kind: 'custom',
+        name: 'Custom Test',
+        api: 'openai-completions',
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        models: [
+          {
+            id: 'mock-model',
+            contextWindow: 1_000,
+            maxTokens: 100,
+            input: ['text'],
+            reasoning: false,
+            thinkingLevels: [],
+          },
+        ],
+        encryptedApiKey: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      'test-key',
+      new AbortController().signal
+    )
+    assert.equal(title, '模型生成标题')
   } finally {
     await close(upstream)
   }

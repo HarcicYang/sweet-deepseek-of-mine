@@ -15,7 +15,7 @@ import * as anthropicMessages from '@earendil-works/pi-ai/api/anthropic-messages
 import * as openAICompletions from '@earendil-works/pi-ai/api/openai-completions'
 import * as openAIResponses from '@earendil-works/pi-ai/api/openai-responses'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
-import type { ChatProxyRequest } from '@sweet-deepseek/contracts/api'
+import type { ChatProxyRequest, ChatTitleRequest } from '@sweet-deepseek/contracts/api'
 import {
   ProviderApiSchema,
   type ProviderApi,
@@ -223,65 +223,9 @@ const textContent = (value: unknown): string => {
     .join('')
 }
 
-const TITLE_MAX_LENGTH = 48
 const TITLE_PROMPT = `为这段对话生成一个简短、具体的标题。
 使用用户提问的语言，只输出标题，不要引号、编号、句末标点或解释。
 中文不超过 16 个字，其他语言不超过 8 个词。`
-
-const firstUserText = (request: ChatProxyRequest): string => {
-  const firstUser = request.messages.find((message) => message.role === 'user')
-  if (!firstUser) {
-    return ''
-  }
-  return textContent(firstUser.content).replace(/\s+/gu, ' ').trim()
-}
-
-const normalizeGeneratedTitle = (value: string): string | undefined => {
-  const title = value
-    .replace(/^(?:标题|title)\s*[:：]\s*/iu, '')
-    .replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim()
-  if (!title) {
-    return undefined
-  }
-  const characters = Array.from(title)
-  return characters.length > TITLE_MAX_LENGTH
-    ? `${characters.slice(0, TITLE_MAX_LENGTH - 1).join('')}…`
-    : title
-}
-
-const generateTitle = async (
-  models: ReturnType<typeof createModels>,
-  model: Model<string>,
-  request: ChatProxyRequest,
-  apiKey: string,
-  signal: AbortSignal
-): Promise<string | undefined> => {
-  const text = firstUserText(request)
-  if (!request.title?.enabled || !text) {
-    return undefined
-  }
-  try {
-    const message = await models.completeSimple(
-      model,
-      {
-        systemPrompt: TITLE_PROMPT,
-        messages: [{ role: 'user', content: text, timestamp: Date.now() }],
-      },
-      {
-        apiKey,
-        signal,
-        disableContinuation: true,
-      }
-    )
-    return normalizeGeneratedTitle(
-      message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join(' ')
-    )
-  } catch {
-    return undefined
-  }
-}
 
 const toPiMessages = (request: ChatProxyRequest): PiMessage[] => {
   const messages: PiMessage[] = []
@@ -543,10 +487,6 @@ export const createPiSseResponse = async (
           } else if (event.type === 'done' || event.type === 'error') {
             const message = event.type === 'done' ? event.message : event.error
             const usage = message.usage
-            const generatedTitle =
-              event.type === 'done'
-                ? await generateTitle(models, model, request, apiKey, signal)
-                : undefined
             send('message_delta', {
               type: 'message_delta',
               delta: {
@@ -557,7 +497,6 @@ export const createPiSseResponse = async (
                       ? 'max_tokens'
                       : 'end_turn',
                 stop_sequence: null,
-                ...(generatedTitle ? { title: generatedTitle } : {}),
               },
               usage: {
                 input_tokens: usage.input,
@@ -603,4 +542,39 @@ export const createPiSseResponse = async (
       'X-Accel-Buffering': 'no',
     },
   })
+}
+
+/** 用当前非 DeepSeek Provider 的模型生成会话标题。 */
+export const createPiTitle = async (
+  request: ChatTitleRequest,
+  record: ProviderRecord,
+  apiKey: string,
+  signal: AbortSignal
+): Promise<string> => {
+  const { provider } =
+    record.kind === 'custom'
+      ? createCustomProvider(record, apiKey)
+      : createBuiltinProvider(record, apiKey)
+  const model = provider.getModels().find((candidate) => candidate.id === request.model)
+  if (!model) {
+    throw new Error(`Provider ${record.name} has no model ${request.model}`)
+  }
+  const models = createModels({ identity: CLIENT_IDENTITY })
+  models.setProvider(provider)
+  const message = await models.completeSimple(
+    model,
+    {
+      systemPrompt: TITLE_PROMPT,
+      messages: [{ role: 'user', content: request.prompt, timestamp: Date.now() }],
+    },
+    { apiKey, signal }
+  )
+  const title = message.content
+    .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+    .join(' ')
+    .trim()
+  if (!title) {
+    throw new Error('Provider returned an empty title')
+  }
+  return title
 }

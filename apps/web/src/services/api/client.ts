@@ -9,12 +9,14 @@ import {
 } from '@sweet-deepseek/contracts'
 import {
   ApiKeyStatusResponseSchema,
+  ChatTitleResponseSchema,
   DeepSeekFetchResponseSchema,
   DeepSeekSearchResponseSchema,
   FileObjectResponseSchema,
   SessionResponseSchema,
   apiRoutes,
   type ApiKeyStatusResponse,
+  type ChatTitleRequest,
   type DeepSeekFetchResponse,
   type DeepSeekSearchRequest,
   type DeepSeekSearchResponse,
@@ -434,6 +436,15 @@ export const listProviders = async (): Promise<{
 }> => {
   const response = await request(apiRoutes.providers)
   return parseResponse(ProvidersResponseSchema, await response.json())
+}
+
+export const generateChatTitle = async (input: ChatTitleRequest): Promise<string> => {
+  const response = await request(apiRoutes.chatTitle, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseResponse(ChatTitleResponseSchema, await response.json()).title
 }
 
 export const createProvider = async (

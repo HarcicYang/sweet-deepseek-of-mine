@@ -11,6 +11,8 @@ import {
   ApiKeyRequestSchema,
   ApiKeyStatusResponseSchema,
   ChatProxyRequestSchema,
+  ChatTitleRequestSchema,
+  ChatTitleResponseSchema,
   DeepSeekFetchRequestSchema,
   DeepSeekFetchResponseSchema,
   DeepSeekSearchRequestSchema,
@@ -24,6 +26,7 @@ import {
   type ApiErrorResponse,
   type ApiKeyStatusResponse,
   type AuthUser,
+  type ChatTitleResponse,
   type SessionResponse,
 } from '@sweet-deepseek/contracts/api'
 import {
@@ -104,6 +107,7 @@ import type { SkillRecord, SkillStore, SkillWrite } from './skill-store.js'
 import { SyncConflictError, SyncSettingsConflictError, type SyncStore } from './sync-store.js'
 import type { ProviderStore } from './provider-store.js'
 import {
+  createPiTitle,
   createPiSseResponse,
   providerSummary,
   providerTemplates,
@@ -2357,6 +2361,57 @@ if(data.ok)setTimeout(()=>window.close(),250);
       status: response.status,
       headers: responseHeaders,
     })
+  })
+
+  app.post(apiRoutes.chatTitle, requireAuth, async (context) => {
+    const json = await readLimitedJson(context, bodyLimits.chat)
+    if (json === 'too-large') {
+      return apiError(context, 413, 'invalid_request', 'Title request is too large')
+    }
+    const parsed = json.ok ? ChatTitleRequestSchema.safeParse(json.value) : null
+    if (!parsed?.success) {
+      return apiError(context, 400, 'invalid_request', 'Invalid title request')
+    }
+    if (parsed.data.providerId === 'deepseek') {
+      return apiError(context, 400, 'invalid_request', 'DeepSeek titles are generated in chat')
+    }
+
+    const user = context.get('auth').user
+    const record = await providerStore.findProvider(user.id, parsed.data.providerId)
+    if (!record || !record.encryptedApiKey) {
+      return apiError(context, 409, 'api_key_missing', 'A provider API key is required')
+    }
+    const apiKey = await security
+      .decryptValue(
+        providerCredentialAad(user.id, parsed.data.providerId),
+        record.encryptedApiKey
+      )
+      .catch(() => null)
+    if (!apiKey) {
+      return apiError(
+        context,
+        500,
+        'credential_error',
+        'Stored provider API key could not be decrypted'
+      )
+    }
+
+    try {
+      const title = await createPiTitle(
+        parsed.data,
+        record,
+        apiKey,
+        createProxySignal(context)
+      )
+      const body: ChatTitleResponse = { title }
+      return context.json(ChatTitleResponseSchema.parse(body))
+    } catch (error) {
+      logger.warn('Provider title generation failed', {
+        providerId: parsed.data.providerId,
+        error: error instanceof Error ? error.name : typeof error,
+      })
+      return apiError(context, 502, 'upstream_error', 'Provider title generation failed')
+    }
   })
 
   return app

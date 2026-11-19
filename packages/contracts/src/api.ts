@@ -13,6 +13,7 @@ export const apiRoutes = {
   providers: '/api/providers',
   provider: '/api/providers/:providerId',
   chat: '/api/chat',
+  chatTitle: '/api/chat/title',
   files: '/api/files',
   file: '/api/files/:fileId',
   speechAsr: '/api/speech/asr',
@@ -251,3 +252,21 @@ export const ChatProxyRequestSchema = z
   })
 
 export type ChatProxyRequest = z.infer<typeof ChatProxyRequestSchema>
+
+export const ChatTitleRequestSchema = z
+  .object({
+    providerId: z.string().min(1).max(128),
+    model: z.string().min(1).max(256),
+    prompt: z.string().trim().min(1),
+  })
+  .strict()
+
+export type ChatTitleRequest = z.infer<typeof ChatTitleRequestSchema>
+
+export const ChatTitleResponseSchema = z
+  .object({
+    title: z.string().trim().min(1),
+  })
+  .strict()
+
+export type ChatTitleResponse = z.infer<typeof ChatTitleResponseSchema>

@@ -17,6 +17,7 @@ import { createId } from '../../utils/id.js'
 import {
   ApiError,
   callMcpTool,
+  generateChatTitle,
   getSkill,
   getCloudSession,
   listMcpTools,
@@ -1880,6 +1881,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       }
     }
   } finally {
+    const shouldGenerateTitle =
+      initial.providerId !== 'deepseek' &&
+      !controller.signal.aborted &&
+      titleRequests.has(controller)
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
     cancelAnimationFrame(frame)
@@ -1890,5 +1895,25 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       ),
     }))
     persist(sessionId)
+    if (shouldGenerateTitle && request.question.content.trim()) {
+      void generateChatTitle({
+        providerId: initial.providerId ?? selectedModel().providerId,
+        model: initial.model ?? selectedModel().modelId,
+        prompt: request.question.content,
+      })
+        .then((title) => {
+          const session = getSession(sessionId)
+          if (!session || session.title.trim() || deletingSessions.has(sessionId)) {
+            return
+          }
+          updateSession(sessionId, (current) =>
+            current.title ? current : { ...current, title }
+          )
+          persist(sessionId)
+        })
+        .catch(() => {
+          // No fallback: a session stays untitled when model title generation fails.
+        })
+    }
   }
 }
