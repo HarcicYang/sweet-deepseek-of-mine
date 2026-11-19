@@ -224,24 +224,64 @@ const textContent = (value: unknown): string => {
 }
 
 const TITLE_MAX_LENGTH = 48
+const TITLE_PROMPT = `为这段对话生成一个简短、具体的标题。
+使用用户提问的语言，只输出标题，不要引号、编号、句末标点或解释。
+中文不超过 16 个字，其他语言不超过 8 个词。`
 
-/** Pi 没有 DeepSeek 的原生标题能力；首轮直接用首条用户消息生成标题。 */
-const titleFromFirstUserMessage = (request: ChatProxyRequest): string | undefined => {
-  if (!request.title?.enabled) {
-    return undefined
-  }
+const firstUserText = (request: ChatProxyRequest): string => {
   const firstUser = request.messages.find((message) => message.role === 'user')
   if (!firstUser) {
+    return ''
+  }
+  return textContent(firstUser.content).replace(/\s+/gu, ' ').trim()
+}
+
+const normalizeGeneratedTitle = (value: string): string | undefined => {
+  const title = value
+    .replace(/^(?:标题|title)\s*[:：]\s*/iu, '')
+    .replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  if (!title) {
     return undefined
   }
-  const text = textContent(firstUser.content).replace(/\s+/gu, ' ').trim()
-  if (!text) {
-    return undefined
-  }
-  const characters = Array.from(text)
+  const characters = Array.from(title)
   return characters.length > TITLE_MAX_LENGTH
     ? `${characters.slice(0, TITLE_MAX_LENGTH - 1).join('')}…`
-    : text
+    : title
+}
+
+const generateTitle = async (
+  models: ReturnType<typeof createModels>,
+  model: Model<string>,
+  request: ChatProxyRequest,
+  apiKey: string,
+  signal: AbortSignal
+): Promise<string | undefined> => {
+  const text = firstUserText(request)
+  if (!request.title?.enabled || !text) {
+    return undefined
+  }
+  try {
+    const message = await models.completeSimple(
+      model,
+      {
+        systemPrompt: TITLE_PROMPT,
+        messages: [{ role: 'user', content: text, timestamp: Date.now() }],
+      },
+      {
+        apiKey,
+        signal,
+        maxTokens: 64,
+        disableContinuation: true,
+      }
+    )
+    return normalizeGeneratedTitle(
+      message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join(' ')
+    )
+  } catch {
+    return undefined
+  }
 }
 
 const toPiMessages = (request: ChatProxyRequest): PiMessage[] => {
@@ -432,13 +472,13 @@ export const createPiSseResponse = async (
         : request.output_config?.effort === 'low'
           ? 'low'
           : 'high'
+  const title = generateTitle(models, model, request, apiKey, signal)
   const events = models.streamSimple(model, context, {
     apiKey,
     sessionId: request.sessionId,
     ...(reasoning === undefined ? {} : { reasoning }),
     signal,
   })
-  const title = titleFromFirstUserMessage(request)
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
@@ -505,6 +545,7 @@ export const createPiSseResponse = async (
           } else if (event.type === 'done' || event.type === 'error') {
             const message = event.type === 'done' ? event.message : event.error
             const usage = message.usage
+            const generatedTitle = event.type === 'done' ? await title : undefined
             send('message_delta', {
               type: 'message_delta',
               delta: {
@@ -515,7 +556,7 @@ export const createPiSseResponse = async (
                       ? 'max_tokens'
                       : 'end_turn',
                 stop_sequence: null,
-                ...(event.type === 'done' && title ? { title } : {}),
+                ...(generatedTitle ? { title: generatedTitle } : {}),
               },
               usage: {
                 input_tokens: usage.input,

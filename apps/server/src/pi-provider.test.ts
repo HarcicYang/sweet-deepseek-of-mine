@@ -42,8 +42,15 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
   const upstream = http.createServer((request, response) => {
     assert.equal(request.method, 'POST')
     assert.equal(request.url, '/v1/chat/completions')
-    request.resume()
+    let body = ''
+    request.setEncoding('utf8')
+    request.on('data', (chunk: string) => {
+      body += chunk
+    })
     request.on('end', () => {
+      const content = body.includes('为这段对话生成一个简短、具体的标题')
+        ? '“测试标题”'
+        : 'OK'
       response.writeHead(200, { 'Content-Type': 'text/event-stream' })
       response.write(
         `data: ${JSON.stringify({
@@ -54,7 +61,7 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
           choices: [
             {
               index: 0,
-              delta: { role: 'assistant', content: 'OK' },
+              delta: { role: 'assistant', content },
               finish_reason: null,
             },
           ],
@@ -118,7 +125,7 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
     assert.match(body, /event: message_start/)
     assert.match(body, /"type":"text_delta","text":"OK"/)
     assert.match(body, /"stop_reason":"end_turn"/)
-    assert.match(body, /"title":"hello"/)
+    assert.match(body, /"title":"测试标题"/)
     assert.match(body, /event: message_stop/)
   } finally {
     await close(upstream)
