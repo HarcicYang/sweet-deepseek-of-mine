@@ -84,6 +84,7 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
       thinking: { type: 'disabled' },
       tools: [],
       safety_check: { level: 'high' },
+      title: { enabled: true },
     }
     const record: ProviderRecord = {
       id: 'custom-test',
@@ -117,6 +118,7 @@ test('Pi custom provider streams through the normalized SSE bridge', async () =>
     assert.match(body, /event: message_start/)
     assert.match(body, /"type":"text_delta","text":"OK"/)
     assert.match(body, /"stop_reason":"end_turn"/)
+    assert.match(body, /"title":"hello"/)
     assert.match(body, /event: message_stop/)
   } finally {
     await close(upstream)

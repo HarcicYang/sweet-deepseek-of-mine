@@ -223,6 +223,27 @@ const textContent = (value: unknown): string => {
     .join('')
 }
 
+const TITLE_MAX_LENGTH = 48
+
+/** Pi 没有 DeepSeek 的原生标题能力；首轮直接用首条用户消息生成标题。 */
+const titleFromFirstUserMessage = (request: ChatProxyRequest): string | undefined => {
+  if (!request.title?.enabled) {
+    return undefined
+  }
+  const firstUser = request.messages.find((message) => message.role === 'user')
+  if (!firstUser) {
+    return undefined
+  }
+  const text = textContent(firstUser.content).replace(/\s+/gu, ' ').trim()
+  if (!text) {
+    return undefined
+  }
+  const characters = Array.from(text)
+  return characters.length > TITLE_MAX_LENGTH
+    ? `${characters.slice(0, TITLE_MAX_LENGTH - 1).join('')}…`
+    : text
+}
+
 const toPiMessages = (request: ChatProxyRequest): PiMessage[] => {
   const messages: PiMessage[] = []
   const toolNames = new Map<string, string>()
@@ -417,6 +438,7 @@ export const createPiSseResponse = async (
     ...(reasoning === undefined ? {} : { reasoning }),
     signal,
   })
+  const title = titleFromFirstUserMessage(request)
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
@@ -493,6 +515,7 @@ export const createPiSseResponse = async (
                       ? 'max_tokens'
                       : 'end_turn',
                 stop_sequence: null,
+                ...(event.type === 'done' && title ? { title } : {}),
               },
               usage: {
                 input_tokens: usage.input,
