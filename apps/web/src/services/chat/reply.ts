@@ -279,7 +279,8 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
   return (
     reply.status === 'stopped' ||
     reply.status === 'error' ||
-    (reply.status === 'done' && reply.stopReason === 'max_tokens')
+    (reply.status === 'done' &&
+      (reply.stopReason === 'max_tokens' || reply.stopReason === 'tool_use'))
   )
 }
 
