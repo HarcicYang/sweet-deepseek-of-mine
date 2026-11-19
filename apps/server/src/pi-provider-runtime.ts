@@ -471,7 +471,6 @@ export const createPiSseResponse = async (
         : request.output_config?.effort === 'low'
           ? 'low'
           : 'high'
-  const title = generateTitle(models, model, request, apiKey, signal)
   const events = models.streamSimple(model, context, {
     apiKey,
     sessionId: request.sessionId,
@@ -544,7 +543,10 @@ export const createPiSseResponse = async (
           } else if (event.type === 'done' || event.type === 'error') {
             const message = event.type === 'done' ? event.message : event.error
             const usage = message.usage
-            const generatedTitle = event.type === 'done' ? await title : undefined
+            const generatedTitle =
+              event.type === 'done'
+                ? await generateTitle(models, model, request, apiKey, signal)
+                : undefined
             send('message_delta', {
               type: 'message_delta',
               delta: {
